@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+body {
+  @apply bg-vault-bg text-gray-200 font-mono min-h-screen;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-vault-bg;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-vault-secondary rounded;
+}
+
+/* Drop zone animation */
+.drop-active {
+  @apply border-vault-accent bg-vault-accent/10;
+}
+
+/* Progress bar */
+.progress-bar {
+  @apply h-1 bg-vault-accent rounded-full transition-all duration-300;
+}

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 80" fill="none">
+  <!--
+    Archivum Null — Text Logo
+    Caps, tracking +5%, sans-serif geometric
+    Uses system-safe fallback; embed Inter via CSS where used
+  -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
+  </style>
+
+  <text
+    x="310" y="52"
+    text-anchor="middle"
+    font-family="'Inter', 'IBM Plex Sans', 'Sora', -apple-system, sans-serif"
+    font-weight="600"
+    font-size="48"
+    letter-spacing="4.8"
+    fill="#60A5FA"
+  >ARCHIVUM NULL</text>
+
+  <!-- Tagline — monospace -->
+  <text
+    x="310" y="76"
+    text-anchor="middle"
+    font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace"
+    font-weight="400"
+    font-size="13"
+    letter-spacing="3"
+    fill="#475569"
+  >ZERO TRUST FILE RELAY</text>
+</svg>

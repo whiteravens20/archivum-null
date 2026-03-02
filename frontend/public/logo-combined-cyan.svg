@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none">
+  <!--
+    Archivum Null — Combined Logo (Cyan variant)
+    Accent: #22D3EE (soft cyan)
+  -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
+  </style>
+
+  <!-- ─── Symbol ─── -->
+  <g transform="translate(60, 100) scale(0.23)">
+    <!-- Broken circle -->
+    <path
+      d="M 195.36 430.28
+         A 200 200 0 1 1 316.64 430.28"
+      stroke="#22D3EE"
+      stroke-width="18"
+      stroke-linecap="round"
+      fill="none"
+    />
+    <!-- Diamond head -->
+    <path d="M 256 108 L 288 152 L 256 196 L 224 152 Z"
+          stroke="#22D3EE" stroke-width="10" stroke-linejoin="miter" fill="none" />
+    <circle cx="256" cy="152" r="8" fill="#22D3EE" />
+    <!-- Shaft -->
+    <line x1="256" y1="196" x2="256" y2="380"
+          stroke="#22D3EE" stroke-width="10" />
+    <!-- Key teeth L -->
+    <path d="M 256 260 L 232 260 L 232 280 L 256 280"
+          stroke="#22D3EE" stroke-width="8" stroke-linejoin="miter" fill="none" />
+    <path d="M 256 305 L 238 305 L 238 320 L 256 320"
+          stroke="#22D3EE" stroke-width="8" stroke-linejoin="miter" fill="none" />
+    <!-- Key teeth R -->
+    <path d="M 256 260 L 280 260 L 280 280 L 256 280"
+          stroke="#22D3EE" stroke-width="8" stroke-linejoin="miter" fill="none" />
+    <path d="M 256 305 L 274 305 L 274 320 L 256 320"
+          stroke="#22D3EE" stroke-width="8" stroke-linejoin="miter" fill="none" />
+    <!-- Pointed terminus -->
+    <path d="M 240 370 L 256 395 L 272 370"
+          stroke="#22D3EE" stroke-width="9" stroke-linejoin="miter" stroke-linecap="round" fill="none" />
+  </g>
+
+  <!-- ─── Text ─── -->
+  <text
+    x="170" y="95"
+    font-family="'Inter', 'IBM Plex Sans', 'Sora', -apple-system, sans-serif"
+    font-weight="600"
+    font-size="52"
+    letter-spacing="5.2"
+    fill="#22D3EE"
+  >ARCHIVUM NULL</text>
+
+  <text
+    x="170" y="130"
+    font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace"
+    font-weight="400"
+    font-size="14"
+    letter-spacing="3.5"
+    fill="#475569"
+  >ZERO TRUST FILE RELAY</text>
+</svg>
