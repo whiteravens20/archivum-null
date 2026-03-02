@@ -50,10 +50,18 @@ export async function uploadVault(
 
     xhr.onload = () => {
       if (xhr.status === 201) {
-        resolve(JSON.parse(xhr.responseText));
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error('Invalid response from server after upload'));
+        }
       } else {
-        const err = JSON.parse(xhr.responseText);
-        reject(new Error(err.error || `Upload failed (${xhr.status})`));
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.error || `Upload failed (${xhr.status})`));
+        } catch {
+          reject(new Error(`Upload failed (${xhr.status}) – backend unreachable`));
+        }
       }
     };
 

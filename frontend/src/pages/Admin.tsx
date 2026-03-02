@@ -51,6 +51,12 @@ export default function Admin() {
         return;
       }
 
+      if (!statsRes.ok || !vaultsRes.ok) {
+        const status = !statsRes.ok ? statsRes.status : vaultsRes.status;
+        setError(`Backend unavailable (${status}). Is the backend container running?`);
+        return;
+      }
+
       setStats(await statsRes.json());
       setVaults(await vaultsRes.json());
       setError(null);
