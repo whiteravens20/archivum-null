@@ -1,6 +1,9 @@
 # ── Development Dockerfile ──
 FROM node:24-alpine
 
+# Update npm to get patched minimatch + tar (CVE-2026-26996, CVE-2026-27903, CVE-2026-27904, CVE-2026-26960)
+RUN npm install -g npm@latest
+
 WORKDIR /app
 
 # Install backend dependencies

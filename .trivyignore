@@ -1,0 +1,11 @@
+# Trivy vulnerability suppressions
+# Each entry must include a justification.
+
+# CVE-2026-27903 / CVE-2026-27904 — minimatch DoS via glob backtracking
+# Located at: usr/local/lib/node_modules/npm/node_modules/minimatch
+# These CVEs are in minimatch bundled *inside* npm itself (build tooling).
+# npm is only present in the image to install production deps during Docker build;
+# it is never invoked at runtime and is not accessible to external users.
+# Fix is minimatch@10.2.3 — not yet shipped in any npm release (as of 2026-03-03).
+CVE-2026-27903
+CVE-2026-27904

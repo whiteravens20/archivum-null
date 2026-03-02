@@ -20,6 +20,9 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:24-alpine AS production
 
+# Update npm to get patched minimatch + tar (CVE-2026-26996, CVE-2026-27903, CVE-2026-27904, CVE-2026-26960)
+RUN npm install -g npm@latest
+
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
     adduser -u 1001 -S archivum -G archivum

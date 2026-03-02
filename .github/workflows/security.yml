@@ -65,6 +65,7 @@ jobs:
           severity: HIGH,CRITICAL
           format: sarif
           output: trivy-fs.sarif
+          trivyignores: .trivyignore
           exit-code: '0'  # Report only — do not fail the build yet (beta)
 
       - name: Upload Trivy SARIF
@@ -95,6 +96,7 @@ jobs:
           severity: HIGH,CRITICAL
           format: sarif
           output: trivy-docker.sarif
+          trivyignores: .trivyignore
           exit-code: '0'  # Report only — do not fail the build yet (beta)
 
       - name: Upload Trivy SARIF
