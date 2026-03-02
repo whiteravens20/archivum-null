@@ -1,0 +1,44 @@
+# ── Archivum Null — Development Docker Compose ──
+# Less strict security for local development
+# Hot reload, verbose logs, LAN accessible
+
+services:
+  archivum-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: archivum-dev-backend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:3000:3000"
+    volumes:
+      - ./backend/src:/app/backend/src
+      - vault-data-dev:/data/vaults
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - BIND_ADDRESS=0.0.0.0
+      - PORT=3000
+    command: npx tsx watch src/index.ts
+    working_dir: /app/backend
+
+  archivum-frontend:
+    image: node:22-alpine
+    container_name: archivum-dev-frontend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend-node-modules:/app/frontend/node_modules
+    working_dir: /app/frontend
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - NODE_ENV=development
+
+volumes:
+  vault-data-dev:
+    driver: local
+  frontend-node-modules:
+    driver: local
