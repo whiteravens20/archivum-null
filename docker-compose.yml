@@ -1,5 +1,5 @@
 # ── Archivum Null — Production Docker Compose ──
-# Hardened for homelab deployment behind Tailscale + SWAG
+# Hardened for homelab deployment behind a reverse proxy + private tunnel
 #
 # SECURITY NOTES:
 # - Container runs as non-root (UID 1001)
@@ -7,7 +7,7 @@
 # - All Linux capabilities dropped
 # - No new privileges
 # - No docker.sock mount
-# - Bind ONLY to Tailscale IP (set BIND_ADDRESS in .env)
+# - Bind ONLY to the tunnel/private interface IP (set BIND_ADDRESS in .env)
 
 services:
   archivum-null:
@@ -28,7 +28,7 @@ services:
     volumes:
       - vault-data:/data/vaults
 
-    # Network: expose only on Tailscale IP
+    # Network: expose only on the tunnel/private interface IP
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
 

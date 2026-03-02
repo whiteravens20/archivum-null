@@ -133,7 +133,7 @@ docker compose up -d --build
 ```
 Internet
   → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
-  → private tunnel (WireGuard, Tailscale, SSH tunnel, …)
+  → private tunnel (WireGuard, SSH tunnel, VPN overlay, …)
   → Archivum Null VM (tunnel interface IP only)
 ```
 
@@ -151,7 +151,7 @@ iptables -A INPUT -s 192.168.0.0/16 -p tcp --dport 3000 -j DROP
 iptables -A INPUT -s 10.0.0.0/8 -p tcp --dport 3000 -j DROP
 iptables -A INPUT -s 172.16.0.0/12 -p tcp --dport 3000 -j DROP
 
-# Allow only the tunnel interface (replace <tunnel-iface> with your actual interface, e.g. wg0, tailscale0)
+# Allow only the tunnel interface (replace <tunnel-iface> with your actual interface, e.g. wg0, tun0)
 iptables -A INPUT -i <tunnel-iface> -p tcp --dport 3000 -j ACCEPT
 
 # Drop everything else to the app port

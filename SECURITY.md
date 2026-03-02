@@ -45,7 +45,7 @@
 ## Network Security
 
 - [x] Bind to specific IP (not 0.0.0.0 in production)
-- [x] Tailscale-only access in production
+- [x] Tunnel/private-interface-only access in production
 - [x] Example firewall rules provided
 - [x] No LAN exposure in production mode
 - [x] CORS restricted in production
@@ -57,7 +57,7 @@
 - [x] No encryption key exposure
 - [x] No plaintext exposure
 - [x] No uploader identity exposure
-- [x] Intended for reverse proxy / Tailscale protection
+- [x] Intended for reverse proxy / tunnel protection
 
 ## Supply Chain
 
