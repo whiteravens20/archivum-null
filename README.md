@@ -6,6 +6,29 @@ Anonymous, zero-knowledge encrypted file sharing with expiring vaults. No accoun
 
 ---
 
+> [!WARNING]
+> **Beta — not production-ready.**
+> This project is under active testing. The architecture, API, and storage format may change without notice.
+> A stable release and official Docker image will be published when the build is considered production-ready.
+> Do not rely on it for sensitive data yet.
+
+---
+
+> [!NOTE]
+> **This project was developed with AI assistance.**
+>
+> AI-generated code can contain subtle bugs, insecure patterns, or plausible-looking nonsense ("AI slop"). Here is what we do to keep the bar high — and what you should check when auditing:
+>
+> - **Tests are mandatory.** Every module has unit tests. `npm test` must pass with 0 failures across backend and frontend before any commit lands.
+> - **ESLint enforces standards.** Both projects run `eslint --max-warnings 0`. No warnings are silently ignored.
+> - **Architecture decisions are human-driven.** Crypto primitives (AES-256-GCM, key in URL fragment, no plaintext on server) were specified explicitly — not delegated to AI defaults.
+> - **Security-critical code is read line by line.** `crypto/encrypt.ts`, `basicAuth.ts`, `storage/local.ts` (path traversal guard), and vault expiry logic were reviewed manually after generation.
+> - **AI does not write the threat model.** See the *Threat Model Limitations* section below — those are our honest assessments, not AI boilerplate.
+>
+> If you find a slop pattern, a logical bug, or a security issue, please open an issue or see [SECURITY.md](SECURITY.md).
+
+---
+
 ## Architecture
 
 ```
