@@ -1,6 +1,6 @@
-import { StorageBackend } from './index.js';
-import { VaultMetadata } from '../vault/types.js';
-import { Readable } from 'node:stream';
+import type { StorageBackend } from './index.js';
+import type { VaultMetadata } from '../vault/types.js';
+import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';

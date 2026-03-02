@@ -1,8 +1,8 @@
-import { VaultMetadata } from './types.js';
+import type { VaultMetadata } from './types.js';
 import { config } from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
-import { Readable } from 'node:stream';
+import type { Readable } from 'node:stream';
 
 const storage = new LocalStorage(config.STORAGE_PATH);
 const vaults = new Map<string, VaultMetadata>();

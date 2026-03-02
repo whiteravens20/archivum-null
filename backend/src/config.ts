@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 const envSchema = {
   MAX_FILE_SIZE: Number(process.env.MAX_FILE_SIZE || 104857600),
   TURNSTILE_SECRET: process.env.TURNSTILE_SECRET || '',

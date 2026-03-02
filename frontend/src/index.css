@@ -1,8 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* ─── Custom theme (TailwindCSS v4) ─── */
+@theme {
+  --color-vault-bg: #0B0F19;
+  --color-vault-secondary: #1C2433;
+  --color-vault-accent: #60A5FA;
+
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
 
 body {
   @apply bg-vault-bg text-gray-200 font-mono min-h-screen;

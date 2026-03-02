@@ -1,5 +1,5 @@
-import { Readable } from 'node:stream';
-import { VaultMetadata } from '../vault/types.js';
+import type { Readable } from 'node:stream';
+import type { VaultMetadata } from '../vault/types.js';
 
 export interface StorageBackend {
   init(): Promise<void>;

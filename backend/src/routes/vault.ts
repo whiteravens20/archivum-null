@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { vaultManager } from '../vault/manager.js';
 import { config } from '../config.js';
 import { verifyTurnstile } from '../middleware/turnstile.js';

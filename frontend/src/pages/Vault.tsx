@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getVaultInfo, downloadVault, VaultInfo } from '../api/vault.ts';
+import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
 import { importKey, decryptFile, formatBytes } from '../crypto/encrypt.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
 
@@ -9,19 +9,15 @@ type Stage = 'loading' | 'ready' | 'downloading' | 'decrypting' | 'done' | 'erro
 export default function Vault() {
   const { vaultId } = useParams<{ vaultId: string }>();
   const [info, setInfo] = useState<VaultInfo | null>(null);
-  const [stage, setStage] = useState<Stage>('loading');
-  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage>(() => (vaultId ? 'loading' : 'error'));
+  const [error, setError] = useState<string | null>(() => (vaultId ? null : 'No vault ID'));
   const [progress, setProgress] = useState(0);
 
   // Extract key from URL fragment (never sent to server)
   const keyFragment = window.location.hash.slice(1);
 
   useEffect(() => {
-    if (!vaultId) {
-      setError('No vault ID');
-      setStage('error');
-      return;
-    }
+    if (!vaultId) return;
 
     getVaultInfo(vaultId)
       .then((data) => {
@@ -82,9 +78,16 @@ export default function Vault() {
     }
   };
 
-  const timeRemaining = info
-    ? Math.max(0, Math.floor((info.expiresAt - Date.now()) / 1000))
-    : 0;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeRemaining = useMemo(
+    () => (info ? Math.max(0, Math.floor((info.expiresAt - now) / 1000)) : 0),
+    [info, now]
+  );
 
   return (
     <div className="max-w-xl mx-auto px-4 py-12 sm:py-20">
