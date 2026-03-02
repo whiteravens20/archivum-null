@@ -19,7 +19,7 @@ export interface VaultInfo {
 
 export async function uploadVault(
   encryptedBlob: Blob,
-  originalName: string,
+  _originalName: string,
   ttl: number,
   maxDownloads: number,
   turnstileToken?: string,

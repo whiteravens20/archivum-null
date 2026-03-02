@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "composite": true,
     "target": "ES2024",
     "lib": ["ES2024"],
     "module": "ESNext",
@@ -8,7 +9,6 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
     "strict": true
   },
   "include": ["vite.config.ts"]
