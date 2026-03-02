@@ -102,7 +102,7 @@ Backend: `http://localhost:3000`
 cp .env.example .env
 # Edit .env — set real values:
 #   ADMIN_PASSWORD=<strong-password>
-#   BIND_ADDRESS=<tailscale-ip>
+#   BIND_ADDRESS=<tunnel-ip>        # IP of your tunnel/private interface
 #   TURNSTILE_SECRET=<real-secret>
 
 docker compose up -d --build
@@ -123,7 +123,7 @@ docker compose up -d --build
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
 | `STORAGE_PATH` | `/data/vaults` | File storage path |
-| `BIND_ADDRESS` | `0.0.0.0` | Bind address (use Tailscale IP in prod) |
+| `BIND_ADDRESS` | `0.0.0.0` | Bind address (use private/tunnel IP in prod) |
 | `PORT` | `3000` | Server port |
 
 ## Deployment Architecture
@@ -132,13 +132,13 @@ docker compose up -d --build
 
 ```
 Internet
-  → VPS running SWAG (reverse proxy + Let's Encrypt)
-  → Tailscale tunnel
-  → Archivum Null VM (Tailscale IP only)
+  → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
+  → private tunnel (WireGuard, Tailscale, SSH tunnel, …)
+  → Archivum Null VM (tunnel interface IP only)
 ```
 
 **Key requirements:**
-- App binds ONLY to Tailscale IP (`BIND_ADDRESS=100.x.x.x`)
+- App binds ONLY to the tunnel interface IP (`BIND_ADDRESS=<tunnel-ip>`)
 - No LAN access
 - Container runs as non-root with read-only filesystem
 - All capabilities dropped
@@ -151,26 +151,28 @@ iptables -A INPUT -s 192.168.0.0/16 -p tcp --dport 3000 -j DROP
 iptables -A INPUT -s 10.0.0.0/8 -p tcp --dport 3000 -j DROP
 iptables -A INPUT -s 172.16.0.0/12 -p tcp --dport 3000 -j DROP
 
-# Allow only Tailscale interface
-iptables -A INPUT -i tailscale0 -p tcp --dport 3000 -j ACCEPT
+# Allow only the tunnel interface (replace <tunnel-iface> with your actual interface, e.g. wg0, tailscale0)
+iptables -A INPUT -i <tunnel-iface> -p tcp --dport 3000 -j ACCEPT
 
 # Drop everything else to the app port
 iptables -A INPUT -p tcp --dport 3000 -j DROP
 ```
 
-### Example SWAG Config
+### Example Reverse Proxy Config (nginx)
+
+Any reverse proxy that supports `proxy_pass` and TLS termination works (nginx, Caddy, Traefik, HAProxy, …). The example below uses nginx.
 
 ```nginx
 server {
     listen 443 ssl http2;
     server_name archivum.yourdomain.com;
 
-    # SSL managed by SWAG/Let's Encrypt
+    # TLS — managed by your reverse proxy / Let's Encrypt / acme.sh / etc.
 
     client_max_body_size 105m;  # Slightly above MAX_FILE_SIZE
 
     location / {
-        proxy_pass http://<TAILSCALE_IP>:3000;
+        proxy_pass http://<TUNNEL_IP>:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -206,7 +208,7 @@ Capabilities:
 
 **Does NOT expose:** encryption keys, plaintext, or uploader identity.
 
-Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect behind Tailscale or a reverse proxy.
+Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect behind a tunnel or a reverse proxy with IP allowlisting.
 
 ## Cloudflare Turnstile
 
