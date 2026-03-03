@@ -110,21 +110,38 @@ docker compose up -d --build
 
 ## Environment Variables
 
+All variables live in a single `.env` file at the project root. Copy `.env.example` to get started.
+
+Variables prefixed with `VITE_` are baked into the frontend bundle at build time by Vite. For every backend variable that controls a value also shown in the UI, there is an equivalent `VITE_` mirror — keep both values in sync.
+
+### Backend
+
 | Variable | Default | Description |
 |---|---|---|
-| `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) |
-| `TURNSTILE_SITE_KEY` | — | Cloudflare Turnstile site key |
+| `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) — enforced by the backend |
+| `TURNSTILE_SITE_KEY` | — | Cloudflare Turnstile site key (passed to backend via env) |
 | `TURNSTILE_SECRET` | — | Cloudflare Turnstile secret key |
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
 | `RATE_LIMIT_MAX` | `10` | Max requests per window per IP |
-| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24h) |
-| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7d) |
+| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h) |
+| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d) |
 | `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault |
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
-| `STORAGE_PATH` | `/data/vaults` | File storage path |
+| `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
 | `BIND_ADDRESS` | `0.0.0.0` | Bind address (use private/tunnel IP in prod) |
 | `PORT` | `3000` | Server port |
+
+### Frontend (Vite build-time)
+
+These mirror the backend values above. Change both when you change a setting.
+
+| Variable | Default | Description |
+|---|---|---|
+| `VITE_TURNSTILE_SITE_KEY` | `0x000…` | Cloudflare Turnstile site key embedded in bundle |
+| `VITE_MAX_FILE_SIZE` | `104857600` | Max upload size shown/enforced in the UI |
+| `VITE_DEFAULT_TTL` | `86400` | Pre-selected TTL in the upload form |
+| `VITE_DEFAULT_MAX_DOWNLOADS` | `10` | Pre-selected download limit in the upload form |
 
 ## Deployment Architecture
 
@@ -201,7 +218,7 @@ server {
 Accessible at `/admin`. Protected by HTTP Basic Auth.
 
 Capabilities:
-- View total vault count, storage usage, active vaults
+- View active vault count, storage usage, and status
 - List vault metadata (ID, size, timestamps, download counts)
 - Force delete any vault
 - Health check on API
@@ -214,7 +231,7 @@ Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect b
 
 To enable:
 1. Create a Turnstile widget at [dash.cloudflare.com](https://dash.cloudflare.com)
-2. Set `TURNSTILE_SITE_KEY` in the frontend (update `Home.tsx`)
+2. Set `VITE_TURNSTILE_SITE_KEY` (and `TURNSTILE_SITE_KEY`) in `.env`
 3. Set `TURNSTILE_SECRET` in `.env`
 
 When secrets are default/missing, Turnstile verification is skipped.
@@ -239,7 +256,7 @@ See [SECURITY.md](SECURITY.md) for the full security checklist.
 
 ## Terms of Service
 
-See [TOS.md](TOS.md).
+The TOS lives in [TOS.md](TOS.md) at the repository root. The backend serves it at `/api/tos` (plain text) and the frontend renders it as Markdown at the `/tos` route.
 
 > ⚠️ Replace the placeholder TOS with a legally generated document appropriate for your jurisdiction before production deployment.
 
