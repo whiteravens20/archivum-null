@@ -66,12 +66,10 @@ export default function Vault() {
 
       setStage('done');
 
-      // Refresh vault info
-      if (vaultId) {
-        getVaultInfo(vaultId)
-          .then(setInfo)
-          .catch(() => {}); // May be deleted
-      }
+      // Refresh vault info to reflect the consumed download
+      getVaultInfo(vaultId)
+        .then(setInfo)
+        .catch(() => {}); // non-fatal: vault may already be deleted
     } catch (err) {
       setStage('error');
       setError(err instanceof Error ? err.message : 'Decryption failed');
