@@ -4,7 +4,10 @@ import { config } from '../config.js';
 interface TurnstileResponse {
   success: boolean;
   'error-codes'?: string[];
+  /** The hostname of the site where the challenge was solved. */
   hostname?: string;
+  /** The action label defined in the widget (optional verification). */
+  action?: string;
 }
 
 export async function verifyTurnstile(
@@ -38,6 +41,17 @@ export async function verifyTurnstile(
 
     if (!data.success) {
       request.log.warn({ errors: data['error-codes'] }, 'Turnstile verification failed');
+      reply.status(403).send({ error: 'Captcha verification failed' });
+      return;
+    }
+
+    // Validate hostname to prevent token reuse from a different site.
+    // Only enforced when TURNSTILE_HOSTNAME is configured.
+    if (config.TURNSTILE_HOSTNAME && data.hostname !== config.TURNSTILE_HOSTNAME) {
+      request.log.warn(
+        { expected: config.TURNSTILE_HOSTNAME, got: data.hostname },
+        'Turnstile hostname mismatch'
+      );
       reply.status(403).send({ error: 'Captcha verification failed' });
       return;
     }

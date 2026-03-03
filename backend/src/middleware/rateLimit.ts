@@ -4,58 +4,81 @@ import { config } from '../config.js';
 /**
  * In-memory rate limiter. IP addresses are NOT persisted.
  * Map entries are automatically cleaned up.
+ *
+ * Two tiers:
+ *   - General  : all /api/ routes  — RATE_LIMIT_API_MAX per window (default 120)
+ *   - Upload   : POST /api/vault   — RATE_LIMIT_MAX per window (default 10)
+ *
+ * `request.ip` is used directly — Fastify resolves it correctly from
+ * X-Forwarded-For according to the `trustProxy` setting. Do NOT re-read
+ * X-Forwarded-For manually; that would bypass the trust chain and allow
+ * clients to spoof their IP.
  */
 interface RateBucket {
   count: number;
   resetAt: number;
 }
 
-const buckets = new Map<string, RateBucket>();
+const apiBuckets = new Map<string, RateBucket>();
+const uploadBuckets = new Map<string, RateBucket>();
+
+function cleanupMap(map: Map<string, RateBucket>): void {
+  const now = Date.now();
+  for (const [key, bucket] of map.entries()) {
+    if (bucket.resetAt <= now) map.delete(key);
+  }
+}
 
 // Cleanup stale entries every 5 minutes
 setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of buckets.entries()) {
-    if (bucket.resetAt <= now) buckets.delete(key);
-  }
+  cleanupMap(apiBuckets);
+  cleanupMap(uploadBuckets);
 }, 300_000).unref();
 
-function getClientIp(request: FastifyRequest): string {
-  // Trust X-Forwarded-For only behind known proxy
-  const xff = request.headers['x-forwarded-for'];
-  if (xff) {
-    const first = Array.isArray(xff) ? xff[0] : xff.split(',')[0];
-    return first.trim();
+function checkLimit(
+  map: Map<string, RateBucket>,
+  ip: string,
+  max: number,
+  windowMs: number,
+  reply: FastifyReply
+): boolean {
+  const now = Date.now();
+  let bucket = map.get(ip);
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + windowMs };
+    map.set(ip, bucket);
   }
-  return request.ip;
+  bucket.count++;
+
+  reply.header('X-RateLimit-Limit', max);
+  reply.header('X-RateLimit-Remaining', Math.max(0, max - bucket.count));
+  reply.header('X-RateLimit-Reset', Math.ceil(bucket.resetAt / 1000));
+
+  if (bucket.count > max) {
+    reply.status(429).send({
+      error: 'Too many requests. Try again later.',
+      retryAfter: Math.ceil((bucket.resetAt - now) / 1000),
+    });
+    return false;
+  }
+  return true;
 }
 
 export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
+  const windowMs = config.RATE_LIMIT_WINDOW * 1000;
+
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Only rate-limit upload endpoints
-    if (!request.url.startsWith('/api/vault') || request.method !== 'POST') return;
+    if (!request.url.startsWith('/api/')) return;
 
-    const ip = getClientIp(request);
-    const now = Date.now();
-    const windowMs = config.RATE_LIMIT_WINDOW * 1000;
+    // `request.ip` is already resolved via Fastify's trustProxy chain.
+    const ip = request.ip;
 
-    let bucket = buckets.get(ip);
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + windowMs };
-      buckets.set(ip, bucket);
-    }
+    // Tier 1 — general API limit (guards /api/tos file I/O, vault GET, etc.)
+    if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;
 
-    bucket.count++;
-
-    reply.header('X-RateLimit-Limit', config.RATE_LIMIT_MAX);
-    reply.header('X-RateLimit-Remaining', Math.max(0, config.RATE_LIMIT_MAX - bucket.count));
-    reply.header('X-RateLimit-Reset', Math.ceil(bucket.resetAt / 1000));
-
-    if (bucket.count > config.RATE_LIMIT_MAX) {
-      reply.status(429).send({
-        error: 'Too many requests. Try again later.',
-        retryAfter: Math.ceil((bucket.resetAt - now) / 1000),
-      });
+    // Tier 2 — stricter upload limit
+    if (request.url.startsWith('/api/vault') && request.method === 'POST') {
+      checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply);
     }
   });
 }

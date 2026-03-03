@@ -25,7 +25,9 @@ async function main(): Promise<void> {
           ? { target: 'pino-pretty', options: { colorize: true } }
           : undefined,
     },
-    trustProxy: true,
+    // Trust only as many proxy hops as configured (default: 1 — nearest proxy).
+    // Do NOT use `true` (trust all) in production — clients can spoof X-Forwarded-For.
+    trustProxy: config.TRUST_PROXY,
     bodyLimit: config.MAX_FILE_SIZE + 1024 * 64,
   });
 
