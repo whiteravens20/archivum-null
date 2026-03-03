@@ -136,4 +136,65 @@ describe('verifyTurnstile', () => {
 
     expect(reply.statusCode).toBe(200);
   });
+
+  it('should pass when hostname matches TURNSTILE_HOSTNAME', async () => {
+    vi.stubEnv('TURNSTILE_SECRET', 'real-secret-key');
+    vi.stubEnv('TURNSTILE_HOSTNAME', 'example.com');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: true, hostname: 'example.com' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { verifyTurnstile } = await import('../middleware/turnstile.js');
+
+    const req = createMockRequest({
+      headers: { 'x-turnstile-token': 'valid-token' },
+    });
+    const reply = createMockReply();
+    await verifyTurnstile(req, reply);
+
+    expect(reply.statusCode).toBe(200);
+  });
+
+  it('should return 403 when hostname does not match TURNSTILE_HOSTNAME', async () => {
+    vi.stubEnv('TURNSTILE_SECRET', 'real-secret-key');
+    vi.stubEnv('TURNSTILE_HOSTNAME', 'example.com');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: true, hostname: 'evil.com' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { verifyTurnstile } = await import('../middleware/turnstile.js');
+
+    const req = createMockRequest({
+      headers: { 'x-turnstile-token': 'spoofed-token' },
+    });
+    const reply = createMockReply();
+    await verifyTurnstile(req, reply);
+
+    expect(reply.statusCode).toBe(403);
+    expect(reply.body.error).toContain('Captcha verification failed');
+  });
+
+  it('should skip hostname check when TURNSTILE_HOSTNAME is not set', async () => {
+    vi.stubEnv('TURNSTILE_SECRET', 'real-secret-key');
+    vi.stubEnv('TURNSTILE_HOSTNAME', '');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: true, hostname: 'any-host.com' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { verifyTurnstile } = await import('../middleware/turnstile.js');
+
+    const req = createMockRequest({
+      headers: { 'x-turnstile-token': 'valid-token' },
+    });
+    const reply = createMockReply();
+    await verifyTurnstile(req, reply);
+
+    expect(reply.statusCode).toBe(200);
+  });
 });

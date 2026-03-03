@@ -40,6 +40,28 @@ describe('config', () => {
     const { config } = await import('../config.js');
     expect(Object.isFrozen(config)).toBe(true);
   });
+
+  it('should default TRUST_PROXY to 1', async () => {
+    const { config } = await import('../config.js');
+    expect(config.TRUST_PROXY).toBe(1);
+  });
+
+  it('should read TRUST_PROXY from env', async () => {
+    vi.stubEnv('TRUST_PROXY', '2');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.TRUST_PROXY).toBe(2);
+  });
+
+  it('should default TURNSTILE_HOSTNAME to empty string', async () => {
+    const { config } = await import('../config.js');
+    expect(config.TURNSTILE_HOSTNAME).toBe('');
+  });
+
+  it('should default RATE_LIMIT_API_MAX to 120', async () => {
+    const { config } = await import('../config.js');
+    expect(config.RATE_LIMIT_API_MAX).toBe(120);
+  });
 });
 
 describe('validateConfig', () => {
