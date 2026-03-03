@@ -3,6 +3,7 @@ dist
 .git
 .env
 *.md
+!TOS.md
 LICENSE
 docker-compose*.yml
 .dockerignore

@@ -1,5 +1,10 @@
 # ── Archivum Null Backend Dockerfile ──
 # Multi-stage build for minimal production image
+#
+# check=skip=SecretsUsedInArgOrEnv
+# ↑ Suppresses a BuildKit false-positive: VITE_TURNSTILE_SITE_KEY is a *public*
+#   Cloudflare site key — its value is intentionally embedded in the browser
+#   bundle and visible to every visitor. It is not a secret.
 
 # Stage 1: Build backend
 FROM node:24-alpine AS backend-build
