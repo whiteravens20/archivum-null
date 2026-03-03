@@ -26,9 +26,11 @@ export async function uploadVault(
   onProgress?: (progress: number) => void
 ): Promise<VaultCreateResponse> {
   const formData = new FormData();
-  formData.append('file', encryptedBlob, 'encrypted.bin');
+  // Text fields must come before the file — @fastify/multipart only exposes
+  // fields already parsed before the file stream starts (data.fields).
   formData.append('ttl', String(ttl));
   formData.append('maxDownloads', String(maxDownloads));
+  formData.append('file', encryptedBlob, 'encrypted.bin');
 
   const headers: Record<string, string> = {};
   if (turnstileToken) {
