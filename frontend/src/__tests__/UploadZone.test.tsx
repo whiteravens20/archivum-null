@@ -45,7 +45,7 @@ describe('UploadZone', () => {
     Object.defineProperty(bigFile, 'size', { value: 2048 });
 
     fireEvent.change(input, { target: { files: [bigFile] } });
-    expect(screen.getByText(/exceeds maximum size/i)).toBeInTheDocument();
+    expect(screen.getByText(/file too large/i)).toBeInTheDocument();
   });
 
   it('should call onFileSelect for valid file', () => {
