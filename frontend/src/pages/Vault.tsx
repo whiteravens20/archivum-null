@@ -13,8 +13,25 @@ export default function Vault() {
   const [error, setError] = useState<string | null>(() => (vaultId ? null : 'No vault ID'));
   const [progress, setProgress] = useState(0);
 
-  // Extract key from URL fragment (never sent to server)
-  const keyFragment = window.location.hash.slice(1);
+  // Extract key + optional display filename from URL fragment (never sent to server).
+  // Fragment format: #<key43chars>.<base64url(filename)>  — '.' is not a base64url char.
+  const rawFragment = window.location.hash.slice(1);
+  const dotIndex = rawFragment.indexOf('.');
+  const keyFragment = dotIndex >= 0 ? rawFragment.slice(0, dotIndex) : rawFragment;
+  const fragmentFilename = (() => {
+    if (dotIndex < 0) return '';
+    try {
+      const enc = rawFragment.slice(dotIndex + 1);
+      const base64 = enc.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+      const bin = atob(padded);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return '';
+    }
+  })();
 
   useEffect(() => {
     if (!vaultId) return;
@@ -41,7 +58,7 @@ export default function Vault() {
       const encryptedBlob = await downloadVault(vaultId);
       setProgress(0.5);
 
-      // Import key from URL fragment
+      // Import key from the key portion of the URL fragment
       setStage('decrypting');
       const key = await importKey(keyFragment);
 
@@ -120,6 +137,14 @@ export default function Vault() {
         <div className="space-y-6">
           {/* Vault metadata */}
           <div className="bg-vault-secondary/50 rounded-lg p-6 space-y-4">
+            {fragmentFilename && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 uppercase tracking-wider">File</span>
+                <span className="text-sm text-gray-200 truncate ml-4 max-w-[60%] text-right font-mono">
+                  {fragmentFilename}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-500 uppercase tracking-wider">Size</span>
               <span className="text-sm text-gray-300">{formatBytes(info.ciphertextSize)}</span>

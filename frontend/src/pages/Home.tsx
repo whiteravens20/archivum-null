@@ -52,8 +52,17 @@ export default function Home() {
         (p) => setProgress(0.5 + p * 0.5) // Second 50% is upload
       );
 
-      // 4. Build vault URL with key in fragment
-      const url = `${window.location.origin}/vault/${result.vaultId}#${keyString}`;
+      // 4. Build vault URL with key + encoded filename in fragment.
+      // Fragment NEVER reaches the server — zero-trust is fully preserved.
+      // Format: #<key43chars>.<base64url(filename)>
+      // '.' is not a valid base64url char, so it acts as an unambiguous separator.
+      const encodedName = (() => {
+        const bytes = new TextEncoder().encode(file.name.slice(0, 255));
+        let bin = '';
+        bytes.forEach((b) => (bin += String.fromCharCode(b)));
+        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      })();
+      const url = `${window.location.origin}/vault/${result.vaultId}#${keyString}.${encodedName}`;
       setVaultUrl(url);
       setStage('done');
       setProgress(1);
