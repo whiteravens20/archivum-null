@@ -9,8 +9,6 @@ export interface VaultCreateResponse {
 
 export interface VaultInfo {
   vaultId: string;
-  originalName: string;
-  mimeType: string;
   ciphertextSize: number;
   createdAt: number;
   expiresAt: number;
@@ -19,7 +17,6 @@ export interface VaultInfo {
 
 export async function uploadVault(
   encryptedBlob: Blob,
-  _originalName: string,
   ttl: number,
   maxDownloads: number,
   turnstileToken?: string,

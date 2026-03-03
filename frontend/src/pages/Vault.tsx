@@ -45,13 +45,8 @@ export default function Vault() {
       setStage('decrypting');
       const key = await importKey(keyFragment);
 
-      // Decrypt
-      const decryptedFile = await decryptFile(
-        encryptedBlob,
-        key,
-        info?.originalName || 'download',
-        info?.mimeType || 'application/octet-stream'
-      );
+      // Decrypt — filename and MIME type are recovered from the encrypted payload
+      const decryptedFile = await decryptFile(encryptedBlob, key);
       setProgress(1);
 
       // Trigger browser download
@@ -125,12 +120,6 @@ export default function Vault() {
         <div className="space-y-6">
           {/* Vault metadata */}
           <div className="bg-vault-secondary/50 rounded-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">File</span>
-              <span className="text-sm text-gray-200 truncate ml-4 max-w-[60%] text-right">
-                {info.originalName}
-              </span>
-            </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-500 uppercase tracking-wider">Size</span>
               <span className="text-sm text-gray-300">{formatBytes(info.ciphertextSize)}</span>

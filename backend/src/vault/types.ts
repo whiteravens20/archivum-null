@@ -1,8 +1,6 @@
 export interface VaultMetadata {
   vaultId: string;
   ciphertextSize: number;
-  originalName: string;
-  mimeType: string;
   createdAt: number;
   expiresAt: number;
   remainingDownloads: number;
@@ -16,8 +14,6 @@ export interface CreateVaultRequest {
 
 export interface VaultPublicInfo {
   vaultId: string;
-  originalName: string;
-  mimeType: string;
   ciphertextSize: number;
   createdAt: number;
   expiresAt: number;

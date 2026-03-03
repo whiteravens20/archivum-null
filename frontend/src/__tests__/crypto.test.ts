@@ -87,7 +87,7 @@ describe('crypto/encrypt', () => {
       const encrypted = await encryptFile(file, key);
       expect(encrypted.size).toBeGreaterThan(file.size); // IV + tag overhead
 
-      const decrypted = await decryptFile(encrypted, key, 'test.txt', 'text/plain');
+      const decrypted = await decryptFile(encrypted, key);
       expect(decrypted.name).toBe('test.txt');
       expect(decrypted.type).toBe('text/plain');
 
@@ -119,7 +119,7 @@ describe('crypto/encrypt', () => {
       const encrypted = await encryptFile(file, key1);
 
       await expect(
-        decryptFile(encrypted, key2, 'test.bin', 'application/octet-stream')
+        decryptFile(encrypted, key2)
       ).rejects.toThrow();
     });
 
@@ -128,7 +128,7 @@ describe('crypto/encrypt', () => {
       const tooShort = new Blob([new Uint8Array(20)]); // Less than IV + tag
 
       await expect(
-        decryptFile(tooShort, key, 'test.bin', 'application/octet-stream')
+        decryptFile(tooShort, key)
       ).rejects.toThrow();
     });
 
@@ -137,10 +137,11 @@ describe('crypto/encrypt', () => {
       const file = new File([], 'empty.bin', { type: 'application/octet-stream' });
 
       const encrypted = await encryptFile(file, key);
-      // Should at least have IV (12) + GCM tag (16)
-      expect(encrypted.size).toBe(28);
+      // IV (12) + header (2+9+2+24=37) + empty content (0) + GCM tag (16) = 65
+      expect(encrypted.size).toBe(65);
 
-      const decrypted = await decryptFile(encrypted, key, 'empty.bin', 'application/octet-stream');
+      const decrypted = await decryptFile(encrypted, key);
+      expect(decrypted.name).toBe('empty.bin');
       expect(decrypted.size).toBe(0);
     });
 
@@ -155,7 +156,7 @@ describe('crypto/encrypt', () => {
       const file = new File([data], 'large.bin');
 
       const encrypted = await encryptFile(file, key);
-      const decrypted = await decryptFile(encrypted, key, 'large.bin', 'application/octet-stream');
+      const decrypted = await decryptFile(encrypted, key);
 
       const original = new Uint8Array(await new Blob([data]).arrayBuffer());
       const result = new Uint8Array(await decrypted.arrayBuffer());

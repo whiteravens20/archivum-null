@@ -6,11 +6,23 @@
  *   - 256-bit key from crypto.getRandomValues
  *   - Unique IV per encryption
  *   - Key NEVER leaves the browser (stored in URL fragment only)
+ *
+ * Payload format (plaintext before AES-GCM):
+ *   [uint16 BE: nameLen][nameLen bytes: filename UTF-8]
+ *   [uint16 BE: mimeLen][mimeLen bytes: MIME type UTF-8]
+ *   [remaining bytes: file content]
+ *
+ * The server never receives the filename or MIME type — they are
+ * encrypted inside the payload and recovered exclusively client-side.
  */
 
 const ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256;
 const IV_LENGTH = 12; // 96 bits recommended for AES-GCM
+
+/** Maximum byte lengths accepted when encoding/decoding header fields */
+const MAX_NAME_BYTES = 510; // ~255 chars worst-case UTF-8
+const MAX_MIME_BYTES = 254;
 
 /** Generate a 256-bit AES key */
 export async function generateKey(): Promise<CryptoKey> {
@@ -41,8 +53,14 @@ export async function importKey(base64url: string): Promise<CryptoKey> {
 
 /**
  * Encrypt a file.
- * Returns: IV (12 bytes) || ciphertext
- * The IV is prepended to the ciphertext for self-contained decryption.
+ *
+ * Plaintext layout before AES-GCM encryption:
+ *   [uint16 BE: nameLen][filename UTF-8][uint16 BE: mimeLen][MIME UTF-8][file bytes]
+ *
+ * Wire format stored on server:
+ *   IV (12 bytes) || AES-GCM ciphertext
+ *
+ * The server never receives (and never can read) the filename or MIME type.
  */
 export async function encryptFile(
   file: File,
@@ -51,50 +69,102 @@ export async function encryptFile(
 ): Promise<Blob> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
 
-  // Read file as ArrayBuffer
-  const plaintext = await readFileAsArrayBuffer(file, onProgress);
+  // Encode filename (capped) and MIME type into header bytes
+  const encoder = new TextEncoder();
+  const rawName = file.name || 'file';
+  // Cap so the encoded form fits within MAX_NAME_BYTES
+  const nameBytes = encoder.encode(rawName.slice(0, MAX_NAME_BYTES));
+  const mimeBytes = encoder.encode((file.type || 'application/octet-stream').slice(0, MAX_MIME_BYTES));
 
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: ALGORITHM, iv },
-    key,
-    plaintext
-  );
+  const fileBytes = await readFileAsArrayBuffer(file, onProgress);
+
+  // Build header + content buffer
+  const headerLen = 2 + nameBytes.length + 2 + mimeBytes.length;
+  const plaintext = new Uint8Array(headerLen + fileBytes.byteLength);
+  const view = new DataView(plaintext.buffer);
+  let offset = 0;
+
+  view.setUint16(offset, nameBytes.length, false); offset += 2;
+  plaintext.set(nameBytes, offset);               offset += nameBytes.length;
+  view.setUint16(offset, mimeBytes.length, false); offset += 2;
+  plaintext.set(mimeBytes, offset);               offset += mimeBytes.length;
+  plaintext.set(new Uint8Array(fileBytes), offset);
+
+  const ciphertext = await crypto.subtle.encrypt({ name: ALGORITHM, iv }, key, plaintext);
 
   // Prepend IV to ciphertext
-  const combined = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), IV_LENGTH);
+  const wire = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
+  wire.set(iv, 0);
+  wire.set(new Uint8Array(ciphertext), IV_LENGTH);
 
-  return new Blob([combined], { type: 'application/octet-stream' });
+  return new Blob([wire], { type: 'application/octet-stream' });
 }
 
 /**
- * Decrypt ciphertext.
- * Expects: IV (12 bytes) || ciphertext
+ * Decrypt ciphertext and recover the original file with its original name and
+ * MIME type — both extracted from the encrypted payload header.
+ *
+ * Expects wire format: IV (12 bytes) || AES-GCM ciphertext
  */
 export async function decryptFile(
   encryptedBlob: Blob,
   key: CryptoKey,
-  originalName: string,
-  mimeType: string
 ): Promise<File> {
   const data = new Uint8Array(await encryptedBlob.arrayBuffer());
 
-  if (data.length < IV_LENGTH + 16) {
-    // AES-GCM tag is 16 bytes minimum
+  // Minimum: IV + 4-byte header (2+2 empty name+mime) + 16-byte GCM tag
+  if (data.length < IV_LENGTH + 4 + 16) {
     throw new Error('Invalid encrypted data: too short');
   }
 
   const iv = data.slice(0, IV_LENGTH);
   const ciphertext = data.slice(IV_LENGTH);
 
-  const plaintext = await crypto.subtle.decrypt(
-    { name: ALGORITHM, iv },
-    key,
-    ciphertext
+  const decrypted = new Uint8Array(
+    await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext)
   );
 
-  return new File([plaintext], originalName, { type: mimeType });
+  // Parse header
+  if (decrypted.length < 4) throw new Error('Decrypted payload header too short');
+  const dv = new DataView(decrypted.buffer);
+  let pos = 0;
+
+  const nameLen = dv.getUint16(pos, false); pos += 2;
+  if (pos + nameLen + 2 > decrypted.length) throw new Error('Corrupt payload: name out of bounds');
+  const decoder = new TextDecoder();
+  const fileName = sanitizeFilename(decoder.decode(decrypted.slice(pos, pos + nameLen)));
+  pos += nameLen;
+
+  const mimeLen = dv.getUint16(pos, false); pos += 2;
+  if (pos + mimeLen > decrypted.length) throw new Error('Corrupt payload: mime out of bounds');
+  const mimeType = decoder.decode(decrypted.slice(pos, pos + mimeLen)) || 'application/octet-stream';
+  pos += mimeLen;
+
+  const fileContent = decrypted.slice(pos);
+  return new File([fileContent], fileName, { type: mimeType });
+}
+
+/**
+ * Sanitize a filename extracted from an encrypted payload to prevent
+ * path-traversal or dangerous names when the browser triggers a download.
+ * (The filename never leaves the client, but we sanitize defensively.)
+ */
+function sanitizeFilename(raw: string): string {
+  return (
+    raw
+      // Strip path separators
+      .replace(/[/\\]/g, '_')
+      // Strip control characters (0x00–0x1F, 0x7F) without control char regex literals
+      .split('')
+      .filter((c) => { const code = c.charCodeAt(0); return code > 31 && code !== 127; })
+      .join('')
+      // Strip leading dots (hidden files on Unix)
+      .replace(/^\.+/, '')
+      // Trim whitespace
+      .trim()
+      // Limit to 255 characters
+      .slice(0, 255) || 'file'
+  );
 }
 
 /** Read file to ArrayBuffer with progress tracking */

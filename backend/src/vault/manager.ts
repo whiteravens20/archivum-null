@@ -56,8 +56,6 @@ export class VaultManager {
 
   async createVault(
     stream: Readable,
-    originalName: string,
-    mimeType: string,
     ttl: number,
     maxDownloads: number
   ): Promise<VaultMetadata> {
@@ -77,8 +75,6 @@ export class VaultManager {
     const meta: VaultMetadata = {
       vaultId,
       ciphertextSize: size,
-      originalName,
-      mimeType,
       createdAt: now,
       expiresAt: now + clampedTtl * 1000,
       remainingDownloads: clampedDownloads,

@@ -22,14 +22,10 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     const fields = data.fields as Record<string, { value?: string }>;
     const ttl = Number(fields?.ttl?.value) || config.DEFAULT_TTL;
     const maxDownloads = Number(fields?.maxDownloads?.value) || config.DEFAULT_MAX_DOWNLOADS;
-    const originalName = data.filename || 'unnamed';
-    const mimeType = data.mimetype || 'application/octet-stream';
 
     try {
       const meta = await vaultManager.createVault(
         data.file,
-        originalName,
-        mimeType,
         ttl,
         maxDownloads
       );
@@ -61,8 +57,6 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.send({
       vaultId: meta.vaultId,
-      originalName: meta.originalName,
-      mimeType: meta.mimeType,
       ciphertextSize: meta.ciphertextSize,
       createdAt: meta.createdAt,
       expiresAt: meta.expiresAt,

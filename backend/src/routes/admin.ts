@@ -28,7 +28,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       vaults.map((v) => ({
         vaultId: v.vaultId,
         ciphertextSize: v.ciphertextSize,
-        originalName: v.originalName,
         createdAt: v.createdAt,
         expiresAt: v.expiresAt,
         remainingDownloads: v.remainingDownloads,

@@ -46,7 +46,6 @@ export default function Home() {
       setStage('uploading');
       const result = await uploadVault(
         encryptedBlob,
-        file.name,
         ttl,
         maxDownloads,
         turnstileToken,

@@ -14,8 +14,6 @@ function makeMeta(partial?: Partial<VaultMetadata>): VaultMetadata {
   return {
     vaultId: 'test-vault-id',
     ciphertextSize: 100,
-    originalName: 'test.bin',
-    mimeType: 'application/octet-stream',
     createdAt: Date.now(),
     expiresAt: Date.now() + 86400_000,
     remainingDownloads: 5,
