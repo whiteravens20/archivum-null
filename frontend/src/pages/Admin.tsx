@@ -4,7 +4,6 @@ import { formatBytes } from '../crypto/encrypt.ts';
 interface VaultMeta {
   vaultId: string;
   ciphertextSize: number;
-  originalName: string;
   createdAt: number;
   expiresAt: number;
   remainingDownloads: number;
@@ -174,10 +173,9 @@ export default function Admin() {
                   <div key={v.vaultId} className="px-4 py-3 flex items-center justify-between text-sm">
                     <div className="min-w-0 flex-1">
                       <div className="flex gap-3 items-baseline">
-                        <span className="text-vault-accent font-mono text-xs truncate max-w-[120px]">
+                        <span className="text-vault-accent font-mono text-xs truncate max-w-[200px]">
                           {v.vaultId}
                         </span>
-                        <span className="text-gray-300 truncate">{v.originalName}</span>
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">
                         {formatBytes(v.ciphertextSize)} · {v.remainingDownloads}/{v.maxDownloads} DL ·
