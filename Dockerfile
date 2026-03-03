@@ -39,6 +39,9 @@ COPY --from=backend-build /app/backend/dist ./backend/dist
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# Copy TOS (can be overridden by volume mount in production)
+COPY TOS.md ./TOS.md
+
 # Create data directory
 RUN mkdir -p /data/vaults && chown -R archivum:archivum /data
 

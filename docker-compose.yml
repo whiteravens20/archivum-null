@@ -27,6 +27,7 @@ services:
     # Volumes
     volumes:
       - vault-data:/data/vaults
+      - ./TOS.md:/app/TOS.md:ro
 
     # Network: expose only on the tunnel/private interface IP
     ports:

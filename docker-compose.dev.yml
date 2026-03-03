@@ -13,6 +13,7 @@ services:
       - "0.0.0.0:3000:3000"
     volumes:
       - ./backend/src:/app/backend/src
+      - ./TOS.md:/app/TOS.md:ro
       - vault-data-dev:/data/vaults
     env_file:
       - .env

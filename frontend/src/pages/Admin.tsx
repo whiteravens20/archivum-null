@@ -147,9 +147,8 @@ export default function Admin() {
         <>
           {/* Stats */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
               {[
-                { label: 'Total Vaults', value: stats.totalVaults },
                 { label: 'Active Vaults', value: stats.activeVaults },
                 { label: 'Storage', value: `${stats.totalStorageMB} MB` },
                 { label: 'Status', value: '● Online' },
