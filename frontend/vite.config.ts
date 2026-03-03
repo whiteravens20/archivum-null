@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  envDir: '..', // read VITE_* variables from root .env
   server: {
     proxy: {
       '/api': {

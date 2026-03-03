@@ -7,15 +7,17 @@ import Turnstile from '../components/Turnstile.tsx';
 import { generateKey, exportKey, encryptFile } from '../crypto/encrypt.ts';
 import { uploadVault } from '../api/vault.ts';
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB — frontend enforcement
-const TURNSTILE_SITE_KEY = '0x0000000000000000000000'; // Replace with real key
+const MAX_FILE_SIZE = Number(import.meta.env.VITE_MAX_FILE_SIZE) || 100 * 1024 * 1024;
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '0x0000000000000000000000';
+const DEFAULT_TTL = Number(import.meta.env.VITE_DEFAULT_TTL) || 86400;
+const DEFAULT_MAX_DOWNLOADS = Number(import.meta.env.VITE_DEFAULT_MAX_DOWNLOADS) || 10;
 
 type Stage = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const [ttl, setTtl] = useState(86400);
-  const [maxDownloads, setMaxDownloads] = useState(10);
+  const [ttl, setTtl] = useState(DEFAULT_TTL);
+  const [maxDownloads, setMaxDownloads] = useState(DEFAULT_MAX_DOWNLOADS);
   const [stage, setStage] = useState<Stage>('idle');
   const [progress, setProgress] = useState(0);
   const [vaultUrl, setVaultUrl] = useState<string | null>(null);

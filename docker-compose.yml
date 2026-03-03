@@ -11,7 +11,13 @@
 
 services:
   archivum-null:
-    build: .
+    build:
+      context: .
+      args:
+        - VITE_MAX_FILE_SIZE=${VITE_MAX_FILE_SIZE:-104857600}
+        - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY:-0x0000000000000000000000}
+        - VITE_DEFAULT_TTL=${VITE_DEFAULT_TTL:-86400}
+        - VITE_DEFAULT_MAX_DOWNLOADS=${VITE_DEFAULT_MAX_DOWNLOADS:-10}
     container_name: archivum-null
     restart: unless-stopped
 
