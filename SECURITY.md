@@ -26,7 +26,11 @@
 ## Anti-Abuse
 
 - [x] Cloudflare Turnstile integration (optional)
-- [x] In-memory per-IP rate limiting (configurable window + max)
+- [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
+- [x] Two-tier in-memory per-IP rate limiting:
+  - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
+  - Upload tier: `POST /api/vault` (default 10 req/window) — stricter
+- [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
 - [x] Max file size enforcement (413 response)
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
@@ -49,6 +53,7 @@
 - [x] Example firewall rules provided
 - [x] No LAN exposure in production mode
 - [x] CORS restricted in production
+- [x] Configurable reverse-proxy trust depth (`TRUST_PROXY`, default `1` — trusts nearest hop only; prevents `X-Forwarded-For` spoofing)
 
 ## Admin Panel
 
