@@ -29,6 +29,18 @@ Anonymous, zero-knowledge encrypted file sharing with expiring vaults. No accoun
 
 ---
 
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| Docker 24+ & Docker Compose | On the homelab host |
+| Domain name | Pointed at the VPS public IP |
+| VPS (any provider) | Runs the reverse proxy; handles TLS termination |
+| Private tunnel | WireGuard (recommended), SSH tunnel, or any VPN overlay |
+| Cloudflare account *(optional)* | For Turnstile CAPTCHA + DDoS mitigation |
+
+> If testing locally only (no VPS, no tunnel), the development Docker Compose is sufficient — skip to [Development](#development).
+
 ## Architecture
 
 ```
@@ -98,15 +110,48 @@ Backend API: `http://localhost:3000`
 
 ### Production
 
-```bash
-cp .env.example .env
-# Edit .env — set real values:
-#   ADMIN_PASSWORD=<strong-password>
-#   HOST_BIND_ADDRESS=<tunnel-ip>    # HOST interface Docker binds the port on
-#   TURNSTILE_SECRET=<real-secret>
+> **First-time deploy checklist** — complete in order.
 
+**1. Provision the VPS.** Install nginx or Caddy. Open ports 80 and 443 only. Keep port 3000 closed (see [VPS Hardening](#vps-hardening)).
+
+**2. Set up a private tunnel.** WireGuard is recommended — see [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement). Note the tunnel IP assigned to your homelab machine (e.g. `10.8.0.2`).
+
+**3. Configure DNS.** Point your domain `A` record to the VPS public IP.
+
+**4. Clone the repo** on the homelab host.
+
+```bash
+git clone https://github.com/whiteravens20/archivum-null.git
+cd archivum-null
+cp .env.example .env
+```
+
+**5. Edit `.env`.** Minimum required changes:
+
+```bash
+ADMIN_PASSWORD=<a-strong-random-password>   # required — panel locked without this
+HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab WireGuard IP
+# Uncomment and fill in if using Cloudflare Turnstile:
+# TURNSTILE_SECRET=<your-cf-secret>
+# TURNSTILE_SITE_KEY=<your-cf-site-key>
+# VITE_TURNSTILE_SITE_KEY=<your-cf-site-key>
+```
+
+**6. Build and start** the production container.
+
+```bash
 docker compose up -d --build
 ```
+
+**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
+
+**8. Validate the deployment posture** on the homelab host.
+
+```bash
+./scripts/check-deployment.sh --tunnel-iface wg0
+```
+
+All checks should pass before exposing the service publicly.
 
 ## Environment Variables
 
@@ -287,6 +332,27 @@ It checks:
 - Port 3000 is **not** reachable via the LAN interface
 - `docker.sock` is not mounted inside the container
 
+## Upgrading
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+The `vault-data` volume is preserved across rebuilds. No migrations are needed for storage format changes in the current version. Check the release notes for any breaking changes before upgrading.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Port 3000 still bound to `0.0.0.0` | `HOST_BIND_ADDRESS` not set in `.env` | Set `HOST_BIND_ADDRESS=<tunnel-ip>` and `docker compose up -d` |
+| Health check failing | `PORT` mismatch between app and health check | Ensure `PORT` in `.env` matches `HEALTHCHECK` in `Dockerfile` (default: `3000`) |
+| Admin panel returns 403 | `ADMIN_PASSWORD` empty or not set | Set `ADMIN_PASSWORD` in `.env` and restart |
+| Uploads fail with 413 | `client_max_body_size` too small on reverse proxy | Set to `105m` (slightly above `MAX_FILE_SIZE`) — see nginx/Caddy config examples |
+| Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` = `VITE_TURNSTILE_SITE_KEY` and both match the Cloudflare dashboard |
+| Files not persisted after restart | Volume not mounted | Check `vault-data` volume exists: `docker volume ls` |
+| `crypto.subtle is undefined` in browser | Page served over plain HTTP | WebCrypto requires a secure context (HTTPS or `localhost`). In dev, use `https://localhost:5173` |
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -333,17 +399,68 @@ See [SECURITY.md](SECURITY.md) for the full security checklist.
 - **No persistent IP logs:** Rate limiter uses in-memory only
 - **Authenticated encryption:** AES-256-GCM provides confidentiality + integrity
 
+### What the Server Knows vs. Cannot Know
+
+| The server stores | The server **cannot** know |
+|---|---|
+| Encrypted ciphertext | Plaintext content |
+| Vault ID (random) | Encryption key (never sent) |
+| File size (encrypted blob size) | Original filename (stored encrypted) |
+| MIME type (stored encrypted) | Original MIME type |
+| Created / expires timestamps | Uploader identity (no accounts) |
+| Download count | Persistent IP address (in-memory only) |
+
+This is the zero-knowledge guarantee: **a server compromise exposes only encrypted blobs, not plaintext.** The decryption key exists only in the vault URL fragment (`#`), which browsers do not include in HTTP requests.
+
+### Threat Model — What We Protect Against
+
+| Threat | Protection |
+|---|---|
+| Passive network observer | TLS in transit; ciphertext at rest — observer sees encrypted bytes only |
+| Legal demand / server seizure | Only ciphertext + metadata available; operator cannot decrypt |
+| Enumeration / brute-force | Vault IDs are 21-character nanoid (128+ bits of entropy) |
+| Abuse / spam | Turnstile CAPTCHA + 3-tier rate limiting per IP |
+| Large file DoS | Streaming size enforcement — no full file held in memory |
+| Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
+
 ### Threat Model Limitations
 
-- Client device compromise exposes key (URL bar, memory)
-- Link interception = file access (share via encrypted channels)
-- Not designed to resist targeted state-level adversaries with client access
+| Threat | Why we don't mitigate it |
+|---|---|
+| Compromised client device | Key is in browser memory and visible in the URL bar/history |
+| Malicious browser extension | Extensions can read page content and URL fragments |
+| Link interception | Anyone with the vault URL can decrypt — share via encrypted channels |
+| Compromised server serving modified JS | A compromised server could serve a client that exfiltrates the key |
+| Targeted state-level adversary with client access | Outside scope — use dedicated offline encryption tools |
+| DDoS at scale | Rate limiting covers casual abuse; use Cloudflare or a CDN for sustained attacks |
 
 ## Terms of Service
 
 The TOS lives in [TOS.md](TOS.md) at the repository root. The backend serves it at `/api/tos` (plain text) and the frontend renders it as Markdown at the `/tos` route.
 
-> ⚠️ Replace the placeholder TOS with a legally generated document appropriate for your jurisdiction before production deployment.
+### Zero-Knowledge Disclaimer
+
+Archivum Null is a **zero-knowledge relay** — the following is built into the architecture:
+
+- The server **never receives** the encryption key. The key exists only in the vault URL fragment (`#KEY`), which browsers exclude from HTTP requests.
+- The server **stores only ciphertext**. Even with full server access, an attacker or the operator cannot read the file contents.
+- The operator **cannot comply** with a request to reveal file contents. They can provide only: encrypted ciphertext, vault metadata (size, timestamps), and download counts.
+
+> This guarantee holds **only** when the client device and browser are not compromised, and only when the vault URL is shared securely. See [Threat Model Limitations](#threat-model--limitations) above.
+
+### Operator Pre-Launch Checklist
+
+Before exposing this service publicly:
+
+- [ ] Replace [TOS.md](TOS.md) with a legally reviewed document for your jurisdiction
+- [ ] Add your contact information to TOS.md (`Replace with your contact information`)
+- [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
+- [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
+- [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
+- [ ] Review the [Threat Model Limitations](#threat-model--limitations) and confirm they are acceptable for your use case
+- [ ] Remove or replace the `[!WARNING] Beta` notice at the top of this README once you consider the deployment stable
+
+> **Legal notice:** The included TOS is a placeholder template and does not constitute legal advice. Consult a qualified lawyer before deploying a public service.
 
 ## License
 
