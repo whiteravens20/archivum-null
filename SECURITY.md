@@ -83,8 +83,12 @@
 
 ## What This Does NOT Protect Against
 
-- Compromise of the client device (key in memory/URL bar)
-- Link interception (share vault links over encrypted channels)
-- Browser extensions with access to page content
-- Targeted state-level adversaries with client access
-- DDoS beyond basic rate limiting (use Cloudflare/proxy)
+| Threat vector | Why it is out of scope |
+|---|---|
+| Compromised client device | Encryption key resides in browser memory and the URL bar; malware/physical access exposes it |
+| Malicious browser extension | Extensions can read page content, URL fragments, and intercept WebCrypto calls |
+| Link sharing over insecure channel | Anyone holding the vault URL `#KEY` fragment can decrypt the file |
+| Server-side JS tampering | A compromised server could serve a modified frontend that exfiltrates the key before encryption |
+| Targeted state-level adversary with client access | Outside scope — use offline, air-gapped tools for this threat model |
+| Sustained DDoS | Rate limiting covers casual abuse; deploy behind Cloudflare or another CDN for sustained attacks |
+| Long-term storage security | Vaults are designed to be ephemeral; do not use for archival of sensitive material |
