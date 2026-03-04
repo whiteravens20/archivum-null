@@ -77,6 +77,15 @@ services:
         max-size: "10m"
         max-file: "3"
 
+    # Network: dedicated bridge — container is isolated from the default docker
+    # network and any unrelated containers on the host.
+    networks:
+      - archivum
+
 volumes:
   vault-data:
     driver: local
+
+networks:
+  archivum:
+    driver: bridge
