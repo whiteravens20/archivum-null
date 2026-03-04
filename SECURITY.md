@@ -55,8 +55,12 @@
 
 - [x] Docker port published only on tunnel/private interface (`HOST_BIND_ADDRESS` in `.env`, default `127.0.0.1`)
 - [x] App inside container binds to `0.0.0.0` of its own network namespace — Docker port mapping is the enforcement boundary
+- [x] Dedicated Docker bridge network (container isolated from default `docker0` and unrelated containers)
 - [x] Tunnel/private-interface-only access in production
 - [x] Example firewall rules provided (iptables + nftables, whitelist-first order)
+- [x] VPS hardening documented (UFW + nftables — port 3000 never public, only 80/443)
+- [x] WireGuard `AllowedIPs = <tunnel-ip>/32` documented to prevent lateral LAN movement
+- [x] Deployment validation script (`scripts/check-deployment.sh`) to verify posture on the running host
 - [x] No LAN exposure in production mode
 - [x] CORS restricted in production
 - [x] Configurable reverse-proxy trust depth (`TRUST_PROXY`, default `1` — trusts nearest hop only; prevents `X-Forwarded-For` spoofing)
