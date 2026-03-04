@@ -1,0 +1,66 @@
+# ── Dependabot configuration ──────────────────────────────────────────────────
+# Keeps GitHub Actions and npm dependencies up to date automatically.
+# Opens PRs weekly — CI must pass before merging (enforced by branch protection).
+#
+# Versioning strategy:
+#   - github-actions: bumps the version tag in `uses:` lines (e.g. @v3 → @v4)
+#   - npm: respects semver ranges in package.json; groups minor+patch into one PR
+
+version: 2
+
+updates:
+  # ── GitHub Actions ───────────────────────────────────────────────────────────
+  # Dependabot will bump the SHA pins and update the # vX.Y.Z comments
+  # when new releases of used actions are published.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci"
+
+  # ── Backend npm ──────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - backend
+    commit-message:
+      prefix: "chore(backend)"
+    # Group all non-breaking updates into a single PR to reduce noise.
+    # Security updates are always opened as separate PRs regardless.
+    groups:
+      backend-non-breaking:
+        update-types:
+          - minor
+          - patch
+
+  # ── Frontend npm ─────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - frontend
+    commit-message:
+      prefix: "chore(frontend)"
+    groups:
+      frontend-non-breaking:
+        update-types:
+          - minor
+          - patch

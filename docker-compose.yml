@@ -1,16 +1,24 @@
 # ── Archivum Null — Production Docker Compose ──
 # Hardened for homelab deployment behind a reverse proxy + private tunnel
 #
+# DEPLOYMENT MODES:
+#   Pull from registry (CD):  docker compose pull && docker compose up -d
+#   Build locally:            docker compose up -d --build
+#
 # SECURITY NOTES:
 # - Container runs as non-root (UID 1001)
 # - Read-only root filesystem (tmpfs for /tmp)
 # - All Linux capabilities dropped
 # - No new privileges
 # - No docker.sock mount
-# - Bind ONLY to the tunnel/private interface IP (set BIND_ADDRESS in .env)
+# - Bind ONLY to the tunnel/private interface IP (set HOST_BIND_ADDRESS in .env)
 
 services:
   archivum-null:
+    # When IMAGE_TAG is set (e.g. 1.2.3), docker compose pull fetches that exact
+    # version from ghcr.io. Defaults to 'latest'.
+    # The build: block below is used when building locally with --build.
+    image: ghcr.io/whiteravens20/archivum-null:${IMAGE_TAG:-latest}
     build:
       context: .
       args:

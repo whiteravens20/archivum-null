@@ -1,0 +1,38 @@
+# ── Code Owners ───────────────────────────────────────────────────────────────
+# GitHub enforces that at least one owner approves any PR touching these paths.
+# Configure branch protection (Settings → Branches → main → Require review from
+# Code Owners) to make this mandatory.
+#
+# Paths are checked most-specific to least-specific; last matching rule wins.
+
+# Default: all files require owner review
+* @whiteravens20
+
+# ── CI/CD & supply chain ──────────────────────────────────────────────────────
+# Any change to workflow files or Dependabot config is high-risk supply-chain.
+/.github/ @whiteravens20
+
+# ── Cryptography ──────────────────────────────────────────────────────────────
+# Client-side encryption — any change here directly impacts the zero-knowledge
+# guarantee.
+/frontend/src/crypto/ @whiteravens20
+
+# ── Security middleware ────────────────────────────────────────────────────────
+# Auth, rate limiting, Turnstile — changes here affect the security perimeter.
+/backend/src/middleware/ @whiteravens20
+
+# ── Vault & storage ───────────────────────────────────────────────────────────
+# Core vault lifecycle and file I/O — race conditions and path traversal
+# vulnerabilities live here.
+/backend/src/vault/ @whiteravens20
+/backend/src/storage/ @whiteravens20
+
+# ── Docker & container config ─────────────────────────────────────────────────
+/Dockerfile @whiteravens20
+/Dockerfile.dev @whiteravens20
+/docker-compose.yml @whiteravens20
+/docker-compose.dev.yml @whiteravens20
+
+# ── Security & legal docs ─────────────────────────────────────────────────────
+/SECURITY.md @whiteravens20
+/TOS.md @whiteravens20

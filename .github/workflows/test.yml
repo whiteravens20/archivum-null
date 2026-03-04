@@ -34,6 +34,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Build
+        run: npm run build
+
       - name: Tests
         run: npm run test
 
@@ -64,5 +67,44 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Build
+        # Use dummy VITE_ values — these are build-time public constants only.
+        # Real values are supplied at release time via repository variables.
+        env:
+          VITE_MAX_FILE_SIZE: '104857600'
+          VITE_TURNSTILE_SITE_KEY: '0x0000000000000000000000'
+          VITE_DEFAULT_TTL: '86400'
+          VITE_DEFAULT_MAX_DOWNLOADS: '10'
+        run: npm run build
+
       - name: Tests
         run: npm run test
+
+  docker:
+    name: Validate Docker build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (validate only — no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # push: false + load: false = full build exercised, result discarded.
+          # This is the fastest way to validate the Dockerfile without storing
+          # an image in the runner or a registry.
+          push: false
+          load: false
+          build-args: |
+            VITE_MAX_FILE_SIZE=104857600
+            VITE_TURNSTILE_SITE_KEY=0x0000000000000000000000
+            VITE_DEFAULT_TTL=86400
+            VITE_DEFAULT_MAX_DOWNLOADS=10
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

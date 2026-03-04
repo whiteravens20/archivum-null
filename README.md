@@ -332,14 +332,37 @@ It checks:
 - Port 3000 is **not** reachable via the LAN interface
 - `docker.sock` is not mounted inside the container
 
+## Docker Images
+
+Images are published to `ghcr.io/whiteravens20/archivum-null`.
+
+| Tag | Source | Stable | Purpose |
+|---|---|---|---|
+| `:1.2.3` / `:1.2` / `:1` / `:latest` | Tagged release from `main` | ✅ Yes | Production |
+| `:edge` | Every push to `main` | ⚠️ Mostly | Preview of next release |
+| `:dev` | Every push to `dev` | ❌ No | Development builds — may be broken |
+| `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
+
+> **Do not run `:dev` in production.** Development images are built from work-in-progress commits, may contain incomplete features, breaking changes, or security issues not yet reviewed. Use a versioned release tag for any internet-facing deployment.
+
 ## Upgrading
 
+**From a registry image (recommended for CD deploys):**
+```bash
+# Pin to a specific version by setting IMAGE_TAG=1.2.3 in .env first,
+# then pull and restart:
+docker compose pull
+docker compose up -d
+docker image prune -f
+```
+
+**From source (local build):**
 ```bash
 git pull
 docker compose up -d --build
 ```
 
-The `vault-data` volume is preserved across rebuilds. No migrations are needed for storage format changes in the current version. Check the release notes for any breaking changes before upgrading.
+The `vault-data` volume is preserved across both modes. Check the release notes for breaking changes before upgrading.
 
 ## Troubleshooting
 
