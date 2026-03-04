@@ -53,9 +53,10 @@
 
 ## Network Security
 
-- [x] Bind to specific IP (not 0.0.0.0 in production)
+- [x] Docker port published only on tunnel/private interface (`HOST_BIND_ADDRESS` in `.env`, default `127.0.0.1`)
+- [x] App inside container binds to `0.0.0.0` of its own network namespace — Docker port mapping is the enforcement boundary
 - [x] Tunnel/private-interface-only access in production
-- [x] Example firewall rules provided
+- [x] Example firewall rules provided (iptables + nftables, whitelist-first order)
 - [x] No LAN exposure in production mode
 - [x] CORS restricted in production
 - [x] Configurable reverse-proxy trust depth (`TRUST_PROXY`, default `1` — trusts nearest hop only; prevents `X-Forwarded-For` spoofing)
