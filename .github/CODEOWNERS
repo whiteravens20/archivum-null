@@ -6,33 +6,33 @@
 # Paths are checked most-specific to least-specific; last matching rule wins.
 
 # Default: all files require owner review
-* @whiteravens20
+#* @pavlojs
 
 # ── CI/CD & supply chain ──────────────────────────────────────────────────────
 # Any change to workflow files or Dependabot config is high-risk supply-chain.
-/.github/ @whiteravens20
+/.github/ @pavlojs
 
 # ── Cryptography ──────────────────────────────────────────────────────────────
 # Client-side encryption — any change here directly impacts the zero-knowledge
 # guarantee.
-/frontend/src/crypto/ @whiteravens20
+/frontend/src/crypto/ @pavlojs
 
 # ── Security middleware ────────────────────────────────────────────────────────
 # Auth, rate limiting, Turnstile — changes here affect the security perimeter.
-/backend/src/middleware/ @whiteravens20
+/backend/src/middleware/ @pavlojs
 
 # ── Vault & storage ───────────────────────────────────────────────────────────
 # Core vault lifecycle and file I/O — race conditions and path traversal
 # vulnerabilities live here.
-/backend/src/vault/ @whiteravens20
-/backend/src/storage/ @whiteravens20
+/backend/src/vault/ @pavlojs
+/backend/src/storage/ @pavlojs
 
 # ── Docker & container config ─────────────────────────────────────────────────
-/Dockerfile @whiteravens20
-/Dockerfile.dev @whiteravens20
-/docker-compose.yml @whiteravens20
-/docker-compose.dev.yml @whiteravens20
+/Dockerfile @pavlojs
+/Dockerfile.dev @pavlojs
+/docker-compose.yml @pavlojs
+/docker-compose.dev.yml @pavlojs
 
 # ── Security & legal docs ─────────────────────────────────────────────────────
-/SECURITY.md @whiteravens20
-/TOS.md @whiteravens20
+/SECURITY.md @pavlojs
+#/TOS.md @pavlojs
