@@ -19,7 +19,11 @@
 - [x] No persistent IP logging (in-memory rate limit only)
 - [x] Streaming file upload — no full-file memory buffering
 - [x] Path traversal protection on vault IDs
-- [x] File size enforced at frontend, backend, and proxy levels — streaming abort on backend (no full oversized write to disk)
+- [x] File size enforced at frontend, backend, and proxy levels:
+  - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
+  - Backend multipart: `@fastify/multipart` stream truncation + explicit `truncated` check → 413
+  - Backend streaming: transform stream aborts early in `writeFile` → no full oversized write to disk
+  - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
 
