@@ -107,6 +107,41 @@ describe('LocalStorage', () => {
     });
   });
 
+  describe('writeFile — maxSize enforcement', () => {
+    it('throws when stream exceeds maxSize', async () => {
+      const bigData = 'a'.repeat(200);
+      await expect(
+        storage.writeFile('too-big', createTestStream(bigData), 100)
+      ).rejects.toThrow();
+    });
+
+    it('does NOT leave a partial data file after size-exceeded error', async () => {
+      const bigData = 'b'.repeat(200);
+      await storage.writeFile('size-partial', createTestStream('seed'), 1000);
+      // Replace with an oversized write
+      await storage
+        .writeFile('size-partial', createTestStream(bigData), 10)
+        .catch(() => {});
+
+      // The data.enc file must have been cleaned up by writeFile's catch block
+      const { default: fspInner } = await import('node:fs/promises');
+      const dataPath = path.join(tempDir, 'size-partial', 'data.enc');
+      await expect(fspInner.access(dataPath)).rejects.toThrow();
+    });
+
+    it('succeeds for data exactly at the limit', async () => {
+      const data = 'x'.repeat(50);
+      const size = await storage.writeFile('exact-limit', createTestStream(data), 50);
+      expect(size).toBe(50);
+    });
+
+    it('succeeds for data within the limit', async () => {
+      const data = 'hello';
+      const size = await storage.writeFile('within-limit', createTestStream(data), 100);
+      expect(size).toBe(data.length);
+    });
+  });
+
   describe('listVaults', () => {
     it('should list vault directories', async () => {
       await storage.writeFile('vault-a', createTestStream('a'));

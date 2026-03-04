@@ -16,6 +16,8 @@ describe('config', () => {
     expect(config.BIND_ADDRESS).toBe('0.0.0.0');
     expect(config.RATE_LIMIT_WINDOW).toBe(60);
     expect(config.RATE_LIMIT_MAX).toBe(10);
+    expect(config.RATE_LIMIT_API_MAX).toBe(120);
+    expect(config.RATE_LIMIT_DOWNLOAD_MAX).toBe(30);
     expect(config.DEFAULT_TTL).toBe(86400);
     expect(config.MAX_TTL).toBe(604800);
     expect(config.DEFAULT_MAX_DOWNLOADS).toBe(10);
@@ -61,6 +63,11 @@ describe('config', () => {
   it('should default RATE_LIMIT_API_MAX to 120', async () => {
     const { config } = await import('../config.js');
     expect(config.RATE_LIMIT_API_MAX).toBe(120);
+  });
+
+  it('should default RATE_LIMIT_DOWNLOAD_MAX to 30', async () => {
+    const { config } = await import('../config.js');
+    expect(config.RATE_LIMIT_DOWNLOAD_MAX).toBe(30);
   });
 });
 
