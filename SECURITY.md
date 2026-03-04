@@ -19,7 +19,7 @@
 - [x] No persistent IP logging (in-memory rate limit only)
 - [x] Streaming file upload — no full-file memory buffering
 - [x] Path traversal protection on vault IDs
-- [x] File size enforced at frontend, backend, and proxy levels
+- [x] File size enforced at frontend, backend, and proxy levels — streaming abort on backend (no full oversized write to disk)
 - [x] Timing-safe comparison for admin credentials
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
 
@@ -27,9 +27,10 @@
 
 - [x] Cloudflare Turnstile integration (optional)
 - [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
-- [x] Two-tier in-memory per-IP rate limiting:
+- [x] Three-tier in-memory per-IP rate limiting:
   - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
   - Upload tier: `POST /api/vault` (default 10 req/window) — stricter
+  - Download tier: `GET /api/vault/:id/download` (default 30 req/window) — prevents bulk download exhaustion
 - [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
 - [x] Max file size enforcement (413 response)
 - [x] TTL clamping (min 60s, max configurable)

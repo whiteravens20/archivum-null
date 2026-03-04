@@ -93,8 +93,8 @@ cp .env.example .env
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-Frontend: `http://localhost:5173`
-Backend: `http://localhost:3000`
+Frontend: `https://localhost:5173` (self-signed cert — accept the browser warning once)
+Backend API: `http://localhost:3000`
 
 ### Production
 
@@ -121,8 +121,11 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) — enforced by the backend |
 | `TURNSTILE_SITE_KEY` | — | Cloudflare Turnstile site key (passed to backend via env) |
 | `TURNSTILE_SECRET` | — | Cloudflare Turnstile secret key |
+| `TURNSTILE_HOSTNAME` | — | Expected hostname in Turnstile response (e.g. `example.com`); leave empty to skip |
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
-| `RATE_LIMIT_MAX` | `10` | Max requests per window per IP |
+| `RATE_LIMIT_MAX` | `10` | Max upload (`POST /api/vault`) requests per window per IP |
+| `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
+| `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
 | `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h) |
 | `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d) |
 | `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault |
@@ -131,6 +134,7 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
 | `BIND_ADDRESS` | `0.0.0.0` | Bind address (use private/tunnel IP in prod) |
 | `PORT` | `3000` | Server port |
+| `TRUST_PROXY` | `1` | Number of trusted reverse-proxy hops for `X-Forwarded-For` (1 = nearest proxy only) |
 
 ### Frontend (Vite build-time)
 
