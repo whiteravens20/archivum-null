@@ -185,10 +185,13 @@ nft add rule inet filter input tcp dport 3000 iifname "<tunnel-iface>" accept
 nft add rule inet filter input tcp dport 3000 drop
 ```
 
-### Example Reverse Proxy Config (nginx)
+### Reverse Proxy Configuration
 
-Any reverse proxy that supports `proxy_pass` and TLS termination works (nginx, Caddy, Traefik, HAProxy, …). The example below uses nginx.
+Any reverse proxy with TLS termination and `proxy_pass`/`reverse_proxy` support works (nginx, Caddy, Traefik, HAProxy, …).
 
+> Replace `<TUNNEL_IP>` with the IP of your homelab tunnel interface as seen from the VPS.
+
+#### nginx
 ```nginx
 server {
     listen 443 ssl http2;
@@ -211,6 +214,78 @@ server {
     }
 }
 ```
+
+#### Caddy (recommended — automatic TLS via Let's Encrypt)
+```caddyfile
+archivum.yourdomain.com {
+    # Caddy handles TLS automatically — no certificate config needed
+
+    request_body max 105MB
+
+    reverse_proxy <TUNNEL_IP>:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Streaming support — disable request buffering
+        flush_interval -1
+    }
+}
+```
+
+### VPS Hardening
+
+The VPS runs only the reverse proxy. Port 3000 must **not** be reachable from the public internet — only 80 (HTTP→HTTPS redirect) and 443 (HTTPS).
+
+**UFW (Ubuntu/Debian)**
+```bash
+ufw default deny incoming
+ufw allow 22/tcp    # SSH — restrict to your admin IP if possible
+ufw allow 80/tcp    # HTTP (Let's Encrypt challenge / redirect)
+ufw allow 443/tcp   # HTTPS
+# Port 3000 is intentionally absent — must never be public
+ufw enable
+```
+
+**nftables**
+```bash
+nft add rule inet filter input tcp dport { 22, 80, 443 } accept
+nft add rule inet filter input drop
+```
+
+### WireGuard — Prevent Lateral LAN Movement
+
+Scope `AllowedIPs` on each WireGuard peer to only the tunnel interface address. **Do not** use `0.0.0.0/0` on the homelab peer unless you intend to route all traffic through the tunnel.
+
+```ini
+# /etc/wireguard/wg0.conf  (on the VPS)
+[Peer]
+PublicKey = <homelab-peer-pubkey>
+# Restrict to tunnel interface IP only — prevents accidental LAN routing
+AllowedIPs = <homelab-tunnel-ip>/32   # e.g. 10.8.0.2/32
+```
+
+With a `/32` `AllowedIPs`, even if the container is misconfigured, WireGuard will only route packets destined for the tunnel IP — LAN subnets remain unreachable from the VPS.
+
+### Deployment Validation
+
+After bringing up the production container on the homelab host, run the included validation script:
+
+```bash
+./scripts/check-deployment.sh --tunnel-iface wg0
+```
+
+It checks:
+- Container is running and healthy
+- Port 3000 is **not** bound to `0.0.0.0`
+- Container is running as non-root
+- `cap_drop: ALL` and `no-new-privileges` are active
+- Root filesystem is read-only
+- Tunnel interface is up and its IP matches `HOST_BIND_ADDRESS`
+- Firewall rules exist for the app port
+- Port 3000 is **not** reachable via the LAN interface
+- `docker.sock` is not mounted inside the container
 
 ## Tech Stack
 
