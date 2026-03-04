@@ -102,7 +102,7 @@ Backend API: `http://localhost:3000`
 cp .env.example .env
 # Edit .env — set real values:
 #   ADMIN_PASSWORD=<strong-password>
-#   BIND_ADDRESS=<tunnel-ip>        # IP of your tunnel/private interface
+#   HOST_BIND_ADDRESS=<tunnel-ip>    # HOST interface Docker binds the port on
 #   TURNSTILE_SECRET=<real-secret>
 
 docker compose up -d --build
@@ -132,7 +132,8 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
 | `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
-| `BIND_ADDRESS` | `0.0.0.0` | Bind address (use private/tunnel IP in prod) |
+| `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod |
+| `BIND_ADDRESS` | `0.0.0.0` | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace) |
 | `PORT` | `3000` | Server port |
 | `TRUST_PROXY` | `1` | Number of trusted reverse-proxy hops for `X-Forwarded-For` (1 = nearest proxy only) |
 
@@ -159,24 +160,29 @@ Internet
 ```
 
 **Key requirements:**
-- App binds ONLY to the tunnel interface IP (`BIND_ADDRESS=<tunnel-ip>`)
+- Docker port published ONLY on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
 - No LAN access
 - Container runs as non-root with read-only filesystem
 - All capabilities dropped
 
-### Example Firewall Rules (iptables)
+### Example Firewall Rules
 
+> **Important:** use a _whitelist-first_ order. Tunnel interfaces often use private-range IPs (e.g. WireGuard at `10.8.0.1`) — if you DROP those subnets first, tunnel traffic is blocked before the ACCEPT rule is reached.
+
+**iptables**
 ```bash
-# Drop all traffic from LAN subnets to the app port
-iptables -A INPUT -s 192.168.0.0/16 -p tcp --dport 3000 -j DROP
-iptables -A INPUT -s 10.0.0.0/8 -p tcp --dport 3000 -j DROP
-iptables -A INPUT -s 172.16.0.0/12 -p tcp --dport 3000 -j DROP
-
-# Allow only the tunnel interface (replace <tunnel-iface> with your actual interface, e.g. wg0, tun0)
+# 1. Accept traffic arriving on the tunnel interface (e.g. wg0, tun0)
 iptables -A INPUT -i <tunnel-iface> -p tcp --dport 3000 -j ACCEPT
 
-# Drop everything else to the app port
+# 2. Drop everything else to the app port (covers LAN, WAN, etc.)
 iptables -A INPUT -p tcp --dport 3000 -j DROP
+```
+
+**nftables** (modern default on Debian/Ubuntu/Fedora)
+```bash
+# Accept on tunnel interface, drop all other traffic to the port
+nft add rule inet filter input tcp dport 3000 iifname "<tunnel-iface>" accept
+nft add rule inet filter input tcp dport 3000 drop
 ```
 
 ### Example Reverse Proxy Config (nginx)
