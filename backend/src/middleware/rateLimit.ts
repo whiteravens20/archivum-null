@@ -58,9 +58,11 @@ function checkLimit(
   reply.header('X-RateLimit-Reset', Math.ceil(bucket.resetAt / 1000));
 
   if (bucket.count > max) {
+    const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
+    reply.header('Retry-After', retryAfter);
     reply.status(429).send({
       error: 'Too many requests. Try again later.',
-      retryAfter: Math.ceil((bucket.resetAt - now) / 1000),
+      retryAfter,
     });
     return false;
   }

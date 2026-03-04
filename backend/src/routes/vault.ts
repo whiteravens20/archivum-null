@@ -18,6 +18,13 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: 'No file provided' });
     }
 
+    // Multipart stream was truncated — file exceeded the allowed size
+    if (data.file.truncated) {
+      // Drain the stream to free the connection before responding
+      data.file.resume();
+      return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
+    }
+
     // Read TTL and maxDownloads from fields
     const fields = data.fields as Record<string, { value?: string }>;
     const ttl = Number(fields?.ttl?.value) || config.DEFAULT_TTL;

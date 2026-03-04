@@ -57,9 +57,15 @@ async function main(): Promise<void> {
   });
 
   // Multipart (streaming)
+  // AES-GCM encryption overhead: 12-byte IV + 2-byte name len + name + 2-byte mime len
+  // + mime + 16-byte GCM tag. Worst case ≈ 800 bytes; use 1 KiB to be safe.
+  // This lets valid max-size files through while the streaming check in writeFile
+  // enforces the true MAX_FILE_SIZE limit on the stored ciphertext.
+  const ENCRYPTION_OVERHEAD = 1024;
+
   await app.register(multipart, {
     limits: {
-      fileSize: config.MAX_FILE_SIZE,
+      fileSize: config.MAX_FILE_SIZE + ENCRYPTION_OVERHEAD,
       files: 1,
       fields: 10,
     },
