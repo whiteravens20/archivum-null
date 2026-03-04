@@ -5,9 +5,10 @@ import { config } from '../config.js';
  * In-memory rate limiter. IP addresses are NOT persisted.
  * Map entries are automatically cleaned up.
  *
- * Two tiers:
- *   - General  : all /api/ routes  — RATE_LIMIT_API_MAX per window (default 120)
- *   - Upload   : POST /api/vault   — RATE_LIMIT_MAX per window (default 10)
+ * Three tiers:
+ *   - General  : all /api/ routes              — RATE_LIMIT_API_MAX per window (default 120)
+ *   - Upload   : POST /api/vault               — RATE_LIMIT_MAX per window (default 10)
+ *   - Download : GET /api/vault/:id/download   — RATE_LIMIT_DOWNLOAD_MAX per window (default 30)
  *
  * `request.ip` is used directly — Fastify resolves it correctly from
  * X-Forwarded-For according to the `trustProxy` setting. Do NOT re-read
@@ -21,6 +22,7 @@ interface RateBucket {
 
 const apiBuckets = new Map<string, RateBucket>();
 const uploadBuckets = new Map<string, RateBucket>();
+const downloadBuckets = new Map<string, RateBucket>();
 
 function cleanupMap(map: Map<string, RateBucket>): void {
   const now = Date.now();
@@ -33,6 +35,7 @@ function cleanupMap(map: Map<string, RateBucket>): void {
 setInterval(() => {
   cleanupMap(apiBuckets);
   cleanupMap(uploadBuckets);
+  cleanupMap(downloadBuckets);
 }, 300_000).unref();
 
 function checkLimit(
@@ -78,7 +81,12 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
 
     // Tier 2 — stricter upload limit
     if (request.url.startsWith('/api/vault') && request.method === 'POST') {
-      checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply);
+      if (!checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply)) return;
+    }
+
+    // Tier 3 — download limit (prevents bulk enumeration / download exhaustion)
+    if (/^\/api\/vault\/[^/]+\/download$/.test(request.url) && request.method === 'GET') {
+      checkLimit(downloadBuckets, ip, config.RATE_LIMIT_DOWNLOAD_MAX, windowMs, reply);
     }
   });
 }
