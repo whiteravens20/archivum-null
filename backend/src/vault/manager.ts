@@ -65,11 +65,15 @@ export class VaultManager {
     const clampedTtl = Math.min(Math.max(ttl, 60), config.MAX_TTL);
     const clampedDownloads = Math.min(Math.max(maxDownloads, 1), 1000);
 
-    const size = await storage.writeFile(vaultId, stream);
-
-    if (size > config.MAX_FILE_SIZE) {
-      await storage.deleteVault(vaultId);
-      throw Object.assign(new Error('File too large'), { statusCode: 413 });
+    // Pass MAX_FILE_SIZE into writeFile so the stream is aborted early if the
+    // limit is exceeded — avoids writing the full oversized blob to disk first.
+    let size: number;
+    try {
+      size = await storage.writeFile(vaultId, stream, config.MAX_FILE_SIZE);
+    } catch (err) {
+      // Ensure the vault directory is fully removed on any write failure
+      await storage.deleteVault(vaultId).catch(() => {});
+      throw err;
     }
 
     const meta: VaultMetadata = {
@@ -91,7 +95,11 @@ export class VaultManager {
     const meta = vaults.get(vaultId);
     if (!meta) return undefined;
     if (meta.expiresAt <= Date.now() || meta.remainingDownloads <= 0) {
-      this.deleteVault(vaultId).catch(() => {});
+      // Do NOT call deleteVault() here. A concurrent consumeDownload may have
+      // just decremented remainingDownloads to 0 and is still opening / streaming
+      // the file. Triggering an immediate rm() would race with that open, causing
+      // ENOENT errors. Instead, rely on stream 'end' handlers and purgeExpired()
+      // (every 60 s) for physical cleanup.
       return undefined;
     }
     return meta;
@@ -101,11 +109,22 @@ export class VaultManager {
     const meta = this.getVault(vaultId);
     if (!meta) return null;
 
+    // Decrement FIRST (synchronously, before the initial await) to maintain
+    // atomicity in Node.js's cooperative scheduling model.  If we awaited anything
+    // before this, concurrent requests in the same microtask batch could all pass
+    // the getVault() guard with the same remainingDownloads value.
+    //
+    // Trade-off (Risk-4): if the underlying file is missing (storage corruption),
+    // the slot has already been consumed.  That is acceptable — a corrupt vault
+    // would be deleted regardless, and the damage is bounded to a single slot.
     meta.remainingDownloads -= 1;
     await storage.writeMetadata(vaultId, meta);
 
     const stream = await storage.readFile(vaultId);
     if (!stream) {
+      // File missing despite valid metadata — storage is corrupt.
+      // Delete the vault; we intentionally do NOT restore the counter because
+      // the vault is irrecoverable and will never serve further downloads.
       await this.deleteVault(vaultId);
       return null;
     }
