@@ -9,6 +9,8 @@ const envSchema = {
   RATE_LIMIT_MAX: Number(process.env.RATE_LIMIT_MAX || 10),
   // General API rate limit (covers all /api/ routes incl. tos, health, vault GET)
   RATE_LIMIT_API_MAX: Number(process.env.RATE_LIMIT_API_MAX || 120),
+  // Download-specific rate limit (GET /api/vault/:id/download)
+  RATE_LIMIT_DOWNLOAD_MAX: Number(process.env.RATE_LIMIT_DOWNLOAD_MAX || 30),
   DEFAULT_TTL: Number(process.env.DEFAULT_TTL || 86400),
   MAX_TTL: Number(process.env.MAX_TTL || 604800),
   DEFAULT_MAX_DOWNLOADS: Number(process.env.DEFAULT_MAX_DOWNLOADS || 10),
@@ -31,7 +33,7 @@ export function validateConfig(): void {
   if (config.MAX_FILE_SIZE <= 0) {
     throw new Error('MAX_FILE_SIZE must be positive');
   }
-  if (config.RATE_LIMIT_WINDOW <= 0 || config.RATE_LIMIT_MAX <= 0 || config.RATE_LIMIT_API_MAX <= 0) {
+  if (config.RATE_LIMIT_WINDOW <= 0 || config.RATE_LIMIT_MAX <= 0 || config.RATE_LIMIT_API_MAX <= 0 || config.RATE_LIMIT_DOWNLOAD_MAX <= 0) {
     throw new Error('Rate limit values must be positive');
   }
 }

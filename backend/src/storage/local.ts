@@ -28,7 +28,7 @@ export class LocalStorage implements StorageBackend {
     return path.join(this.vaultDir(vaultId), 'meta.json');
   }
 
-  async writeFile(vaultId: string, stream: Readable): Promise<number> {
+  async writeFile(vaultId: string, stream: Readable, maxSize?: number): Promise<number> {
     const dir = this.vaultDir(vaultId);
     await fsp.mkdir(dir, { recursive: true });
 
@@ -39,12 +39,23 @@ export class LocalStorage implements StorageBackend {
     const counter = new (await import('node:stream')).Transform({
       transform(chunk, _encoding, callback) {
         size += chunk.length;
+        if (maxSize !== undefined && size > maxSize) {
+          // Abort immediately — avoid buffering excess data on disk
+          callback(Object.assign(new Error('File too large'), { statusCode: 413 }));
+          return;
+        }
         this.push(chunk);
         callback();
       },
     });
 
-    await pipeline(stream, counter, writeStream);
+    try {
+      await pipeline(stream, counter, writeStream);
+    } catch (err) {
+      // Clean up partial file so no orphan data remains on disk
+      await fsp.rm(filePath, { force: true }).catch(() => {});
+      throw err;
+    }
     return size;
   }
 
