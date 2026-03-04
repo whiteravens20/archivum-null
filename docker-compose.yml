@@ -35,15 +35,22 @@ services:
       - vault-data:/data/vaults
       - ./TOS.md:/app/TOS.md:ro
 
-    # Network: expose only on the tunnel/private interface IP
+    # Network: expose only on the tunnel/private interface IP.
+    # HOST_BIND_ADDRESS (from .env) controls which HOST interface Docker publishes
+    # the port on — set it to your tunnel/WireGuard IP.
+    # BIND_ADDRESS (set in environment: below) stays 0.0.0.0 so Fastify listens
+    # on all interfaces inside the container's own network namespace; Docker's
+    # port mapping is the actual enforcement boundary.
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
 
     # Environment
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+      # Must stay 0.0.0.0 inside Docker — Fastify listens on all container
+      # interfaces; host-side restriction is enforced by ports: above.
       - BIND_ADDRESS=0.0.0.0
 
     # Resource limits
