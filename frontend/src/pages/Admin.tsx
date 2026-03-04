@@ -26,6 +26,8 @@ export default function Admin() {
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // vaultId pending inline confirmation, null = none
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const authHeader = useCallback(
     () => ({ Authorization: `Basic ${auth}` }),
@@ -80,8 +82,8 @@ export default function Admin() {
     return () => clearInterval(interval);
   }, [authenticated, fetchData]);
 
-  const handleDelete = async (vaultId: string) => {
-    if (!confirm(`Delete vault ${vaultId}?`)) return;
+  const handleDeleteConfirmed = async (vaultId: string) => {
+    setPendingDelete(null);
     try {
       const res = await fetch(`/api/admin/vaults/${vaultId}`, {
         method: 'DELETE',
@@ -182,12 +184,32 @@ export default function Admin() {
                         Expires {new Date(v.expiresAt).toLocaleString()}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDelete(v.vaultId)}
-                      className="ml-4 text-xs text-red-400 hover:text-red-300 whitespace-nowrap"
-                    >
-                      Delete
-                    </button>
+                    <div className="ml-4 flex items-center gap-2 whitespace-nowrap">
+                      {pendingDelete === v.vaultId ? (
+                        <>
+                          <span className="text-xs text-gray-400">Confirm?</span>
+                          <button
+                            onClick={() => handleDeleteConfirmed(v.vaultId)}
+                            className="text-xs text-red-400 hover:text-red-300 font-medium"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setPendingDelete(null)}
+                            className="text-xs text-gray-500 hover:text-gray-300"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setPendingDelete(v.vaultId)}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -197,4 +219,21 @@ export default function Admin() {
       )}
     </div>
   );
+}
+
+
+interface VaultMeta {
+  vaultId: string;
+  ciphertextSize: number;
+  createdAt: number;
+  expiresAt: number;
+  remainingDownloads: number;
+  maxDownloads: number;
+}
+
+interface Stats {
+  totalVaults: number;
+  activeVaults: number;
+  totalStorageBytes: number;
+  totalStorageMB: number;
 }
