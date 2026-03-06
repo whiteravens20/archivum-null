@@ -33,7 +33,7 @@
     "tsx": "^4.21.0",
     "pino-pretty": "^13.0.0",
     "eslint": "^9.39.3",
-    "@eslint/js": "^9.39.3",
+    "@eslint/js": "^10.0.1",
     "typescript-eslint": "^8.56.1",
     "globals": "^17.4.0",
     "vitest": "^4.0.18",
