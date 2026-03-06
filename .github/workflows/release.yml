@@ -43,14 +43,37 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # ── Job 0: guard — ensure tag points to a commit on main ────────────────────
+  # github.event.base_ref is unreliable for tags pushed via `git push origin <tag>`
+  # (it is only populated reliably when the tag is created through the GitHub UI).
+  # This job checks out the repo and uses `git branch --contains` to confirm the
+  # tagged commit is actually reachable from main before the build runs.
+  check-branch:
+    name: Verify tag is on main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      on-main: ${{ steps.check.outputs.on-main }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # full history needed for branch containment check
+      - name: Check branch containment
+        id: check
+        run: |
+          if git branch -r --contains "${{ github.sha }}" | grep -q 'origin/main'; then
+            echo "on-main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "on-main=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Tag ${{ github.ref_name }} does not point to a commit on main. Release skipped."
+          fi
+
   # ── Job 1: build and push image ─────────────────────────────────────────────
   build-push:
     name: Build & push Docker image
-    # Only run when the tag was pushed from main.
-    # github.event.base_ref is 'refs/heads/main' for tags created on main.
-    # Tags pushed from dev or other branches are ignored — use docker-snapshot.yml
-    # for development images.
-    if: github.event.base_ref == 'refs/heads/main'
+    needs: check-branch
+    if: needs.check-branch.outputs.on-main == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
