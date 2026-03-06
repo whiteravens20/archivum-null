@@ -50,6 +50,7 @@
   "overrides": {
     "@vitejs/plugin-basic-ssl": {
       "vite": "$vite"
-    }
+    },
+    "minimatch": "^10.2.4"
   }
 }
