@@ -146,7 +146,48 @@ jobs:
           provenance: true
           sbom: true
 
-  # ── Job 2: Trivy scan on pushed image ────────────────────────────────────────
+  # ── Job 2: GitHub Release with auto-generated changelog ─────────────────────
+  # Creates (or updates) the GitHub Release for this tag.
+  # GitHub's built-in release notes generator groups merged PRs by label,
+  # lists direct commits, and credits every contributor automatically.
+  # Configure grouping labels in .github/release.yml (distinct from this file).
+  github-release:
+    name: Create GitHub Release
+    needs: [check-branch, build-push]
+    if: needs.check-branch.outputs.on-main == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # Required to create/update the release
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # needed to compare tag with previous tag
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Auto-generate body from GitHub's release notes API:
+          # groups PRs by label, lists commits, credits contributors.
+          generate_release_notes: true
+          # Append Docker image reference to the generated notes.
+          append_body: true
+          body: |
+
+            ---
+            ## Docker image
+
+            ```
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+
+            | Tag | Description |
+            |---|---|
+            | `${{ github.ref_name }}` | This exact release (immutable) |
+            | `:main` | Always the latest stable production release |
+
+            > **Digest (immutable):** `${{ needs.build-push.outputs.digest }}`
+
+  # ── Job 3: Trivy scan on pushed image ────────────────────────────────────────
   # Pulls the freshly pushed image by immutable digest and scans for HIGH/CRITICAL
   # CVEs. exit-code: 1 fails the workflow on any unacknowledged finding.
   # Add CVE IDs to .trivyignore (with justification) to acknowledge and unblock.
