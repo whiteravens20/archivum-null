@@ -5,10 +5,6 @@
 # Versioning strategy:
 #   - github-actions: bumps the version tag in `uses:` lines (e.g. @v3 → @v4)
 #   - npm: respects semver ranges in package.json; groups minor+patch into one PR
-#
-# ESLint 10 / @eslint/js 10 are intentionally ignored until typescript-eslint
-# adds peer-dependency support for ESLint v10 (typescript-eslint currently
-# declares `eslint: ^8.57.0 || ^9.0.0`).
 
 version: 2
 
@@ -51,12 +47,6 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      # Blocked until typescript-eslint supports ESLint v10
-      - dependency-name: "eslint"
-        versions: [">=10.0.0"]
-      - dependency-name: "@eslint/js"
-        versions: [">=10.0.0"]
 
   # ── Frontend npm ─────────────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -78,7 +68,7 @@ updates:
           - minor
           - patch
     ignore:
-      # Blocked until typescript-eslint supports ESLint v10
+      # Blocked until eslint-plugin-react-hooks adds peer-dep support for ESLint v10
       - dependency-name: "eslint"
         versions: [">=10.0.0"]
       - dependency-name: "@eslint/js"
