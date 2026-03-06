@@ -338,12 +338,17 @@ Images are published to `ghcr.io/whiteravens20/archivum-null`.
 
 | Tag | Source | Stable | Purpose |
 |---|---|---|---|
-| `:1.2.3` / `:1.2` / `:1` / `:latest` | Tagged release from `main` | ✅ Yes | Production |
-| `:edge` | Every push to `main` | ⚠️ Mostly | Preview of next release |
-| `:dev` | Every push to `dev` | ❌ No | Development builds — may be broken |
+| Tag | Source | Stable | Purpose |
+|---|---|---|---|
+| `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
+| `:main` | Tagged release from `main` | ✅ Yes | Production — always the most recent stable release |
+| `:edge` | Every push to `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
+| `:dev` | Every push to `dev` | ❌ No | Snapshot — development builds, may be broken |
 | `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
 
-> **Do not run `:dev` in production.** Development images are built from work-in-progress commits, may contain incomplete features, breaking changes, or security issues not yet reviewed. Use a versioned release tag for any internet-facing deployment.
+> **Only `:main` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`.
+> `:latest` is intentionally **not published** — it is ambiguous by Docker convention (simply the last image built, not necessarily stable).
+> `:edge` and `:dev` are CI snapshot builds — do not use them for any internet-facing deployment.
 
 ## Upgrading
 

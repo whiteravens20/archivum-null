@@ -22,7 +22,13 @@
 #   ghcr.io/whiteravens20/archivum-null:1.2.3
 #   ghcr.io/whiteravens20/archivum-null:1.2
 #   ghcr.io/whiteravens20/archivum-null:1
-#   ghcr.io/whiteravens20/archivum-null:latest
+#   ghcr.io/whiteravens20/archivum-null:main
+#
+# ℹ️  :main is ONLY updated by this workflow on a versioned semver release.
+#    It always points to the most recent stable production build.
+#    The :latest tag is intentionally NOT published — it is ambiguous by Docker
+#    convention (simply the last image built, not necessarily stable).
+#    For a pre-release snapshot of the main branch, use :edge (docker-snapshot.yml).
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Release
@@ -67,12 +73,14 @@ jobs:
           #   :X.Y.Z  (exact version)
           #   :X.Y    (minor)
           #   :X      (major)
-          #   :latest
+          #   :main   (stable production — always the most recent versioned release)
+          # NOTE: :latest is intentionally omitted — it is ambiguous by Docker
+          # convention and could mislead users into pulling a snapshot.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
+            type=raw,value=main
           # Propagate VCS labels for traceability
           labels: |
             org.opencontainers.image.title=Archivum Null

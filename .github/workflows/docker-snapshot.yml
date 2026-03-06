@@ -9,6 +9,11 @@
 #   main branch push  →  ghcr.io/<owner>/<repo>:edge
 #                        ghcr.io/<owner>/<repo>:edge-<7-char-sha>
 #
+# ⚠️  Both :dev and :edge are snapshot builds and are NOT production releases.
+#    The :main tag is reserved exclusively for versioned production releases
+#    (see release.yml). For a stable production image use :main, :latest, or
+#    a specific versioned tag (e.g. :1.2.3).
+#
 # The short-sha tag lets you pin a specific snapshot by commit if needed.
 #
 # VITE_ build-args fall back to safe defaults when repository variables are not

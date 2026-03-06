@@ -16,9 +16,10 @@
 services:
   archivum-null:
     # When IMAGE_TAG is set (e.g. 1.2.3), docker compose pull fetches that exact
-    # version from ghcr.io. Defaults to 'latest'.
+    # version from ghcr.io. Defaults to 'main' (latest stable production release).
+    # Do NOT set IMAGE_TAG to 'edge' or 'dev' in production — those are snapshots.
     # The build: block below is used when building locally with --build.
-    image: ghcr.io/whiteravens20/archivum-null:${IMAGE_TAG:-latest}
+    image: ghcr.io/whiteravens20/archivum-null:${IMAGE_TAG:-main}
     build:
       context: .
       args:
