@@ -67,9 +67,3 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      # Blocked until eslint-plugin-react-hooks adds peer-dep support for ESLint v10
-      - dependency-name: "eslint"
-        versions: [">=10.0.0"]
-      - dependency-name: "@eslint/js"
-        versions: [">=10.0.0"]
