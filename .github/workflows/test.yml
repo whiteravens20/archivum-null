@@ -93,7 +93,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build image (validate only — no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           # push: false + load: false = full build exercised, result discarded.
