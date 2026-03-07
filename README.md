@@ -517,4 +517,4 @@ Before exposing this service publicly:
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](LICENSE) and [ATTRIBUTION](ATTRIBUTION).
