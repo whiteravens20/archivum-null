@@ -73,6 +73,11 @@ describe('config', () => {
 });
 
 describe('validateConfig', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it('should warn when ADMIN_PASSWORD is not set', async () => {
     vi.stubEnv('ADMIN_PASSWORD', '');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -87,5 +92,50 @@ describe('validateConfig', () => {
     const { validateConfig } = await import('../config.js');
     validateConfig();
     expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('should throw when MAX_TTL is zero', async () => {
+    vi.stubEnv('MAX_TTL', '0');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('MAX_TTL must be positive');
+  });
+
+  it('should throw when MAX_TTL is negative', async () => {
+    vi.stubEnv('MAX_TTL', '-1');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('MAX_TTL must be positive');
+  });
+
+  it('should throw when DEFAULT_TTL is zero', async () => {
+    vi.stubEnv('DEFAULT_TTL', '0');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('DEFAULT_TTL must be positive');
+  });
+
+  it('should throw when DEFAULT_TTL exceeds MAX_TTL', async () => {
+    vi.stubEnv('DEFAULT_TTL', '604800');
+    vi.stubEnv('MAX_TTL', '86400');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('DEFAULT_TTL must not exceed MAX_TTL');
+  });
+
+  it('should throw when DEFAULT_MAX_DOWNLOADS is zero', async () => {
+    vi.stubEnv('DEFAULT_MAX_DOWNLOADS', '0');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('DEFAULT_MAX_DOWNLOADS must be positive');
+  });
+
+  it('should throw when DEFAULT_MAX_DOWNLOADS is negative', async () => {
+    vi.stubEnv('DEFAULT_MAX_DOWNLOADS', '-5');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('DEFAULT_MAX_DOWNLOADS must be positive');
+  });
+
+  it('should not throw when DEFAULT_TTL equals MAX_TTL', async () => {
+    vi.stubEnv('DEFAULT_TTL', '86400');
+    vi.stubEnv('MAX_TTL', '86400');
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).not.toThrow();
   });
 });

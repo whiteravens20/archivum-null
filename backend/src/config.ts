@@ -38,4 +38,16 @@ export function validateConfig(): void {
   if (config.RATE_LIMIT_WINDOW <= 0 || config.RATE_LIMIT_MAX <= 0 || config.RATE_LIMIT_API_MAX <= 0 || config.RATE_LIMIT_DOWNLOAD_MAX <= 0) {
     throw new Error('Rate limit values must be positive');
   }
+  if (config.MAX_TTL <= 0) {
+    throw new Error('MAX_TTL must be positive');
+  }
+  if (config.DEFAULT_TTL <= 0) {
+    throw new Error('DEFAULT_TTL must be positive');
+  }
+  if (config.DEFAULT_TTL > config.MAX_TTL) {
+    throw new Error('DEFAULT_TTL must not exceed MAX_TTL');
+  }
+  if (config.DEFAULT_MAX_DOWNLOADS <= 0) {
+    throw new Error('DEFAULT_MAX_DOWNLOADS must be positive');
+  }
 }

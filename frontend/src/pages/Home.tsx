@@ -9,8 +9,27 @@ import { uploadVault } from '../api/vault.ts';
 
 const MAX_FILE_SIZE = Number(import.meta.env.VITE_MAX_FILE_SIZE) || 100 * 1024 * 1024;
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '0x0000000000000000000000';
-const DEFAULT_TTL = Number(import.meta.env.VITE_DEFAULT_TTL) || 86400;
-const DEFAULT_MAX_DOWNLOADS = Number(import.meta.env.VITE_DEFAULT_MAX_DOWNLOADS) || 10;
+
+const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
+const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
+
+function nearestInList(value: number, list: number[]): number {
+  return list.reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+  );
+}
+
+const _rawTtl = Number(import.meta.env.VITE_DEFAULT_TTL) || 86400;
+const DEFAULT_TTL = nearestInList(_rawTtl, TTL_OPTION_VALUES);
+if (import.meta.env.DEV && !TTL_OPTION_VALUES.includes(_rawTtl)) {
+  console.warn(`[VaultConfig] VITE_DEFAULT_TTL=${_rawTtl} is not a valid TTL option. Snapped to nearest: ${DEFAULT_TTL}s. Valid options: ${TTL_OPTION_VALUES.join(', ')}`);
+}
+
+const _rawDownloads = Number(import.meta.env.VITE_DEFAULT_MAX_DOWNLOADS) || 10;
+const DEFAULT_MAX_DOWNLOADS = nearestInList(_rawDownloads, DOWNLOAD_OPTION_VALUES);
+if (import.meta.env.DEV && !DOWNLOAD_OPTION_VALUES.includes(_rawDownloads)) {
+  console.warn(`[VaultConfig] VITE_DEFAULT_MAX_DOWNLOADS=${_rawDownloads} is not a valid download option. Snapped to nearest: ${DEFAULT_MAX_DOWNLOADS}. Valid options: ${DOWNLOAD_OPTION_VALUES.join(', ')}`);
+}
 
 type Stage = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
 
