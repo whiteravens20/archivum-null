@@ -1,5 +1,5 @@
 <div align="center">
-    <img src=frontend/public/logo-text-modern.svg width="80%">
+    <img src=frontend/public/logo-text-modern.svg width="85%">
 <br \><br \>
 
 # Archivum Null
@@ -197,9 +197,9 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `RATE_LIMIT_MAX` | `10` | Max upload (`POST /api/vault`) requests per window per IP |
 | `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
 | `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
-| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h) |
-| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d) |
-| `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault |
+| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
+| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
+| `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
 | `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
@@ -217,8 +217,8 @@ These mirror the backend values above. Change both when you change a setting.
 |---|---|---|
 | `VITE_TURNSTILE_SITE_KEY` | `0x000…` | Cloudflare Turnstile site key embedded in bundle |
 | `VITE_MAX_FILE_SIZE` | `104857600` | Max upload size shown/enforced in the UI |
-| `VITE_DEFAULT_TTL` | `86400` | Pre-selected TTL in the upload form |
-| `VITE_DEFAULT_MAX_DOWNLOADS` | `10` | Pre-selected download limit in the upload form |
+| `VITE_DEFAULT_TTL` | `86400` | Pre-selected TTL in the upload form. Must be one of: `300`, `1800`, `3600`, `21600`, `86400`, `259200`, `604800`. Other values are silently snapped to the nearest option. |
+| `VITE_DEFAULT_MAX_DOWNLOADS` | `10` | Pre-selected download limit in the upload form. Must be one of: `1`, `3`, `5`, `10`, `25`, `50`, `100`. Other values are silently snapped to the nearest option. |
 
 ## Deployment Architecture
 
@@ -363,8 +363,6 @@ It checks:
 
 Images are published to `ghcr.io/whiteravens20/archivum-null`.
 
-| Tag | Source | Stable | Purpose |
-|---|---|---|---|
 | Tag | Source | Stable | Purpose |
 |---|---|---|---|
 | `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
