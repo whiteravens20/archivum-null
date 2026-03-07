@@ -525,4 +525,4 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By particip
 
 ## License
 
-See [LICENSE](LICENSE) and [ATTRIBUTION](ATTRIBUTION).
+See [LICENSE](LICENSE) and [ATTRIBUTION](ATTRIBUTION.md).
