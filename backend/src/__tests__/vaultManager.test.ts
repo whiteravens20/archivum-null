@@ -183,4 +183,58 @@ describe('VaultManager — download counter atomicity', () => {
 
     await unlimitedManager.shutdown();
   });
+
+  // ------------------------------------------------------------------
+  // Chunked upload protocol
+  // ------------------------------------------------------------------
+
+  it('completes a chunked upload with multiple chunks', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+    expect(session.uploadId).toBeDefined();
+    expect(session.receivedBytes).toBe(0);
+
+    // Send two chunks of 50 bytes each
+    await manager.appendChunk(session.uploadId, 0, makeStream('a'.repeat(50)));
+    const s2 = await manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)));
+    expect(s2.receivedBytes).toBe(100);
+
+    const meta = await manager.completeChunkedUpload(session.uploadId);
+    expect(meta.ciphertextSize).toBe(100);
+    expect(meta.vaultId).toBeDefined();
+
+    // Verify the vault is accessible
+    const vault = manager.getVault(meta.vaultId);
+    expect(vault).toBeDefined();
+  });
+
+  it('rejects out-of-order chunk index', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+
+    // Sending chunk index 1 before 0 must fail
+    await expect(
+      manager.appendChunk(session.uploadId, 1, makeStream('data'))
+    ).rejects.toThrow(/Expected chunk index 0/);
+
+    await manager.abortChunkedUpload(session.uploadId);
+  });
+
+  it('rejects completing with no chunks', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+
+    await expect(
+      manager.completeChunkedUpload(session.uploadId)
+    ).rejects.toThrow(/No chunks received/);
+  });
+
+  it('rejects init when totalSize exceeds MAX_FILE_SIZE', () => {
+    expect(() => {
+      manager.initChunkedUpload(999_999_999, 3600, 5);
+    }).toThrow();
+  });
+
+  it('rejects chunk when session does not exist', async () => {
+    await expect(
+      manager.appendChunk('nonexistent-session-id', 0, makeStream('data'))
+    ).rejects.toThrow(/not found/);
+  });
 });

@@ -175,4 +175,47 @@ describe('LocalStorage', () => {
       expect(() => (storage as any).vaultDir('abc123DEF-_xyz')).not.toThrow();
     });
   });
+
+  describe('chunked upload', () => {
+    it('should append chunks and finalize into a vault', async () => {
+      const uploadId = 'test-upload-id';
+      const vaultId = 'test-vault-id';
+
+      // Chunk 1
+      const bytes1 = await storage.appendChunk(uploadId, createTestStream('hello'), 100, 0);
+      expect(bytes1).toBe(5);
+
+      // Chunk 2 (append)
+      const bytes2 = await storage.appendChunk(uploadId, createTestStream(' world'), 100, 5);
+      expect(bytes2).toBe(6);
+
+      // Finalize — moves file into vault directory
+      await storage.finalizeChunkedUpload(uploadId, vaultId);
+
+      // Verify the vault file is readable
+      const stream = await storage.readFile(vaultId);
+      expect(stream).not.toBeNull();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream!) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      expect(Buffer.concat(chunks).toString()).toBe('hello world');
+    });
+
+    it('should reject chunk that would exceed maxTotalSize', async () => {
+      await expect(
+        storage.appendChunk('oversized', createTestStream('a'.repeat(200)), 100, 0)
+      ).rejects.toThrow();
+    });
+
+    it('should clean up upload directory on deleteChunkedUpload', async () => {
+      await storage.appendChunk('cleanup-test', createTestStream('data'), 100, 0);
+      await storage.deleteChunkedUpload('cleanup-test');
+      // Verify _uploads/cleanup-test is gone
+      const { default: fspInner } = await import('node:fs/promises');
+      await expect(
+        fspInner.access(path.join(tempDir, '_uploads', 'cleanup-test'))
+      ).rejects.toThrow();
+    });
+  });
 });

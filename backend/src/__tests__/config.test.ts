@@ -24,6 +24,8 @@ describe('config', () => {
     expect(config.STORAGE_PATH).toBe('/data/vaults');
     expect(config.MAX_FILE_SIZE).toBe(104857600);
     expect(config.MAX_TOTAL_STORAGE).toBe(0);
+    expect(config.CHUNK_SIZE).toBe(52428800);
+    expect(config.UPLOAD_SESSION_TTL).toBe(1800);
     expect(config.ADMIN_USER).toBe('admin');
   });
 
