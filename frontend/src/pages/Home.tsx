@@ -179,19 +179,28 @@ export default function Home() {
                 </div>
               )}
 
-              <button
-                onClick={handleUpload}
-                disabled={stage !== 'idle' || !file}
-                className="w-full py-3 bg-vault-accent text-vault-bg rounded-lg font-medium
-                           hover:bg-vault-accent/90 transition-colors
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {stage === 'idle'
-                  ? 'Encrypt & Upload'
-                  : stage === 'encrypting'
-                  ? 'Encrypting...'
-                  : 'Uploading...'}
-              </button>
+              {stage === 'error' ? (
+                <button
+                  onClick={handleReset}
+                  className="w-full py-3 text-sm text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg transition-colors"
+                >
+                  ← Return to main page
+                </button>
+              ) : (
+                <button
+                  onClick={handleUpload}
+                  disabled={stage !== 'idle' || !file}
+                  className="w-full py-3 bg-vault-accent text-vault-bg rounded-lg font-medium
+                             hover:bg-vault-accent/90 transition-colors
+                             disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {stage === 'idle'
+                    ? 'Encrypt & Upload'
+                    : stage === 'encrypting'
+                    ? 'Encrypting...'
+                    : 'Uploading...'}
+                </button>
+              )}
             </>
           )}
 
