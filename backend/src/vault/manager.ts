@@ -59,6 +59,18 @@ export class VaultManager {
     ttl: number,
     maxDownloads: number
   ): Promise<VaultMetadata> {
+    // Enforce global storage quota before accepting a new upload
+    if (config.MAX_TOTAL_STORAGE > 0) {
+      const { totalStorageBytes } = this.getStats();
+      if (totalStorageBytes >= config.MAX_TOTAL_STORAGE) {
+        const err = Object.assign(
+          new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
+          { statusCode: 507 }
+        );
+        throw err;
+      }
+    }
+
     const vaultId = nanoid(24);
     const now = Date.now();
 

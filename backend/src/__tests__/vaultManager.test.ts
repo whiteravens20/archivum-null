@@ -140,4 +140,47 @@ describe('VaultManager — download counter atomicity', () => {
     const entries = await fsp.readdir(tempDir).catch(() => []);
     expect(entries).toHaveLength(0);
   });
+
+  // ------------------------------------------------------------------
+  // Global storage quota enforcement
+  // ------------------------------------------------------------------
+
+  it('rejects vault creation when global storage quota is exceeded', async () => {
+    vi.resetModules();
+    // Set a tiny quota (30 bytes) so a second upload is rejected
+    vi.stubEnv('MAX_TOTAL_STORAGE', '30');
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    const quotaManager = new mod.VaultManager();
+    await quotaManager.init();
+
+    // First upload: 40 bytes — exceeds the 30-byte quota check on next upload
+    await quotaManager.createVault(makeStream('a'.repeat(40)), 3600, 5);
+
+    // Second upload: total is now 40 >= 30 quota, so this must be rejected
+    await expect(
+      quotaManager.createVault(makeStream('b'.repeat(10)), 3600, 5)
+    ).rejects.toThrow(/Storage quota exceeded/);
+
+    await quotaManager.shutdown();
+  });
+
+  it('allows uploads when MAX_TOTAL_STORAGE is 0 (unlimited)', async () => {
+    vi.resetModules();
+    vi.stubEnv('MAX_TOTAL_STORAGE', '0');
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    const unlimitedManager = new mod.VaultManager();
+    await unlimitedManager.init();
+
+    // Should succeed regardless of size
+    const vault = await unlimitedManager.createVault(makeStream('x'.repeat(1000)), 3600, 5);
+    expect(vault.vaultId).toBeDefined();
+
+    await unlimitedManager.shutdown();
+  });
 });

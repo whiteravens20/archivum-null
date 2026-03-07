@@ -23,6 +23,7 @@ describe('config', () => {
     expect(config.DEFAULT_MAX_DOWNLOADS).toBe(10);
     expect(config.STORAGE_PATH).toBe('/data/vaults');
     expect(config.MAX_FILE_SIZE).toBe(104857600);
+    expect(config.MAX_TOTAL_STORAGE).toBe(0);
     expect(config.ADMIN_USER).toBe('admin');
   });
 

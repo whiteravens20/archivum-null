@@ -15,6 +15,8 @@ interface Stats {
   activeVaults: number;
   totalStorageBytes: number;
   totalStorageMB: number;
+  /** 0 = unlimited */
+  storageQuotaBytes: number;
 }
 
 export default function Admin() {
@@ -149,16 +151,47 @@ export default function Admin() {
           {/* Stats */}
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
-              {[
-                { label: 'Active Vaults', value: stats.activeVaults },
-                { label: 'Storage', value: `${stats.totalStorageMB} MB` },
-                { label: 'Status', value: '● Online' },
-              ].map((s) => (
-                <div key={s.label} className="bg-vault-secondary/50 rounded-lg p-4">
-                  <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">{s.label}</p>
-                  <p className="text-lg font-bold text-gray-200">{s.value}</p>
-                </div>
-              ))}
+              <div className="bg-vault-secondary/50 rounded-lg p-4">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Active Vaults</p>
+                <p className="text-lg font-bold text-gray-200">{stats.activeVaults}</p>
+              </div>
+
+              {/* Storage card — shows quota bar when limit is set */}
+              <div className="bg-vault-secondary/50 rounded-lg p-4 sm:col-span-1">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Storage</p>
+                {stats.storageQuotaBytes > 0 ? (() => {
+                  const pct = Math.min(100, (stats.totalStorageBytes / stats.storageQuotaBytes) * 100);
+                  const isNearFull = pct >= 90;
+                  const isFull = pct >= 100;
+                  return (
+                    <>
+                      <p className={`text-lg font-bold ${isFull ? 'text-red-400' : isNearFull ? 'text-yellow-400' : 'text-gray-200'}`}>
+                        {formatBytes(stats.totalStorageBytes)}
+                        <span className="text-xs font-normal text-gray-500 ml-1">/ {formatBytes(stats.storageQuotaBytes)}</span>
+                      </p>
+                      <div className="mt-2 h-1.5 rounded-full bg-vault-secondary overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isFull ? 'bg-red-500' : isNearFull ? 'bg-yellow-400' : 'bg-vault-accent'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1">{pct.toFixed(1)}% used</p>
+                    </>
+                  );
+                })() : (
+                  <p className="text-lg font-bold text-gray-200">
+                    {formatBytes(stats.totalStorageBytes)}
+                    <span className="text-xs font-normal text-gray-500 ml-1">/ ∞</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-vault-secondary/50 rounded-lg p-4">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Status</p>
+                <p className="text-lg font-bold text-gray-200">● Online</p>
+              </div>
             </div>
           )}
 
@@ -229,11 +262,4 @@ interface VaultMeta {
   expiresAt: number;
   remainingDownloads: number;
   maxDownloads: number;
-}
-
-interface Stats {
-  totalVaults: number;
-  activeVaults: number;
-  totalStorageBytes: number;
-  totalStorageMB: number;
 }

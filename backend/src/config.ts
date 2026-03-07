@@ -14,6 +14,8 @@ const envSchema = {
   DEFAULT_TTL: Number(process.env.DEFAULT_TTL || 86400),
   MAX_TTL: Number(process.env.MAX_TTL || 604800),
   DEFAULT_MAX_DOWNLOADS: Number(process.env.DEFAULT_MAX_DOWNLOADS || 10),
+  // Global storage quota — 0 means unlimited
+  MAX_TOTAL_STORAGE: Number(process.env.MAX_TOTAL_STORAGE || 0),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',

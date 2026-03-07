@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { vaultManager } from '../vault/manager.js';
 import { basicAuth } from '../middleware/basicAuth.js';
+import { config } from '../config.js';
 
 interface VaultParams {
   vaultId: string;
@@ -18,6 +19,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       activeVaults: stats.activeVaults,
       totalStorageBytes: stats.totalStorageBytes,
       totalStorageMB: Math.round(stats.totalStorageBytes / 1024 / 1024 * 100) / 100,
+      // 0 means unlimited
+      storageQuotaBytes: config.MAX_TOTAL_STORAGE,
     });
   });
 
