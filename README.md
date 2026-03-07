@@ -494,6 +494,8 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 
 The TOS lives in [TOS.md](TOS.md) at the repository root. The backend serves it at `/api/tos` (plain text) and the frontend renders it as Markdown at the `/tos` route.
 
+> **Legal notice:** The included TOS is a placeholder template and does not constitute legal advice. Consult a qualified lawyer before deploying a public service.
+
 ## Zero-Knowledge Disclaimer
 
 Archivum Null is a **zero-knowledge relay** — the following is built into the architecture:
@@ -502,7 +504,7 @@ Archivum Null is a **zero-knowledge relay** — the following is built into the 
 - The server **stores only ciphertext**. Even with full server access, an attacker or the operator cannot read the file contents.
 - The operator **cannot comply** with a request to reveal file contents. They can provide only: encrypted ciphertext, vault metadata (size, timestamps), and download counts.
 
-> This guarantee holds **only** when the client device and browser are not compromised, and only when the vault URL is shared securely. See [Threat Model Limitations](#threat-model--limitations) above.
+> This guarantee holds **only** when the client device and browser are not compromised, and only when the vault URL is shared securely. See [Threat Model Limitations](#threat-model-limitations) above.
 
 ## Operator Pre-Launch Checklist
 
@@ -513,9 +515,7 @@ Before exposing this service publicly:
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
 - [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
-- [ ] Review the [Threat Model Limitations](#threat-model--limitations) and confirm they are acceptable for your use case
-
-> **Legal notice:** The included TOS is a placeholder template and does not constitute legal advice. Consult a qualified lawyer before deploying a public service.
+- [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
 
 ## License
 
