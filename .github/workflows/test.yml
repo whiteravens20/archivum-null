@@ -75,6 +75,7 @@ jobs:
           VITE_TURNSTILE_SITE_KEY: '0x0000000000000000000000'
           VITE_DEFAULT_TTL: '86400'
           VITE_DEFAULT_MAX_DOWNLOADS: '10'
+          VITE_CHUNK_SIZE: '52428800'
         run: npm run build
 
       - name: Tests
