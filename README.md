@@ -1,8 +1,16 @@
 # Archivum Null
 
 **Zero trust file relay.**
+<br /><br />
 
-Anonymous, zero-knowledge encrypted file sharing with expiring vaults. No accounts. No cookies. No tracking.
+<div align="center">
+    <img src=frontend/public/logo-text-modern.svg width="70%">
+
+<br />
+Anonymous, zero-knowledge encrypted file sharing with expiring vaults.
+
+No accounts. No cookies. No tracking.
+</div>
 
 ---
 
@@ -31,15 +39,31 @@ Anonymous, zero-knowledge encrypted file sharing with expiring vaults. No accoun
 
 ## Prerequisites
 
+**You can run this project with Node.js only — no Docker, no VPS, no tunnel required.**
+The table below lists the only hard requirement and optional conveniences.
+
+### Required (always)
+
 | Requirement | Notes |
 |---|---|
-| Docker 24+ & Docker Compose | On the homelab host |
-| Domain name | Pointed at the VPS public IP |
-| VPS (any provider) | Runs the reverse proxy; handles TLS termination |
-| Private tunnel | WireGuard (recommended), SSH tunnel, or any VPN overlay |
-| Cloudflare account *(optional)* | For Turnstile CAPTCHA + DDoS mitigation |
+| Node.js 24+ | Both backend and frontend; declared in each `package.json` |
 
-> If testing locally only (no VPS, no tunnel), the development Docker Compose is sufficient — skip to [Development](#development).
+### Optional — containerised setup
+
+| Option | Notes |
+|---|---|
+| Docker 24+ & Docker Compose | Convenient wrapper around Node — not required; use if you prefer containers or want the production image |
+
+### Recommended for public / production deployment
+
+| Recommendation | Why it matters if skipped |
+|---|---|
+| Domain name pointed at a public IP | Without one, the service is reachable only on a local network or raw IP — fine for personal/homelab use |
+| VPS running a reverse proxy (nginx, Caddy, …) | Without TLS termination, traffic is unencrypted in transit; the browser will block WebCrypto on non-HTTPS origins (see [Troubleshooting](#troubleshooting)) |
+| Private tunnel (WireGuard, SSH, VPN overlay) | Without a tunnel, port 3000 must be exposed directly to the internet — significantly higher attack surface |
+| Cloudflare Turnstile | Without it, upload abuse protection relies on rate limiting alone; Turnstile verification is automatically skipped when keys are not set |
+
+> **Quickest local start:** `cd backend && npm install && npm run dev` in one terminal, `cd frontend && npm install && npm run dev` in another. Open `https://localhost:5173` (accept the self-signed cert once — required for WebCrypto).
 
 ## Architecture
 
@@ -50,26 +74,29 @@ Anonymous, zero-knowledge encrypted file sharing with expiring vaults. No accoun
 │  1. Select file                                          │
 │  2. Generate AES-256-GCM key (WebCrypto)                 │
 │  3. Encrypt file client-side                             │
+│     Payload: [filename][MIME type][file bytes] → AES-GCM │
 │  4. Upload ciphertext to server                          │
-│  5. Receive vault URL: /vault/{id}#BASE64_KEY            │
+│  5. Receive vault URL:                                   │
+│       /vault/{id}#BASE64_KEY.BASE64_FILENAME             │
 │                                                          │
-│  Key NEVER leaves the browser.                           │
-│  URL fragment (#) is NOT sent in HTTP requests.          │
+│  Key and filename NEVER leave the browser via HTTP.      │
+│  URL fragment (#) is NOT included in HTTP requests.      │
 └──────────────┬───────────────────────────────────────────┘
-               │ HTTPS (ciphertext only)
+               │ HTTPS (encrypted blob + vault config only)
                ▼
 ┌──────────────────────────────────────────────────────────┐
 │  Server                                                  │
 │                                                          │
 │  Stores only:                                            │
 │  - vault_id                                              │
-│  - ciphertext (encrypted blob)                           │
+│  - ciphertext (encrypted blob — filename/MIME inside)    │
 │  - created_at / expires_at                               │
-│  - remaining_downloads                                   │
+│  - remaining_downloads / max_downloads                   │
 │                                                          │
 │  NEVER stores:                                           │
 │  - plaintext                                             │
 │  - encryption keys                                       │
+│  - original filename or MIME type (encrypted in blob)    │
 │  - user identity                                         │
 │  - persistent IP logs                                    │
 └──────────────────────────────────────────────────────────┘
