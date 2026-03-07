@@ -40,6 +40,12 @@ services:
       - /tmp:noexec,nosuid,size=64m
 
     # Volumes
+    # vault-data is a named Docker volume (recommended). Named volumes are managed
+    # entirely by Docker — ownership is set correctly by the container on first start.
+    # If you replace vault-data with a host bind mount (e.g. /srv/vaults:/data/vaults)
+    # the directory on the host must be owned by UID 1001 (the in-container user):
+    #   sudo mkdir -p /srv/vaults && sudo chown 1001:1001 /srv/vaults
+    # Without this the container will fail to write files.
     volumes:
       - vault-data:/data/vaults
       - ./TOS.md:/app/TOS.md:ro

@@ -406,6 +406,7 @@ The `vault-data` volume is preserved across both modes. Check the release notes 
 | Uploads fail with 413 | `client_max_body_size` too small on reverse proxy | Set to `105m` (slightly above `MAX_FILE_SIZE`) — see nginx/Caddy config examples |
 | Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` = `VITE_TURNSTILE_SITE_KEY` and both match the Cloudflare dashboard |
 | Files not persisted after restart | Volume not mounted | Check `vault-data` volume exists: `docker volume ls` |
+| Permission denied writing to `/data/vaults` | Bind mount used instead of named volume, wrong ownership on host | Named volumes handle ownership automatically. If using a bind mount, the host directory must be owned by UID `1001`: `sudo chown 1001:1001 /your/path` |
 | `crypto.subtle is undefined` in browser | Page served over plain HTTP | WebCrypto requires a secure context (HTTPS or `localhost`). In dev, use `https://localhost:5173` |
 
 ## Tech Stack
