@@ -1,12 +1,11 @@
+<div align="center">
+    <img src=frontend/public/logo-text-modern.svg width="80%">
+<br \><br \>
+
 # Archivum Null
 
-**Zero trust file relay.**
-<br /><br />
+**Zero trust file relay**
 
-<div align="center">
-    <img src=frontend/public/logo-text-modern.svg width="70%">
-
-<br />
 Anonymous, zero-knowledge encrypted file sharing with expiring vaults.
 
 No accounts. No cookies. No tracking.
@@ -201,6 +200,7 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h) |
 | `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d) |
 | `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault |
+| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
 | `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
