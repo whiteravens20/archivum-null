@@ -9,4 +9,10 @@ export interface StorageBackend {
   readMetadata(vaultId: string): Promise<VaultMetadata | null>;
   deleteVault(vaultId: string): Promise<boolean>;
   listVaults(): Promise<string[]>;
+  /** Append a chunk to an in-progress upload identified by uploadId. Returns total bytes written so far. */
+  appendChunk(uploadId: string, stream: Readable, maxTotalSize: number, currentSize: number): Promise<number>;
+  /** Move the assembled chunk file into a finalized vault directory. */
+  finalizeChunkedUpload(uploadId: string, vaultId: string): Promise<void>;
+  /** Remove temporary chunk directory (cleanup on abort / timeout). */
+  deleteChunkedUpload(uploadId: string): Promise<void>;
 }

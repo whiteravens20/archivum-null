@@ -1,4 +1,4 @@
-import type { VaultMetadata } from './types.js';
+import type { VaultMetadata, ChunkedUploadSession } from './types.js';
 import { config } from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
@@ -6,6 +6,7 @@ import type { Readable } from 'node:stream';
 
 const storage = new LocalStorage(config.STORAGE_PATH);
 const vaults = new Map<string, VaultMetadata>();
+const uploadSessions = new Map<string, ChunkedUploadSession>();
 
 // Cleanup interval — every 60 seconds, purge expired vaults
 const CLEANUP_INTERVAL = 60_000;
@@ -50,6 +51,13 @@ export class VaultManager {
     for (const [id, meta] of vaults.entries()) {
       if (meta.expiresAt <= now || meta.remainingDownloads <= 0) {
         await this.deleteVault(id);
+      }
+    }
+    // Purge stale upload sessions
+    for (const [id, session] of uploadSessions.entries()) {
+      if (session.expiresAt <= now) {
+        uploadSessions.delete(id);
+        await storage.deleteChunkedUpload(id).catch(() => {});
       }
     }
   }
@@ -101,6 +109,108 @@ export class VaultManager {
     vaults.set(vaultId, meta);
 
     return meta;
+  }
+
+  // ── Chunked upload ────────────────────────────────────────────────────────
+
+  initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number): ChunkedUploadSession {
+    if (totalSize <= 0 || totalSize > config.MAX_FILE_SIZE) {
+      throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
+    }
+
+    // Enforce global storage quota
+    if (config.MAX_TOTAL_STORAGE > 0) {
+      const { totalStorageBytes } = this.getStats();
+      if (totalStorageBytes + totalSize > config.MAX_TOTAL_STORAGE) {
+        throw Object.assign(
+          new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
+          { statusCode: 507 }
+        );
+      }
+    }
+
+    const uploadId = nanoid(24);
+    const session: ChunkedUploadSession = {
+      uploadId,
+      totalSize,
+      receivedBytes: 0,
+      nextChunkIndex: 0,
+      ttl: Math.min(Math.max(ttl, 60), config.MAX_TTL),
+      maxDownloads: Math.min(Math.max(maxDownloads, 1), 1000),
+      expiresAt: Date.now() + config.UPLOAD_SESSION_TTL * 1000,
+    };
+    uploadSessions.set(uploadId, session);
+    return session;
+  }
+
+  async appendChunk(uploadId: string, chunkIndex: number, stream: Readable): Promise<ChunkedUploadSession> {
+    const session = uploadSessions.get(uploadId);
+    if (!session || session.expiresAt <= Date.now()) {
+      if (session) {
+        uploadSessions.delete(uploadId);
+        await storage.deleteChunkedUpload(uploadId).catch(() => {});
+      }
+      throw Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 });
+    }
+
+    if (chunkIndex !== session.nextChunkIndex) {
+      throw Object.assign(
+        new Error(`Expected chunk index ${session.nextChunkIndex}, got ${chunkIndex}`),
+        { statusCode: 400 }
+      );
+    }
+
+    const chunkBytes = await storage.appendChunk(
+      uploadId,
+      stream,
+      session.totalSize,
+      session.receivedBytes
+    );
+
+    session.receivedBytes += chunkBytes;
+    session.nextChunkIndex += 1;
+    return session;
+  }
+
+  async completeChunkedUpload(uploadId: string): Promise<VaultMetadata> {
+    const session = uploadSessions.get(uploadId);
+    if (!session || session.expiresAt <= Date.now()) {
+      if (session) {
+        uploadSessions.delete(uploadId);
+        await storage.deleteChunkedUpload(uploadId).catch(() => {});
+      }
+      throw Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 });
+    }
+
+    if (session.receivedBytes === 0) {
+      uploadSessions.delete(uploadId);
+      await storage.deleteChunkedUpload(uploadId).catch(() => {});
+      throw Object.assign(new Error('No chunks received'), { statusCode: 400 });
+    }
+
+    const vaultId = nanoid(24);
+    const now = Date.now();
+
+    await storage.finalizeChunkedUpload(uploadId, vaultId);
+    uploadSessions.delete(uploadId);
+
+    const meta: VaultMetadata = {
+      vaultId,
+      ciphertextSize: session.receivedBytes,
+      createdAt: now,
+      expiresAt: now + session.ttl * 1000,
+      remainingDownloads: session.maxDownloads,
+      maxDownloads: session.maxDownloads,
+    };
+
+    await storage.writeMetadata(vaultId, meta);
+    vaults.set(vaultId, meta);
+    return meta;
+  }
+
+  async abortChunkedUpload(uploadId: string): Promise<void> {
+    uploadSessions.delete(uploadId);
+    await storage.deleteChunkedUpload(uploadId).catch(() => {});
   }
 
   getVault(vaultId: string): VaultMetadata | undefined {

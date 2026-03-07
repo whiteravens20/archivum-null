@@ -16,6 +16,10 @@ const envSchema = {
   DEFAULT_MAX_DOWNLOADS: Number(process.env.DEFAULT_MAX_DOWNLOADS || 10),
   // Global storage quota — 0 means unlimited
   MAX_TOTAL_STORAGE: Number(process.env.MAX_TOTAL_STORAGE || 0),
+  // Chunked upload — chunk size per request in bytes (default 50 MB, safe under Cloudflare's 100 MB limit)
+  CHUNK_SIZE: Number(process.env.CHUNK_SIZE || 52428800),
+  // How long an incomplete chunked upload session stays alive (seconds, default 30 min)
+  UPLOAD_SESSION_TTL: Number(process.env.UPLOAD_SESSION_TTL || 1800),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',

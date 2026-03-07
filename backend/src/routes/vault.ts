@@ -7,6 +7,10 @@ interface VaultParams {
   vaultId: string;
 }
 
+interface UploadParams {
+  uploadId: string;
+}
+
 export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   // Upload (create vault)
   app.post('/api/vault', {
@@ -93,5 +97,89 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     reply.header('Pragma', 'no-cache');
 
     return reply.send(result.stream);
+  });
+
+  // ── Chunked upload endpoints ─────────────────────────────────────────────
+  // These let the frontend split large encrypted blobs into small chunks that
+  // individually stay under Cloudflare's 100 MB per-request limit.
+
+  // 1. Initialise a chunked upload session (Turnstile-verified)
+  app.post('/api/vault/upload/init', {
+    preHandler: verifyTurnstile,
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown> | undefined;
+    const totalSize = Number(body?.totalSize);
+    const ttl = Number(body?.ttl) || config.DEFAULT_TTL;
+    const maxDownloads = Number(body?.maxDownloads) || config.DEFAULT_MAX_DOWNLOADS;
+
+    if (!totalSize || totalSize <= 0) {
+      return reply.status(400).send({ error: 'totalSize is required and must be positive' });
+    }
+
+    try {
+      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads);
+      return reply.status(201).send({
+        uploadId: session.uploadId,
+        chunkSize: config.CHUNK_SIZE,
+        expiresAt: session.expiresAt,
+      });
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      if (error.statusCode === 507) {
+        return reply.status(507).send({
+          error: 'Storage quota exceeded. Please try again later or contact the administrator.',
+        });
+      }
+      return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
+    }
+  });
+
+  // 2. Upload a single chunk
+  app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/chunk', {
+    bodyLimit: config.CHUNK_SIZE + 1024 * 64, // chunk + multipart overhead
+  }, async (request, reply) => {
+    const { uploadId } = request.params;
+
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: 'No chunk data provided' });
+    }
+
+    const fields = data.fields as Record<string, { value?: string }>;
+    const chunkIndex = Number(fields?.chunkIndex?.value);
+    if (Number.isNaN(chunkIndex) || chunkIndex < 0) {
+      data.file.resume();
+      return reply.status(400).send({ error: 'chunkIndex is required and must be non-negative' });
+    }
+
+    try {
+      const session = await vaultManager.appendChunk(uploadId, chunkIndex, data.file);
+      return reply.send({
+        uploadId: session.uploadId,
+        receivedBytes: session.receivedBytes,
+        nextChunkIndex: session.nextChunkIndex,
+      });
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
+    }
+  });
+
+  // 3. Finalise — assemble chunks into a vault
+  app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/complete', async (request, reply) => {
+    const { uploadId } = request.params;
+
+    try {
+      const meta = await vaultManager.completeChunkedUpload(uploadId);
+      return reply.status(201).send({
+        vaultId: meta.vaultId,
+        expiresAt: meta.expiresAt,
+        maxDownloads: meta.maxDownloads,
+        ciphertextSize: meta.ciphertextSize,
+      });
+    } catch (err: unknown) {
+      const error = err as Error & { statusCode?: number };
+      return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
+    }
   });
 }

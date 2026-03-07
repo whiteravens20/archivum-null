@@ -5,12 +5,15 @@ import ProgressBar from '../components/ProgressBar.tsx';
 import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
 import { generateKey, exportKey, encryptFile } from '../crypto/encrypt.ts';
-import { uploadVault } from '../api/vault.ts';
+import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
 
 const MAX_FILE_SIZE = Number(import.meta.env.VITE_MAX_FILE_SIZE) || 100 * 1024 * 1024;
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '0x0000000000000000000000';
 const DEFAULT_TTL = Number(import.meta.env.VITE_DEFAULT_TTL) || 86400;
 const DEFAULT_MAX_DOWNLOADS = Number(import.meta.env.VITE_DEFAULT_MAX_DOWNLOADS) || 10;
+// Blobs larger than this threshold use the chunked upload protocol so each
+// HTTP request stays below Cloudflare's 100 MB per-request limit.
+const CHUNK_UPLOAD_THRESHOLD = Number(import.meta.env.VITE_CHUNK_SIZE) || 50 * 1024 * 1024;
 
 type Stage = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
 
@@ -42,15 +45,26 @@ export default function Home() {
         setProgress(p * 0.5); // First 50% is encryption
       });
 
-      // 3. Upload encrypted blob
+      // 3. Upload encrypted blob — use chunked protocol for large files
       setStage('uploading');
-      const result = await uploadVault(
-        encryptedBlob,
-        ttl,
-        maxDownloads,
-        turnstileToken,
-        (p) => setProgress(0.5 + p * 0.5) // Second 50% is upload
-      );
+      let result;
+      if (encryptedBlob.size > CHUNK_UPLOAD_THRESHOLD) {
+        result = await uploadVaultChunked(
+          encryptedBlob,
+          ttl,
+          maxDownloads,
+          turnstileToken,
+          (p) => setProgress(0.5 + p * 0.5) // Second 50% is upload
+        );
+      } else {
+        result = await uploadVault(
+          encryptedBlob,
+          ttl,
+          maxDownloads,
+          turnstileToken,
+          (p) => setProgress(0.5 + p * 0.5) // Second 50% is upload
+        );
+      }
 
       // 4. Build vault URL with key + encoded filename in fragment.
       // Fragment NEVER reaches the server — zero-trust is fully preserved.

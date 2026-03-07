@@ -96,9 +96,74 @@ export class LocalStorage implements StorageBackend {
   async listVaults(): Promise<string[]> {
     try {
       const entries = await fsp.readdir(this.basePath, { withFileTypes: true });
-      return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+      return entries
+        .filter((e) => e.isDirectory() && !e.name.startsWith('_'))
+        .map((e) => e.name);
     } catch {
       return [];
     }
+  }
+
+  // ── Chunked upload helpers ─────────────────────────────────────────────────
+
+  private uploadDir(uploadId: string): string {
+    const safe = uploadId.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safe || safe !== uploadId) throw new Error('Invalid upload ID');
+    return path.join(this.basePath, '_uploads', safe);
+  }
+
+  private uploadDataPath(uploadId: string): string {
+    return path.join(this.uploadDir(uploadId), 'data.enc');
+  }
+
+  async appendChunk(
+    uploadId: string,
+    stream: Readable,
+    maxTotalSize: number,
+    currentSize: number
+  ): Promise<number> {
+    const dir = this.uploadDir(uploadId);
+    await fsp.mkdir(dir, { recursive: true });
+
+    const filePath = this.uploadDataPath(uploadId);
+    // flags: 'a' = append; creates the file if it doesn't exist
+    const writeStream = fs.createWriteStream(filePath, { flags: 'a' });
+
+    let chunkBytes = 0;
+    const counter = new (await import('node:stream')).Transform({
+      transform(chunk, _encoding, callback) {
+        chunkBytes += chunk.length;
+        if (currentSize + chunkBytes > maxTotalSize) {
+          callback(Object.assign(new Error('File too large'), { statusCode: 413 }));
+          return;
+        }
+        this.push(chunk);
+        callback();
+      },
+    });
+
+    try {
+      await pipeline(stream, counter, writeStream);
+    } catch (err) {
+      // On size overflow, clean up the partial chunk data that was appended.
+      // We truncate back to the size before this chunk started.
+      const filePath = this.uploadDataPath(uploadId);
+      await fsp.truncate(filePath, currentSize).catch(() => {});
+      throw err;
+    }
+    return chunkBytes;
+  }
+
+  async finalizeChunkedUpload(uploadId: string, vaultId: string): Promise<void> {
+    const src = this.uploadDataPath(uploadId);
+    const destDir = this.vaultDir(vaultId);
+    await fsp.mkdir(destDir, { recursive: true });
+    await fsp.rename(src, this.dataPath(vaultId));
+    // Remove now-empty upload directory
+    await fsp.rm(this.uploadDir(uploadId), { recursive: true, force: true }).catch(() => {});
+  }
+
+  async deleteChunkedUpload(uploadId: string): Promise<void> {
+    await fsp.rm(this.uploadDir(uploadId), { recursive: true, force: true }).catch(() => {});
   }
 }
