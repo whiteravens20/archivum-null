@@ -515,6 +515,14 @@ Before exposing this service publicly:
 - [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
 
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for coding guidelines, testing requirements, and the secure contributing checklist before opening a pull request.
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
 ## License
 
 See [LICENSE](LICENSE) and [ATTRIBUTION](ATTRIBUTION).
