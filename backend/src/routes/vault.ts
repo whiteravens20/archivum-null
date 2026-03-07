@@ -25,7 +25,8 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
     }
 
-    // Read TTL and maxDownloads from fields
+    // Read TTL and maxDownloads from fields.
+    // @fastify/multipart types `fields` as a broad union; we narrow to the known multipart field shape.
     const fields = data.fields as Record<string, { value?: string }>;
     const ttl = Number(fields?.ttl?.value) || config.DEFAULT_TTL;
     const maxDownloads = Number(fields?.maxDownloads?.value) || config.DEFAULT_MAX_DOWNLOADS;
@@ -44,6 +45,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         ciphertextSize: meta.ciphertextSize,
       });
     } catch (err: unknown) {
+      // Narrow unknown error to Error with an optional statusCode set by the vault manager.
       const error = err as Error & { statusCode?: number };
       if (error.statusCode === 413) {
         return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
