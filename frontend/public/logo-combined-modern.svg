@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none">
+  <!--
+    Archivum Null — Modern Combined Logo (Symbol + Text)
+    Cyan → Blue → Violet gradient, unified sigil glow, gradient text
+  -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
+  </style>
+
+  <defs>
+    <!-- Symbol gradient: top-to-bottom in 512×512 local space -->
+    <linearGradient id="symGrad" x1="256" y1="80" x2="256" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#22D3EE"/>
+      <stop offset="55%"  stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+
+    <radialGradient id="diamondFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#60A5FA" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#60A5FA" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Text gradient: horizontal across title in 800×200 outer space -->
+    <linearGradient id="textGrad" x1="138" y1="95" x2="680" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#22D3EE"/>
+      <stop offset="55%"  stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+
+    <!-- Unified neon glow for sigil group -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Strong glow for eye -->
+    <filter id="eyeGlow" x="-150%" y="-150%" width="400%" height="400%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Subtle glow for title text -->
+    <filter id="textGlow" x="-5%" y="-40%" width="110%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ─── Symbol (scaled, centred vertically) ─── -->
+  <g transform="translate(8, 44) scale(0.23)">
+
+    <!-- Outer circle with null-gap -->
+    <path
+      d="M 195.36 430.28
+         A 200 200 0 1 1 316.64 430.28"
+      stroke="url(#symGrad)"
+      stroke-width="18"
+      stroke-linecap="round"
+      fill="none"
+      filter="url(#glow)"
+    />
+
+    <!-- Key-Sigil group — single unified glow -->
+    <g stroke="url(#symGrad)" fill="none" filter="url(#glow)">
+      <path
+        d="M 256 108 L 288 152 L 256 196 L 224 152 Z"
+        stroke-width="10"
+        stroke-linejoin="miter"
+        fill="url(#diamondFill)"
+      />
+      <path
+        d="M 256 196 L 256 380
+           M 256 260 L 232 260 L 232 280 L 256 280
+           M 256 260 L 280 260 L 280 280 L 256 280
+           M 256 305 L 238 305 L 238 320 L 256 320
+           M 256 305 L 274 305 L 274 320 L 256 320
+           M 240 370 L 256 395 L 272 370"
+        stroke-width="9"
+        stroke-linejoin="miter"
+        stroke-linecap="round"
+      />
+    </g>
+
+    <!-- Eye -->
+    <circle cx="256" cy="152" r="8" fill="url(#symGrad)" filter="url(#eyeGlow)"/>
+  </g>
+
+  <!-- ─── Title text ─── -->
+  <text
+    x="138" y="95"
+    font-family="'Inter', 'IBM Plex Sans', 'Sora', -apple-system, sans-serif"
+    font-weight="600"
+    font-size="52"
+    letter-spacing="5.2"
+    fill="url(#textGrad)"
+    filter="url(#textGlow)"
+  >ARCHIVUM NULL</text>
+
+  <!-- Tagline -->
+  <text
+    x="138" y="130"
+    font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace"
+    font-weight="400"
+    font-size="14"
+    letter-spacing="3.5"
+    fill="#475569"
+  >ZERO TRUST FILE RELAY</text>
+</svg>

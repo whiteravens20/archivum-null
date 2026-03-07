@@ -103,7 +103,7 @@ export default function Vault() {
     <div className="max-w-xl mx-auto px-4 py-12 sm:py-20">
       <div className="text-center mb-8">
         <a href="/" className="inline-block">
-          <img src="/logo-symbol.svg" alt="" className="w-12 h-12 mx-auto mb-2" />
+          <img src="/logo-symbol-modern.svg" alt="" className="w-12 h-12 mx-auto mb-2" />
           <h1 className="text-2xl font-bold tracking-[0.05em] text-gray-100 mb-1 uppercase">
             Archivum Null
           </h1>

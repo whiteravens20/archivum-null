@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 80" fill="none">
+  <!--
+    Archivum Null — Modern Text Logo
+    Horizontal cyan → blue → violet gradient on title, subtle neon glow
+  -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
+  </style>
+
+  <defs>
+    <!-- Horizontal gradient across the title width -->
+    <linearGradient id="textGrad" x1="60" y1="52" x2="560" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#22D3EE"/>
+      <stop offset="55%"  stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+
+    <!-- Subtle glow behind the title -->
+    <filter id="textGlow" x="-5%" y="-40%" width="110%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text
+    x="310" y="48"
+    text-anchor="middle"
+    font-family="'Inter', 'IBM Plex Sans', 'Sora', -apple-system, sans-serif"
+    font-weight="600"
+    font-size="48"
+    letter-spacing="4.8"
+    fill="url(#textGrad)"
+    filter="url(#textGlow)"
+  >ARCHIVUM NULL</text>
+
+  <!-- Tagline -->
+  <text
+    x="310" y="72"
+    text-anchor="middle"
+    font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace"
+    font-weight="400"
+    font-size="13"
+    letter-spacing="3"
+    fill="#475569"
+  >ZERO TRUST FILE RELAY</text>
+</svg>

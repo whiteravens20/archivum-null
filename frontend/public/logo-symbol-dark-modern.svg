@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!--
+    Archivum Null — Modern Symbol on Dark Background
+    Rounded dark card + modern sigil (gradient + unified neon glow)
+  -->
+
+  <defs>
+    <linearGradient id="symGrad" x1="256" y1="80" x2="256" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#22D3EE"/>
+      <stop offset="55%"  stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+
+    <radialGradient id="diamondFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#60A5FA" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#60A5FA" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="halo" cx="50%" cy="50%" r="43%">
+      <stop offset="0%"   stop-color="#22D3EE" stop-opacity="0"/>
+      <stop offset="80%"  stop-color="#22D3EE" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="eyeGlow" x="-150%" y="-150%" width="400%" height="400%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Dark card -->
+  <rect width="512" height="512" rx="40" fill="#0B0F19"/>
+
+  <!-- Faint halo -->
+  <circle cx="256" cy="256" r="220" fill="url(#halo)"/>
+
+  <!-- Outer circle with null-gap -->
+  <path
+    d="M 195.36 430.28
+       A 200 200 0 1 1 316.64 430.28"
+    stroke="url(#symGrad)"
+    stroke-width="18"
+    stroke-linecap="round"
+    fill="none"
+    filter="url(#glow)"
+  />
+
+  <!-- Key-Sigil group — single unified glow -->
+  <g stroke="url(#symGrad)" fill="none" filter="url(#glow)">
+    <path
+      d="M 256 108 L 288 152 L 256 196 L 224 152 Z"
+      stroke-width="10"
+      stroke-linejoin="miter"
+      fill="url(#diamondFill)"
+    />
+    <path
+      d="M 256 196 L 256 380
+         M 256 260 L 232 260 L 232 280 L 256 280
+         M 256 260 L 280 260 L 280 280 L 256 280
+         M 256 305 L 238 305 L 238 320 L 256 320
+         M 256 305 L 274 305 L 274 320 L 256 320
+         M 240 370 L 256 395 L 272 370"
+      stroke-width="9"
+      stroke-linejoin="miter"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <!-- Eye — isolated strong glow -->
+  <circle cx="256" cy="152" r="8" fill="url(#symGrad)" filter="url(#eyeGlow)"/>
+</svg>
