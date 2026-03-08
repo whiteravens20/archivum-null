@@ -36,6 +36,9 @@ describe('Rate-limit middleware', () => {
     // Test routes
     app.get('/api/health', async () => ({ status: 'ok' }));
     app.post('/api/vault', async () => ({ created: true }));
+    app.post('/api/vault/upload/init', async () => ({ uploadId: 'u1', chunkSize: 52428800, expiresAt: 9999 }));
+    app.post('/api/vault/upload/:uploadId/chunk', async () => ({ receivedBytes: 100 }));
+    app.post('/api/vault/upload/:uploadId/complete', async () => ({ vaultId: 'v1' }));
     app.get('/api/vault/test-id/download', async () => ({ data: 'ok' }));
     app.get('/not-api', async () => ({ ok: true }));
 
@@ -87,6 +90,33 @@ describe('Rate-limit middleware', () => {
     // 4th upload should be rate-limited
     const res = await app.inject({ method: 'POST', url: '/api/vault' });
     expect(res.statusCode).toBe(429);
+  });
+
+  it('should enforce upload-specific limit on POST /api/vault/upload/init', async () => {
+    // Upload limit is 3 — init counts as a new upload
+    for (let i = 0; i < 3; i++) {
+      const res = await app.inject({ method: 'POST', url: '/api/vault/upload/init' });
+      expect(res.statusCode).toBe(200);
+    }
+
+    // 4th init should be rate-limited
+    const res = await app.inject({ method: 'POST', url: '/api/vault/upload/init' });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('should NOT apply upload-specific limit to chunk and complete requests', async () => {
+    // Exhaust the upload limit with init requests
+    for (let i = 0; i < 3; i++) {
+      await app.inject({ method: 'POST', url: '/api/vault/upload/init' });
+    }
+
+    // chunk and complete are NOT counted in upload tier — must still go through
+    // (general API limit is 5; we've used 3 so far, leaving 2 more)
+    const chunkRes = await app.inject({ method: 'POST', url: '/api/vault/upload/u1/chunk' });
+    expect(chunkRes.statusCode).toBe(200);
+
+    const completeRes = await app.inject({ method: 'POST', url: '/api/vault/upload/u1/complete' });
+    expect(completeRes.statusCode).toBe(200);
   });
 
   it('should enforce download-specific limit on GET /api/vault/:id/download', async () => {

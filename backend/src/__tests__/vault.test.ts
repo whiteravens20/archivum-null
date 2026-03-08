@@ -42,6 +42,25 @@ function makeMockVaultManager() {
       }
       return null;
     }),
+    initChunkedUpload: vi.fn((_totalSize: number, _ttl: number, _maxDownloads: number) => ({
+      uploadId: 'upload-abc',
+      totalSize: 200,
+      receivedBytes: 0,
+      nextChunkIndex: 0,
+      ttl: 3600,
+      maxDownloads: 5,
+      expiresAt: 9999999999,
+    })),
+    appendChunk: vi.fn(async (_uploadId: string, _chunkIndex: number, stream: Readable) => {
+      stream.resume();
+      return { uploadId: 'upload-abc', receivedBytes: 100, nextChunkIndex: 1 };
+    }),
+    completeChunkedUpload: vi.fn(async (_uploadId: string) => ({
+      vaultId: 'chunked-vault-id',
+      expiresAt: 9999999999,
+      maxDownloads: 5,
+      ciphertextSize: 200,
+    })),
   };
 }
 
@@ -260,6 +279,119 @@ describe('Vault routes', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/vault/nonexistent/download',
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toContain('not found');
+  });
+
+  // ------------------------------------------------------------------
+  // Chunked upload routes
+  // ------------------------------------------------------------------
+
+  it('POST /api/vault/upload/init returns 201 with uploadId', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize: 200, ttl: 3600, maxDownloads: 5 }),
+    });
+
+    expect(res.statusCode).toBe(201);
+    const json = res.json();
+    expect(json).toHaveProperty('uploadId', 'upload-abc');
+    expect(json).toHaveProperty('chunkSize');
+    expect(json).toHaveProperty('expiresAt');
+    expect(mockManager.initChunkedUpload).toHaveBeenCalledOnce();
+  });
+
+  it('POST /api/vault/upload/init returns 400 when totalSize is missing', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ ttl: 3600 }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('totalSize');
+  });
+
+  it('POST /api/vault/upload/init returns 507 when quota exceeded', async () => {
+    mockManager.initChunkedUpload.mockImplementationOnce(() => {
+      throw Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 });
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize: 200, ttl: 3600, maxDownloads: 5 }),
+    });
+
+    expect(res.statusCode).toBe(507);
+    expect(res.json().error).toContain('quota');
+  });
+
+  it('POST /api/vault/upload/:uploadId/chunk returns 200 with progress', async () => {
+    const payload = buildMultipart(boundary,
+      { chunkIndex: '0' },
+      { name: 'chunk.bin', content: Buffer.from('a'.repeat(100)) }
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const json = res.json();
+    expect(json).toHaveProperty('uploadId', 'upload-abc');
+    expect(json).toHaveProperty('receivedBytes');
+    expect(json).toHaveProperty('nextChunkIndex');
+  });
+
+  it('POST /api/vault/upload/:uploadId/chunk returns 400 when chunkIndex is missing', async () => {
+    const payload = buildMultipart(boundary,
+      {},
+      { name: 'chunk.bin', content: Buffer.from('data') }
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('chunkIndex');
+  });
+
+  it('POST /api/vault/upload/:uploadId/complete returns 201 with vaultId', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/complete',
+    });
+
+    expect(res.statusCode).toBe(201);
+    const json = res.json();
+    expect(json).toHaveProperty('vaultId', 'chunked-vault-id');
+    expect(json).toHaveProperty('expiresAt');
+    expect(json).toHaveProperty('ciphertextSize');
+    expect(mockManager.completeChunkedUpload).toHaveBeenCalledWith('upload-abc');
+  });
+
+  it('POST /api/vault/upload/:uploadId/complete returns 404 for unknown session', async () => {
+    mockManager.completeChunkedUpload.mockRejectedValueOnce(
+      Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/nonexistent/complete',
     });
 
     expect(res.statusCode).toBe(404);
