@@ -36,6 +36,9 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:24-alpine AS production
 
+# Upgrade all Alpine packages to latest patched versions (catches zlib CVE-2026-22184 and any future OS-level CVEs)
+RUN apk upgrade --no-cache
+
 # Update npm to get patched minimatch + tar (CVE-2026-26996, CVE-2026-27903, CVE-2026-27904, CVE-2026-26960)
 RUN npm install -g npm@latest
 
