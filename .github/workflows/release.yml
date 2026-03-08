@@ -154,7 +154,7 @@ jobs:
   # Configure grouping labels in .github/release.yml (distinct from this file).
   github-release:
     name: Create GitHub Release
-    needs: [check-branch, build-push]
+    needs: [check-branch, build-push, scan]
     if: needs.check-branch.outputs.on-main == 'true'
     runs-on: ubuntu-latest
     permissions:
