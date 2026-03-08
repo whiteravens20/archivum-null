@@ -184,10 +184,10 @@ systemctl status archivum-null
 >
 > ```bash
 > # Run on the Proxmox host
-> sudo bash scripts/setup-firewall.sh --mode proxmox-veth --veth veth<vmid>i0
+> sudo bash ../scripts/setup-firewall.sh --mode proxmox-veth --veth veth<vmid>i0
 > ```
 >
-> Or interactively: `sudo bash scripts/setup-firewall.sh` and choose `proxmox-veth` mode.
+> Or interactively: `sudo bash ../scripts/setup-firewall.sh` and choose `proxmox-veth` mode.
 
 Proxmox has a built-in firewall controllable from the GUI (**Datacenter → `<node>` → CT `<vmid>` → Firewall**) or by editing the container's firewall config file directly on the host.
 
