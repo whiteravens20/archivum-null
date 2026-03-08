@@ -81,8 +81,13 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     // Tier 1 — general API limit (guards /api/tos file I/O, vault GET, etc.)
     if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;
 
-    // Tier 2 — stricter upload limit
-    if (request.url.startsWith('/api/vault') && request.method === 'POST') {
+    // Tier 2 — stricter upload limit (single-request upload OR chunked upload init only).
+    // Individual chunk requests (/chunk, /complete) are NOT counted here — a single large
+    // file upload generates N+2 POST requests and would exhaust the limit mid-upload.
+    const isNewUpload =
+      (request.url === '/api/vault' && request.method === 'POST') ||
+      (request.url === '/api/vault/upload/init' && request.method === 'POST');
+    if (isNewUpload) {
       if (!checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply)) return;
     }
 
