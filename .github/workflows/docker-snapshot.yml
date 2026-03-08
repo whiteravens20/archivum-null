@@ -77,14 +77,14 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.prefix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.prefix }}-${{ steps.tag.outputs.sha }}
-          # VITE_ vars are public build-time constants. Fallback defaults are used
+          # These are public build-time constants. Fallback defaults are used
           # when repository variables are not configured.
           build-args: |
-            VITE_MAX_FILE_SIZE=${{ vars.VITE_MAX_FILE_SIZE || '104857600' }}
-            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
-            VITE_DEFAULT_TTL=${{ vars.VITE_DEFAULT_TTL || '86400' }}
-            VITE_DEFAULT_MAX_DOWNLOADS=${{ vars.VITE_DEFAULT_MAX_DOWNLOADS || '10' }}
-            VITE_CHUNK_SIZE=${{ vars.VITE_CHUNK_SIZE || '52428800' }}
+            MAX_FILE_SIZE=${{ vars.MAX_FILE_SIZE || '104857600' }}
+            TURNSTILE_SITE_KEY=${{ vars.TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
+            DEFAULT_TTL=${{ vars.DEFAULT_TTL || '86400' }}
+            DEFAULT_MAX_DOWNLOADS=${{ vars.DEFAULT_MAX_DOWNLOADS || '10' }}
+            CHUNK_SIZE=${{ vars.CHUNK_SIZE || '52428800' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

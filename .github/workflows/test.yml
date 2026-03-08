@@ -68,14 +68,14 @@ jobs:
         run: npm run typecheck
 
       - name: Build
-        # Use dummy VITE_ values — these are build-time public constants only.
+        # Unprefixed vars — vite.config.ts maps them to import.meta.env.VITE_* at build time.
         # Real values are supplied at release time via repository variables.
         env:
-          VITE_MAX_FILE_SIZE: '104857600'
-          VITE_TURNSTILE_SITE_KEY: '0x0000000000000000000000'
-          VITE_DEFAULT_TTL: '86400'
-          VITE_DEFAULT_MAX_DOWNLOADS: '10'
-          VITE_CHUNK_SIZE: '52428800'
+          MAX_FILE_SIZE: '104857600'
+          TURNSTILE_SITE_KEY: '0x0000000000000000000000'
+          DEFAULT_TTL: '86400'
+          DEFAULT_MAX_DOWNLOADS: '10'
+          CHUNK_SIZE: '52428800'
         run: npm run build
 
       - name: Tests
@@ -103,9 +103,10 @@ jobs:
           push: false
           load: false
           build-args: |
-            VITE_MAX_FILE_SIZE=104857600
-            VITE_TURNSTILE_SITE_KEY=0x0000000000000000000000
-            VITE_DEFAULT_TTL=86400
-            VITE_DEFAULT_MAX_DOWNLOADS=10
+            MAX_FILE_SIZE=104857600
+            TURNSTILE_SITE_KEY=0x0000000000000000000000
+            DEFAULT_TTL=86400
+            DEFAULT_MAX_DOWNLOADS=10
+            CHUNK_SIZE=52428800
           cache-from: type=gha
           cache-to: type=gha,mode=max
