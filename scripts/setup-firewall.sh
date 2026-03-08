@@ -479,7 +479,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
   bold "Next steps:"
   echo "  • Run ./scripts/check-deployment.sh to verify the full deployment posture"
   if [[ "$MODE" == "proxmox-veth" ]]; then
-    echo "  • Also configure /etc/pve/firewall/<vmid>.fw (see PROXMOX.md)"
+    echo "  • Also configure /etc/pve/firewall/<vmid>.fw (see docs/PROXMOX.md)"
   fi
   if [[ $AUTO_PERSIST -eq 0 ]]; then
     yellow "  • Rules are NOT persisted — they will be lost on reboot."
