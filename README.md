@@ -138,9 +138,9 @@ Backend API: `http://localhost:3000`
 
 > **First-time deploy checklist** — complete in order.
 
-**1. Provision the VPS.** Install nginx or Caddy. Open ports 80 and 443 only. Keep port 3000 closed (see [VPS Hardening](#vps-hardening)).
+**1. Provision the VPS.** Install nginx or Caddy. Open ports 80 and 443 only. Keep port 3000 closed (see [VPS Hardening](docs/HARDENING.md#vps-hardening)).
 
-**2. Set up a private tunnel.** WireGuard is recommended — see [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement). Note the tunnel IP assigned to your homelab machine (e.g. `10.8.0.2`).
+**2. Set up a private tunnel.** WireGuard is recommended — see [WireGuard — Prevent Lateral LAN Movement](docs/HARDENING.md#wireguard--prevent-lateral-lan-movement). Note the tunnel IP assigned to your homelab machine (e.g. `10.8.0.2`).
 
 **3. Configure DNS.** Point your domain `A` record to the VPS public IP.
 
@@ -169,7 +169,7 @@ HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab Wire
 docker compose up -d --build
 ```
 
-**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
+**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
 
 **8. Validate the deployment posture** on the homelab host.
 
@@ -399,7 +399,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 | Abuse / spam | Turnstile CAPTCHA + 3-tier rate limiting per IP |
 | Large file DoS | Streaming size enforcement — no full file held in memory |
 | Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
-| Compromised container initiating outbound LAN/WAN connections | Docker `internal` network or host FORWARD egress rules block container-to-LAN and container-to-internet traffic; see [Egress Containment](#egress-containment--blocking-outbound-from-a-compromised-container) |
+| Compromised container initiating outbound LAN/WAN connections | Docker `internal` network or host FORWARD egress rules block container-to-LAN and container-to-internet traffic; see [Egress Containment](docs/HARDENING.md#egress-containment) |
 
 ### Threat Model Limitations
 
