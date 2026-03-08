@@ -38,22 +38,25 @@ export function validateConfig(): void {
   if (!config.ADMIN_PASSWORD || config.ADMIN_PASSWORD === 'CHANGE_ME_IMMEDIATELY') {
     console.warn('[WARN] ADMIN_PASSWORD is not set or uses default. Admin panel will be inaccessible.');
   }
-  if (config.MAX_FILE_SIZE <= 0) {
-    throw new Error('MAX_FILE_SIZE must be positive');
+  if (!isFinite(config.MAX_FILE_SIZE) || config.MAX_FILE_SIZE <= 0) {
+    throw new Error('MAX_FILE_SIZE must be a positive number');
   }
-  if (config.RATE_LIMIT_WINDOW <= 0 || config.RATE_LIMIT_MAX <= 0 || config.RATE_LIMIT_API_MAX <= 0 || config.RATE_LIMIT_DOWNLOAD_MAX <= 0) {
+  if (!isFinite(config.RATE_LIMIT_WINDOW) || !isFinite(config.RATE_LIMIT_MAX) || !isFinite(config.RATE_LIMIT_API_MAX) || !isFinite(config.RATE_LIMIT_DOWNLOAD_MAX) || !isFinite(config.RATE_LIMIT_ADMIN_MAX)) {
+    throw new Error('Rate limit values must be valid numbers');
+  }
+  if (config.RATE_LIMIT_WINDOW <= 0 || config.RATE_LIMIT_MAX <= 0 || config.RATE_LIMIT_API_MAX <= 0 || config.RATE_LIMIT_DOWNLOAD_MAX <= 0 || config.RATE_LIMIT_ADMIN_MAX <= 0) {
     throw new Error('Rate limit values must be positive');
   }
-  if (config.MAX_TTL <= 0) {
-    throw new Error('MAX_TTL must be positive');
+  if (!isFinite(config.MAX_TTL) || config.MAX_TTL <= 0) {
+    throw new Error('MAX_TTL must be a positive number');
   }
-  if (config.DEFAULT_TTL <= 0) {
-    throw new Error('DEFAULT_TTL must be positive');
+  if (!isFinite(config.DEFAULT_TTL) || config.DEFAULT_TTL <= 0) {
+    throw new Error('DEFAULT_TTL must be a positive number');
   }
   if (config.DEFAULT_TTL > config.MAX_TTL) {
     throw new Error('DEFAULT_TTL must not exceed MAX_TTL');
   }
-  if (config.DEFAULT_MAX_DOWNLOADS <= 0) {
-    throw new Error('DEFAULT_MAX_DOWNLOADS must be positive');
+  if (!isFinite(config.DEFAULT_MAX_DOWNLOADS) || config.DEFAULT_MAX_DOWNLOADS <= 0) {
+    throw new Error('DEFAULT_MAX_DOWNLOADS must be a positive number');
   }
 }
