@@ -23,6 +23,7 @@ interface RateBucket {
 const apiBuckets = new Map<string, RateBucket>();
 const uploadBuckets = new Map<string, RateBucket>();
 const downloadBuckets = new Map<string, RateBucket>();
+const adminBuckets = new Map<string, RateBucket>();
 
 function cleanupMap(map: Map<string, RateBucket>): void {
   const now = Date.now();
@@ -36,6 +37,7 @@ setInterval(() => {
   cleanupMap(apiBuckets);
   cleanupMap(uploadBuckets);
   cleanupMap(downloadBuckets);
+  cleanupMap(adminBuckets);
 }, 300_000).unref();
 
 function checkLimit(
@@ -81,7 +83,12 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     // Tier 1 — general API limit (guards /api/tos file I/O, vault GET, etc.)
     if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;
 
-    // Tier 2 — stricter upload limit (single-request upload OR chunked upload init only).
+    // Tier 2a — admin routes get a dedicated strict limit (brute-force protection)
+    if (request.url.startsWith('/api/admin')) {
+      if (!checkLimit(adminBuckets, ip, config.RATE_LIMIT_ADMIN_MAX, windowMs, reply)) return;
+    }
+
+    // Tier 2b — stricter upload limit (single-request upload OR chunked upload init only).
     // Individual chunk requests (/chunk, /complete) are NOT counted here — a single large
     // file upload generates N+2 POST requests and would exhaust the limit mid-upload.
     const isNewUpload =

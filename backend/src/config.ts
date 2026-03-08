@@ -11,6 +11,8 @@ const envSchema = {
   RATE_LIMIT_API_MAX: Number(process.env.RATE_LIMIT_API_MAX || 120),
   // Download-specific rate limit (GET /api/vault/:id/download)
   RATE_LIMIT_DOWNLOAD_MAX: Number(process.env.RATE_LIMIT_DOWNLOAD_MAX || 30),
+  // Admin-specific rate limit (all /api/admin/ routes — brute-force protection)
+  RATE_LIMIT_ADMIN_MAX: Number(process.env.RATE_LIMIT_ADMIN_MAX || 10),
   DEFAULT_TTL: Number(process.env.DEFAULT_TTL || 86400),
   MAX_TTL: Number(process.env.MAX_TTL || 604800),
   DEFAULT_MAX_DOWNLOADS: Number(process.env.DEFAULT_MAX_DOWNLOADS || 10),
