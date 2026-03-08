@@ -148,7 +148,12 @@ server {
 
     # TLS — managed by your reverse proxy / Let's Encrypt / acme.sh / etc.
 
-    client_max_body_size 105m;  # Slightly above MAX_FILE_SIZE
+    # Must exceed CHUNK_SIZE (default 50 MB) so individual chunk requests pass
+    # through. Set slightly above MAX_FILE_SIZE if you also want the single-
+    # request upload path to work for files up to MAX_FILE_SIZE.
+    # With chunked uploads each HTTP request body is bounded by CHUNK_SIZE,
+    # not the total file size — so 55m is enough for the default 50 MB chunks.
+    client_max_body_size 105m;
 
     location / {
         proxy_pass http://<TUNNEL_IP>:3000;
@@ -172,6 +177,10 @@ server {
 archivum.yourdomain.com {
     # Caddy handles TLS automatically — no certificate config needed
 
+    # Must exceed CHUNK_SIZE (default 50 MB). With chunked uploads each HTTP
+    # request body is bounded by CHUNK_SIZE, not the total file size — so
+    # 55MB is enough for the default 50 MB chunks. 105MB covers the single-
+    # request upload path up to MAX_FILE_SIZE as well.
     request_body max 105MB
 
     reverse_proxy <TUNNEL_IP>:3000 {
@@ -286,6 +295,14 @@ systemctl enable --now cloudflared
 - In `.env`, set `HOST_BIND_ADDRESS=127.0.0.1` (or the container's LAN IP) — the tunnel daemon runs on the same host and connects locally; the port need not be reachable from outside.
 - Enable **Cloudflare Zero Trust Access** policies on the tunnel to require authentication before reaching the service (optional but recommended for the admin panel).
 - Disable `proxy_ssl_verify` only if you use a self-signed cert between cloudflared and the app — prefer plain HTTP on localhost.
+
+**Chunked uploads and Cloudflare's per-request size limit:**
+
+Cloudflare Free and Pro plans enforce a **100 MB maximum body size per HTTP request**. Archivum Null handles this automatically: the frontend splits large encrypted files into `CHUNK_SIZE`-sized HTTP requests sent sequentially. Each request is processed independently and must individually pass through Cloudflare.
+
+- Keep `CHUNK_SIZE` (and its mirror `VITE_CHUNK_SIZE`) **below 100 MB** — the default 50 MB is safe.
+- Do **not** raise `CHUNK_SIZE` to 100 MB or above when using Cloudflare Tunnel — Cloudflare will reject those requests with HTTP 413 before they reach the backend.
+- The Cloudflare Business/Enterprise `1 GB` upload limit applies per-request as well. If you are on a paid plan with a raised limit, you may increase `CHUNK_SIZE` up to (but not equal to) that limit.
 
 ### Egress containment with Cloudflare Tunnel
 
