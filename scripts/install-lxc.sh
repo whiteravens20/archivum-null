@@ -65,7 +65,7 @@ CT_MEMORY=512
 CT_SWAP=256
 CT_CORES=1
 CT_DISK=4   # GiB
-TEMPLATE_PATTERN="debian-12-standard"
+TEMPLATE_PATTERN="debian-13-standard"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  UPDATE MODE
@@ -115,20 +115,23 @@ fi
 
 header "Archivum Null — Proxmox LXC Installer"
 
-# ── Pick next free VMID ───────────────────────────────────────────────────────
-VMID=$(pvesh get /cluster/nextid 2>/dev/null | tr -d '[:space:]') || \
+# ── Pick next free VMID (interactively) ─────────────────────────────────────
+NEXT_VMID=$(pvesh get /cluster/nextid 2>/dev/null | tr -d '[:space:]') || \
       die "Could not determine next free VMID."
+read -rp "VMID [$NEXT_VMID]: " VMID
+VMID="${VMID:-$NEXT_VMID}"
+[[ "$VMID" =~ ^[0-9]+$ ]] || die "VMID must be a positive integer."
 info "Using VMID: $VMID"
 
 # ── Locate CT template ────────────────────────────────────────────────────────
-info "Searching for Debian 12 CT template…"
+info "Searching for Debian 13 CT template…"
 TEMPLATE_PATH=$(pveam list local 2>/dev/null | awk '{print $1}' | grep "$TEMPLATE_PATTERN" | sort -V | tail -1 || true)
 
 if [[ -z "$TEMPLATE_PATH" ]]; then
   info "Template not found locally — downloading…"
   pveam update
   REMOTE_TMPL=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "$TEMPLATE_PATTERN" | sort -V | tail -1 || true)
-  [[ -n "$REMOTE_TMPL" ]] || die "Could not find a Debian 12 template in the Proxmox repository."
+  [[ -n "$REMOTE_TMPL" ]] || die "Could not find a Debian 13 template in the Proxmox repository."
   pveam download local "$REMOTE_TMPL"
   TEMPLATE_PATH="local:vztmpl/$REMOTE_TMPL"
 fi
@@ -139,6 +142,30 @@ read -rp "Storage pool [$DEFAULT_STORAGE]: " STORAGE
 STORAGE="${STORAGE:-$DEFAULT_STORAGE}"
 read -rp "Bridge [$DEFAULT_BRIDGE]: " BRIDGE
 BRIDGE="${BRIDGE:-$DEFAULT_BRIDGE}"
+
+# ── VPN / tunnel options ──────────────────────────────────────────────────────
+read -rp "Enable TUN device support (required for WireGuard/OpenVPN inside LXC)? [y/N] " _vpn_ans
+VPN_TUN=false
+VPN_FW_TYPE="none"
+if [[ "$_vpn_ans" =~ ^[Yy]$ ]]; then
+  VPN_TUN=true
+  echo "  Firewall rule presets:"
+  echo "    wireguard  — allow UDP 51820 outbound + DNS"
+  echo "    openvpn    — allow UDP/TCP 1194 outbound + DNS"
+  echo "    none       — no extra rules (configure manually)"
+  read -rp "  VPN firewall preset [wireguard/openvpn/none] (default: none): " _vpn_fw
+  VPN_FW_TYPE="${_vpn_fw:-none}"
+  VPN_FW_TYPE="${VPN_FW_TYPE,,}"
+  if [[ ! "$VPN_FW_TYPE" =~ ^(wireguard|openvpn|none)$ ]]; then
+    yellow "Unknown preset '$VPN_FW_TYPE' — defaulting to 'none'."
+    VPN_FW_TYPE="none"
+  fi
+  green "TUN support enabled; firewall preset: $VPN_FW_TYPE"
+fi
+
+# ── Build container feature flags ────────────────────────────────────────────
+CT_FEATURES="keyctl=1,nesting=0"
+[[ "$VPN_TUN" == "true" ]] && CT_FEATURES="${CT_FEATURES},tun=1"
 
 # ── Create the container ──────────────────────────────────────────────────────
 header "Creating LXC container (VMID: $VMID)"
@@ -151,7 +178,7 @@ pct create "$VMID" "$TEMPLATE_PATH" \
   --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp,firewall=1" \
   --rootfs "${STORAGE}:${CT_DISK}" \
   --onboot 1 \
-  --features keyctl=1,nesting=0
+  --features "$CT_FEATURES"
 
 pct start "$VMID"
 sleep 3   # wait for network
@@ -171,11 +198,16 @@ NODE_MAJOR=24
 
 echo "==> Updating packages…"
 apt-get update -qq
-apt-get install -y --no-install-recommends curl git ca-certificates gnupg
+apt install -y --no-install-recommends curl git ca-certificates gnupg
 
 echo "==> Installing Node.js ${NODE_MAJOR}…"
 curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - >/dev/null 2>&1
-apt-get install -y nodejs
+apt install -y --no-install-recommends nodejs
+npm install -g npm@latest
+
+echo "==> Clearing apt cache…"
+apt clean
+rm -rf /var/lib/apt/lists/*
 
 echo "==> Creating system user '$APP_USER' (UID $APP_UID)…"
 useradd -r -u "$APP_UID" -s /usr/sbin/nologin -m -d "$INSTALL_DIR" "$APP_USER" 2>/dev/null || true
@@ -249,7 +281,29 @@ FW_FILE="/etc/pve/firewall/${VMID}.fw"
 if [[ -f "$FW_FILE" ]]; then
   yellow "Firewall config $FW_FILE already exists — skipping (edit manually if needed)."
 else
-  cat > "$FW_FILE" << 'FW'
+  # Build optional VPN firewall rules
+  case "$VPN_FW_TYPE" in
+    wireguard)
+      VPN_FW_RULES="
+# WireGuard VPN outbound
+OUT ACCEPT -proto udp -dport 51820
+OUT ACCEPT -proto udp -dport 53
+OUT ACCEPT -proto tcp -dport 53"
+      ;;
+    openvpn)
+      VPN_FW_RULES="
+# OpenVPN outbound
+OUT ACCEPT -proto udp -dport 1194
+OUT ACCEPT -proto tcp -dport 1194
+OUT ACCEPT -proto udp -dport 53
+OUT ACCEPT -proto tcp -dport 53"
+      ;;
+    *)
+      VPN_FW_RULES=""
+      ;;
+  esac
+
+  cat > "$FW_FILE" << FW
 # Archivum Null — container firewall
 # policy_out: DROP blocks all container-initiated outbound connections.
 # ESTABLISHED,RELATED allows return traffic for inbound client sessions.
@@ -271,6 +325,7 @@ OUT ACCEPT -m conntrack --ctstate ESTABLISHED,RELATED
 # OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
 # OUT ACCEPT -proto udp -dport 53
 # OUT ACCEPT -proto tcp -dport 53
+${VPN_FW_RULES}
 FW
   green "Proxmox Firewall config written to $FW_FILE"
 fi
@@ -287,4 +342,9 @@ info "Container IP:"
 pct exec "$VMID" -- ip -4 addr show eth0 | awk '/inet / {print "  " $2}' || true
 echo
 green "Installation complete. VMID: $VMID"
+if [[ "$VPN_TUN" == "true" ]]; then
+  info "TUN device is enabled (--features tun=1). Install WireGuard/OpenVPN inside the container:"
+  info "  pct enter $VMID"
+  info "  apt install -y --no-install-recommends wireguard-tools   # or openvpn"
+fi
 info "Refer to README → Proxmox LXC Deployment for WireGuard tunnel and reverse proxy setup."
