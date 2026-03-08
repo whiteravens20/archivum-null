@@ -194,7 +194,7 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `TURNSTILE_SECRET` | — | Cloudflare Turnstile secret key |
 | `TURNSTILE_HOSTNAME` | — | Expected hostname in Turnstile response (e.g. `example.com`); leave empty to skip |
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
-| `RATE_LIMIT_MAX` | `10` | Max upload (`POST /api/vault`) requests per window per IP |
+| `RATE_LIMIT_MAX` | `10` | Max new-upload requests per window per IP — counts `POST /api/vault` and `POST /api/vault/upload/init` (chunked upload start); individual chunk/complete requests are not counted |
 | `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
 | `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
 | `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
