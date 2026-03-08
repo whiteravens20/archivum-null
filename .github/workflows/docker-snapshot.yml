@@ -88,10 +88,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── Trivy scan (report-only — does not block snapshot builds) ────────────────
+  # ── Trivy scan (blocking — fails the build on HIGH/CRITICAL CVEs) ─────────────
   # Findings are uploaded to the Security tab for visibility.
-  # To gate merges to main on scan results, promote to exit-code: '1' and add
-  # this job to your branch protection required checks.
+  # This mirrors the scan in release.yml so that vulnerabilities are caught
+  # during development and never silently reach a production release tag.
+  # Add CVE IDs to .trivyignore (with justification) to acknowledge and unblock.
   scan:
     name: Trivy scan (report-only)
     needs: build-push
@@ -119,10 +120,9 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-push.outputs.digest }}
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore
-          # exit-code: 0 — findings are reported but do NOT fail the build.
-          # Snapshot images are for development iteration; blocking scans live
-          # in release.yml where they gate production tags.
-          exit-code: '0'
+          # exit-code: 1 — findings fail the build so that vulnerabilities are
+          # caught on dev before they ever reach a production release tag.
+          exit-code: '1'
           format: sarif
           output: trivy-snapshot.sarif
 
