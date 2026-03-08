@@ -1,6 +1,6 @@
 # check=skip=SecretsUsedInArgOrEnv
 # ↑ Parser directive (must be first line). Suppresses a BuildKit false-positive:
-#   VITE_TURNSTILE_SITE_KEY is a *public* Cloudflare site key — its value is
+#   TURNSTILE_SITE_KEY is a *public* Cloudflare site key — its value is
 #   intentionally embedded in the browser bundle and visible to every visitor.
 #   It is NOT a secret. See: https://developers.cloudflare.com/turnstile/get-started/
 #
@@ -21,16 +21,16 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* frontend/.npmrc* ./
 RUN npm ci --ignore-scripts
 COPY frontend/ ./
-ARG VITE_MAX_FILE_SIZE=104857600
-ARG VITE_TURNSTILE_SITE_KEY=0x0000000000000000000000
-ARG VITE_DEFAULT_TTL=86400
-ARG VITE_DEFAULT_MAX_DOWNLOADS=10
-ARG VITE_CHUNK_SIZE=52428800
-ENV VITE_MAX_FILE_SIZE=$VITE_MAX_FILE_SIZE \
-    VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY \
-    VITE_DEFAULT_TTL=$VITE_DEFAULT_TTL \
-    VITE_DEFAULT_MAX_DOWNLOADS=$VITE_DEFAULT_MAX_DOWNLOADS \
-    VITE_CHUNK_SIZE=$VITE_CHUNK_SIZE
+ARG MAX_FILE_SIZE=104857600
+ARG TURNSTILE_SITE_KEY=0x0000000000000000000000
+ARG DEFAULT_TTL=86400
+ARG DEFAULT_MAX_DOWNLOADS=10
+ARG CHUNK_SIZE=52428800
+ENV MAX_FILE_SIZE=$MAX_FILE_SIZE \
+    TURNSTILE_SITE_KEY=$TURNSTILE_SITE_KEY \
+    DEFAULT_TTL=$DEFAULT_TTL \
+    DEFAULT_MAX_DOWNLOADS=$DEFAULT_MAX_DOWNLOADS \
+    CHUNK_SIZE=$CHUNK_SIZE
 RUN npm run build
 
 # Stage 3: Production image
