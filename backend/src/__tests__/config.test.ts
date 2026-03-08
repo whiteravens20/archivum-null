@@ -104,19 +104,19 @@ describe('validateConfig', () => {
   it('should throw when MAX_TTL is zero', async () => {
     vi.stubEnv('MAX_TTL', '0');
     const { validateConfig } = await import('../config.js');
-    expect(() => validateConfig()).toThrow('MAX_TTL must be positive');
+    expect(() => validateConfig()).toThrow('MAX_TTL must be a positive number');
   });
 
   it('should throw when MAX_TTL is negative', async () => {
     vi.stubEnv('MAX_TTL', '-1');
     const { validateConfig } = await import('../config.js');
-    expect(() => validateConfig()).toThrow('MAX_TTL must be positive');
+    expect(() => validateConfig()).toThrow('MAX_TTL must be a positive number');
   });
 
   it('should throw when DEFAULT_TTL is zero', async () => {
     vi.stubEnv('DEFAULT_TTL', '0');
     const { validateConfig } = await import('../config.js');
-    expect(() => validateConfig()).toThrow('DEFAULT_TTL must be positive');
+    expect(() => validateConfig()).toThrow('DEFAULT_TTL must be a positive number');
   });
 
   it('should throw when DEFAULT_TTL exceeds MAX_TTL', async () => {
@@ -129,13 +129,13 @@ describe('validateConfig', () => {
   it('should throw when DEFAULT_MAX_DOWNLOADS is zero', async () => {
     vi.stubEnv('DEFAULT_MAX_DOWNLOADS', '0');
     const { validateConfig } = await import('../config.js');
-    expect(() => validateConfig()).toThrow('DEFAULT_MAX_DOWNLOADS must be positive');
+    expect(() => validateConfig()).toThrow('DEFAULT_MAX_DOWNLOADS must be a positive number');
   });
 
   it('should throw when DEFAULT_MAX_DOWNLOADS is negative', async () => {
     vi.stubEnv('DEFAULT_MAX_DOWNLOADS', '-5');
     const { validateConfig } = await import('../config.js');
-    expect(() => validateConfig()).toThrow('DEFAULT_MAX_DOWNLOADS must be positive');
+    expect(() => validateConfig()).toThrow('DEFAULT_MAX_DOWNLOADS must be a positive number');
   });
 
   it('should not throw when DEFAULT_TTL equals MAX_TTL', async () => {
