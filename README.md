@@ -178,7 +178,6 @@ HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab Wire
 # Uncomment and fill in if using Cloudflare Turnstile:
 # TURNSTILE_SECRET=<your-cf-secret>
 # TURNSTILE_SITE_KEY=<your-cf-site-key>
-# VITE_TURNSTILE_SITE_KEY=<your-cf-site-key>
 ```
 
 **6. Build and start** the production container.
@@ -201,8 +200,6 @@ All checks should pass before exposing the service publicly.
 
 All variables live in a single `.env` file at the project root. Copy `.env.example` to get started.
 
-Variables prefixed with `VITE_` are baked into the frontend bundle at build time by Vite. For every backend variable that controls a value also shown in the UI, there is an equivalent `VITE_` mirror — keep both values in sync.
-
 ### Backend
 
 | Variable | Default | Description |
@@ -222,24 +219,12 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
 | `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
-| `CHUNK_SIZE` | `52428800` | Chunk size in bytes for the chunked upload protocol (default 50 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap |
+| `CHUNK_SIZE` | `52428800` | Chunk size in bytes for the chunked upload protocol (default 50 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. |
 | `UPLOAD_SESSION_TTL` | `1800` | How long an incomplete chunked upload session stays alive in seconds (default 30 min) |
 | `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod |
 | `BIND_ADDRESS` | `0.0.0.0` | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace) |
 | `PORT` | `3000` | Server port |
 | `TRUST_PROXY` | `1` | Number of trusted reverse-proxy hops for `X-Forwarded-For` (1 = nearest proxy only) |
-
-### Frontend (Vite build-time)
-
-These mirror the backend values above. Change both when you change a setting.
-
-| Variable | Default | Description |
-|---|---|---|
-| `VITE_TURNSTILE_SITE_KEY` | `0x000…` | Cloudflare Turnstile site key embedded in bundle |
-| `VITE_MAX_FILE_SIZE` | `104857600` | Max upload size shown/enforced in the UI |
-| `VITE_DEFAULT_TTL` | `86400` | Pre-selected TTL in the upload form. Must be one of: `300`, `1800`, `3600`, `21600`, `86400`, `259200`, `604800`. Other values are silently snapped to the nearest option. |
-| `VITE_DEFAULT_MAX_DOWNLOADS` | `10` | Pre-selected download limit in the upload form. Must be one of: `1`, `3`, `5`, `10`, `25`, `50`, `100`. Other values are silently snapped to the nearest option. |
-| `VITE_CHUNK_SIZE` | `52428800` | Chunk upload threshold — blobs larger than this use the chunked protocol; keep in sync with backend `CHUNK_SIZE` |
 
 ## Deployment Architecture
 
@@ -346,7 +331,7 @@ The `vault-data` volume is preserved across both modes. Check the release notes 
 | Health check failing | `PORT` mismatch between app and health check | Ensure `PORT` in `.env` matches `HEALTHCHECK` in `Dockerfile` (default: `3000`) |
 | Admin panel returns 403 | `ADMIN_PASSWORD` empty or not set | Set `ADMIN_PASSWORD` in `.env` and restart |
 | Uploads fail with 413 | `client_max_body_size` too small on reverse proxy | Set to `105m` (slightly above `MAX_FILE_SIZE`) — see nginx/Caddy config examples |
-| Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` = `VITE_TURNSTILE_SITE_KEY` and both match the Cloudflare dashboard |
+| Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` matches the Cloudflare dashboard and both `TURNSTILE_SECRET` and `TURNSTILE_SITE_KEY` are set |
 | Files not persisted after restart | Volume not mounted | Check `vault-data` volume exists: `docker volume ls` |
 | Permission denied writing to `/data/vaults` | Bind mount used instead of named volume, wrong ownership on host | Named volumes handle ownership automatically. If using a bind mount, the host directory must be owned by UID `1001`: `sudo chown 1001:1001 /your/path` |
 | `crypto.subtle is undefined` in browser | Page served over plain HTTP | WebCrypto requires a secure context (HTTPS or `localhost`). In dev, use `https://localhost:5173` |
@@ -380,7 +365,7 @@ Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect b
 
 To enable:
 1. Create a Turnstile widget at [dash.cloudflare.com](https://dash.cloudflare.com)
-2. Set `VITE_TURNSTILE_SITE_KEY` (and `TURNSTILE_SITE_KEY`) in `.env`
+2. Set `TURNSTILE_SITE_KEY` in `.env`
 3. Set `TURNSTILE_SECRET` in `.env`
 
 When secrets are default/missing, Turnstile verification is skipped.

@@ -300,7 +300,7 @@ systemctl enable --now cloudflared
 
 Cloudflare Free and Pro plans enforce a **100 MB maximum body size per HTTP request**. Archivum Null handles this automatically: the frontend splits large encrypted files into `CHUNK_SIZE`-sized HTTP requests sent sequentially. Each request is processed independently and must individually pass through Cloudflare.
 
-- Keep `CHUNK_SIZE` (and its mirror `VITE_CHUNK_SIZE`) **below 100 MB** — the default 50 MB is safe.
+- Keep `CHUNK_SIZE` **below 100 MB** — the default 50 MB is safe.
 - Do **not** raise `CHUNK_SIZE` to 100 MB or above when using Cloudflare Tunnel — Cloudflare will reject those requests with HTTP 413 before they reach the backend.
 - The Cloudflare Business/Enterprise `1 GB` upload limit applies per-request as well. If you are on a paid plan with a raised limit, you may increase `CHUNK_SIZE` up to (but not equal to) that limit.
 
