@@ -228,266 +228,28 @@ These mirror the backend values above. Change both when you change a setting.
 Internet
   → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
   → private tunnel (WireGuard, SSH tunnel, VPN overlay, …)
-  → Archivum Null VM (tunnel interface IP only)
+  → Archivum Null VM / homelab host (tunnel interface IP only)
 ```
 
 **Key requirements:**
-- Docker port published ONLY on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
-- No LAN access
-- Container runs as non-root with read-only filesystem
-- All capabilities dropped
+- Docker port published **only** on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
+- No direct LAN access to port 3000
+- Container runs as non-root with read-only filesystem and all capabilities dropped
+- VPS exposes only ports 80 and 443 — port 3000 is never public
 
-### Example Firewall Rules
+For the full hardening guide — inbound firewall rules, reverse proxy config (nginx/Caddy), VPS lockdown, WireGuard scope, and egress containment — see **[docs/HARDENING.md](docs/HARDENING.md)**.
 
-> **Important:** use a _whitelist-first_ order. Tunnel interfaces often use private-range IPs (e.g. WireGuard at `10.8.0.1`) — if you DROP those subnets first, tunnel traffic is blocked before the ACCEPT rule is reached.
-
-**iptables**
-```bash
-# 1. Accept traffic arriving on the tunnel interface (e.g. wg0, tun0)
-iptables -A INPUT -i <tunnel-iface> -p tcp --dport 3000 -j ACCEPT
-
-# 2. Drop everything else to the app port (covers LAN, WAN, etc.)
-iptables -A INPUT -p tcp --dport 3000 -j DROP
-```
-
-**nftables** (modern default on Debian/Ubuntu/Fedora)
-```bash
-# Accept on tunnel interface, drop all other traffic to the port
-nft add rule inet filter input tcp dport 3000 iifname "<tunnel-iface>" accept
-nft add rule inet filter input tcp dport 3000 drop
-```
-
-### Reverse Proxy Configuration
-
-Any reverse proxy with TLS termination and `proxy_pass`/`reverse_proxy` support works (nginx, Caddy, Traefik, HAProxy, …).
-
-> Replace `<TUNNEL_IP>` with the IP of your homelab tunnel interface as seen from the VPS.
-
-#### nginx
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name archivum.yourdomain.com;
-
-    # TLS — managed by your reverse proxy / Let's Encrypt / acme.sh / etc.
-
-    client_max_body_size 105m;  # Slightly above MAX_FILE_SIZE
-
-    location / {
-        proxy_pass http://<TUNNEL_IP>:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Streaming support
-        proxy_request_buffering off;
-        proxy_buffering off;
-    }
-}
-```
-
-#### Caddy (recommended — automatic TLS via Let's Encrypt)
-```caddyfile
-archivum.yourdomain.com {
-    # Caddy handles TLS automatically — no certificate config needed
-
-    request_body max 105MB
-
-    reverse_proxy <TUNNEL_IP>:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-
-        # Streaming support — disable request buffering
-        flush_interval -1
-    }
-}
-```
-
-### VPS Hardening
-
-The VPS runs only the reverse proxy. Port 3000 must **not** be reachable from the public internet — only 80 (HTTP→HTTPS redirect) and 443 (HTTPS).
-
-**UFW (Ubuntu/Debian)**
-```bash
-ufw default deny incoming
-ufw allow 22/tcp    # SSH — restrict to your admin IP if possible
-ufw allow 80/tcp    # HTTP (Let's Encrypt challenge / redirect)
-ufw allow 443/tcp   # HTTPS
-# Port 3000 is intentionally absent — must never be public
-ufw enable
-```
-
-**nftables**
-```bash
-nft add rule inet filter input tcp dport { 22, 80, 443 } accept
-nft add rule inet filter input drop
-```
-
-### WireGuard — Prevent Lateral LAN Movement
-
-Scope `AllowedIPs` on each WireGuard peer to only the tunnel interface address. **Do not** use `0.0.0.0/0` on the homelab peer unless you intend to route all traffic through the tunnel.
-
-```ini
-# /etc/wireguard/wg0.conf  (on the VPS)
-[Peer]
-PublicKey = <homelab-peer-pubkey>
-# Restrict to tunnel interface IP only — prevents accidental LAN routing
-AllowedIPs = <homelab-tunnel-ip>/32   # e.g. 10.8.0.2/32
-```
-
-With a `/32` `AllowedIPs`, even if the container is misconfigured, WireGuard will only route packets destined for the tunnel IP — LAN subnets remain unreachable from the VPS.
-
-### Egress Containment — Blocking Outbound from a Compromised Container
-
-**Threat:** The inbound rules above prevent unauthorized access *to* the container. A separate concern is what happens if an attacker gains code execution *inside* the container (e.g., via a vulnerability in Node.js, Fastify, or a malformed uploaded blob). Without egress controls, the compromised container can freely initiate outbound connections — scanning your internal LAN, pivoting to other hosts, or beaconing to a C2 server on the internet.
-
-The rules below cut off that escape path.
-
-#### Option A — Docker `internal` network (recommended when Turnstile is not enabled)
-
-If Cloudflare Turnstile is **not** used, the container requires zero outbound internet access. Set the Docker network to `internal: true` in `docker-compose.yml`:
-
-```yaml
-# docker-compose.yml — networks block at the bottom of the file
-networks:
-  archivum:
-    driver: bridge
-    internal: true          # container cannot initiate any outbound connections
-    driver_opts:
-      com.docker.network.bridge.name: br-archivum   # stable name for iptables rules
-```
-
-With `internal: true`, Docker removes the default gateway from the container's network namespace. The container can **still receive** traffic via the `ports:` mapping on the host, but it cannot initiate any TCP/UDP connections outward — to the LAN or to the internet.
-
-> **If Turnstile is enabled,** the backend must reach `https://challenges.cloudflare.com` to verify tokens. Use Option B instead.
-
-#### Option B — Host firewall FORWARD rules (required when Turnstile is enabled)
-
-When the container needs selective internet access, restrict the container's bridge interface using FORWARD chain rules on the homelab host.
-
-**Step 1 — pin the bridge name** (prevents rules from breaking after `docker compose down && up`). Add `driver_opts` to the networks block in `docker-compose.yml`:
-
-```yaml
-networks:
-  archivum:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: br-archivum
-```
-
-Then rebuild the network once:
+To apply firewall rules without copying commands manually:
 
 ```bash
-docker compose down && docker compose up -d
+sudo bash scripts/setup-firewall.sh
 ```
-
-**Step 2 — add FORWARD egress rules on the host:**
-
-> **Important:** rules are applied top-to-bottom. Put ACCEPT rules before DROP rules.
-
-**iptables**
-```bash
-BRIDGE=br-archivum
-
-# Allow return traffic for already-established inbound connections
-iptables -I FORWARD -i $BRIDGE -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# Always block container → RFC 1918 LAN and link-local
-iptables -I FORWARD -i $BRIDGE -d 10.0.0.0/8     -j DROP
-iptables -I FORWARD -i $BRIDGE -d 172.16.0.0/12  -j DROP
-iptables -I FORWARD -i $BRIDGE -d 192.168.0.0/16 -j DROP
-iptables -I FORWARD -i $BRIDGE -d 169.254.0.0/16 -j DROP
-
-# --- If Turnstile IS enabled: allow only Cloudflare challenge endpoints ---
-# Cloudflare IPv4 ranges used by challenges.cloudflare.com
-iptables -I FORWARD -i $BRIDGE -d 104.16.0.0/13  -p tcp --dport 443 -j ACCEPT
-iptables -I FORWARD -i $BRIDGE -d 104.24.0.0/14  -p tcp --dport 443 -j ACCEPT
-
-# Drop everything else outbound from the container
-iptables -A FORWARD -i $BRIDGE -j DROP
-
-# --- If Turnstile IS NOT enabled: skip the two ACCEPT lines above ---
-# and simply add the final DROP rule:
-# iptables -A FORWARD -i $BRIDGE -j DROP
-```
-
-**nftables** (modern default on Debian/Ubuntu/Fedora)
-```bash
-BRIDGE=br-archivum
-
-# Allow established/related return traffic
-nft add rule inet filter forward iifname "$BRIDGE" ct state established,related accept
-
-# Block container → RFC 1918 / link-local (always)
-nft add rule inet filter forward iifname "$BRIDGE" \
-    ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } drop
-
-# If Turnstile IS enabled — allow Cloudflare, then drop everything else
-nft add rule inet filter forward iifname "$BRIDGE" \
-    ip daddr { 104.16.0.0/13, 104.24.0.0/14 } tcp dport 443 accept
-nft add rule inet filter forward iifname "$BRIDGE" drop
-
-# If Turnstile IS NOT enabled — only the final drop rule is needed:
-# nft add rule inet filter forward iifname "$BRIDGE" drop
-```
-
-> **Make rules persistent.** On Debian/Ubuntu use `iptables-persistent` (`apt install iptables-persistent && netfilter-persistent save`). For nftables, save to `/etc/nftables.conf` and ensure the `nftables` systemd service is enabled.
-
-#### Option C — Bare-metal (no Docker)
-
-When running Node.js directly on the host, use the OUTPUT chain with owner matching to restrict the process by UID:
-
-```bash
-# Find the UID the backend process runs as
-id archivum-null        # if a dedicated system user exists
-# or: ps -eo uid,cmd | grep 'node.*index'
-
-APP_UID=<uid>
-
-# Block app process → RFC 1918 LAN / link-local
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 10.0.0.0/8     -j DROP
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 172.16.0.0/12  -j DROP
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 192.168.0.0/16 -j DROP
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 169.254.0.0/16 -j DROP
-
-# If Turnstile IS enabled — allow Cloudflare only
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
-
-# Drop all remaining outbound from the app UID
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -j DROP
-```
-
-#### Summary — which option to apply
-
-| Deployment | Turnstile disabled | Turnstile enabled |
-|---|---|---|
-| Docker | Option A (`internal: true`) | Option B (FORWARD rules, Cloudflare ACCEPT) |
-| Bare-metal / Proxmox LXC | Option C (OUTPUT DROP all) | Option C (OUTPUT with Cloudflare ACCEPT) |
-| Proxmox LXC (Proxmox Firewall) | Proxmox Firewall `policy_out: DROP` | Proxmox Firewall `policy_out: DROP` + Cloudflare ACCEPT rule |
-
-> **Quick setup:** instead of applying rules manually, use the included helper script — it is interactive and supports all three modes:
->
-> ```bash
-> sudo bash scripts/setup-firewall.sh
-> ```
->
-> Or non-interactively (example — Docker with Turnstile, nftables):
->
-> ```bash
-> sudo bash scripts/setup-firewall.sh \
->   --mode docker --backend nftables --turnstile yes \
->   --bridge br-archivum --tunnel-iface wg0 --app-port 3000 --persist
-> ```
 
 ### Proxmox LXC Deployment
 
 Running Archivum Null as a Proxmox LXC container is a lightweight alternative to a full VM. No Docker is needed — Node.js runs directly inside the LXC.
 
-For full instructions covering container creation, manual installation, the Community Scripts quick installer, systemd service hardening, Proxmox Firewall egress rules, and SDN/VLAN isolation, see **[PROXMOX.md](PROXMOX.md)**.
+For full instructions covering container creation, manual installation, the Community Scripts quick installer, systemd service hardening, Proxmox Firewall egress rules, and SDN/VLAN isolation, see **[docs/PROXMOX.md](docs/PROXMOX.md)**.
 
 **Quick start (Proxmox host shell):**
 
