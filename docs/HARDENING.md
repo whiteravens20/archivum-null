@@ -25,6 +25,16 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
     - [Caddy (recommended — automatic TLS via Let's Encrypt)](#caddy-recommended--automatic-tls-via-lets-encrypt)
   - [VPS Hardening](#vps-hardening)
   - [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement)
+  - [Cloudflare Tunnel (optional)](#cloudflare-tunnel-optional)
+    - [Setup](#setup)
+    - [Hardening](#hardening)
+    - [Egress containment with Cloudflare Tunnel](#egress-containment-with-cloudflare-tunnel)
+    - [Privacy considerations](#privacy-considerations)
+  - [Tailscale (optional)](#tailscale-optional)
+    - [Setup](#setup-1)
+    - [Hardening](#hardening-1)
+    - [Self-hosted coordination — Headscale](#self-hosted-coordination--headscale)
+    - [Privacy considerations](#privacy-considerations-1)
   - [Egress Containment](#egress-containment)
     - [Option A — Docker `internal` network](#option-a--docker-internal-network)
     - [Option B — Host FORWARD rules (Docker with Turnstile)](#option-b--host-forward-rules-docker-with-turnstile)
@@ -58,6 +68,7 @@ Before applying any rules, understand the threat model this guide addresses and 
 | Rule loss after reboot (without persistence) | iptables rules are in-memory by default — see [persistence notes](#persistence) |
 | Docker daemon itself as an attack surface | Do not expose `/var/run/docker.sock` inside containers; the production Compose file already enforces this |
 | `conntrack` table exhaustion DoS | Rate limiting in the app and at the reverse proxy layer mitigate this; kernel `nf_conntrack_max` tuning is outside the scope of this guide |
+| Cloudflare Tunnel / Tailscale coordination metadata | Both services collect metadata (see their dedicated sections) — they are not zero-knowledge transports |
 
 ### Rule ordering is critical
 
@@ -222,6 +233,199 @@ AllowedIPs = <homelab-tunnel-ip>/32   # e.g. 10.8.0.2/32
 With a `/32` `AllowedIPs`, even if the container is misconfigured, WireGuard will only route packets destined for the tunnel IP — LAN subnets remain unreachable from the VPS.
 
 **Security note:** `0.0.0.0/0` in `AllowedIPs` on the homelab peer makes the VPS a default gateway for all traffic from the homelab host. This is almost never the intent. If you see this in an existing config, narrow it to `/32` immediately.
+
+---
+
+## Cloudflare Tunnel (optional)
+
+Cloudflare Tunnel (`cloudflared`) creates an **outbound-only** encrypted connection from your homelab to Cloudflare's edge. No VPS, no public IP, no open inbound ports are required — the daemon initiates the connection.
+
+```
+Internet → Cloudflare edge (TLS termination) → cloudflared daemon → Archivum Null
+```
+
+### Setup
+
+```bash
+# Install cloudflared (Debian/Ubuntu)
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+  | gpg --dearmor > /usr/share/keyrings/cloudflare-main.gpg
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] \
+  https://pkg.cloudflare.com/cloudflared bullseye main' \
+  > /etc/apt/sources.list.d/cloudflared.list
+apt update && apt install cloudflared
+
+# Authenticate and create a tunnel
+cloudflared tunnel login
+cloudflared tunnel create archivum-null
+
+# Configure routing
+cloudflared tunnel route dns archivum-null archivum.yourdomain.com
+```
+
+Tunnel config (`~/.cloudflared/config.yml`):
+
+```yaml
+tunnel: <tunnel-id>
+credentials-file: /root/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: archivum.yourdomain.com
+    service: http://127.0.0.1:3000   # or tunnel IP if on separate host
+  - service: http_status:404
+```
+
+```bash
+cloudflared service install
+systemctl enable --now cloudflared
+```
+
+### Hardening
+
+- Set `TRUST_PROXY=1` in `.env` — `cloudflared` is one trusted proxy hop.
+- In `.env`, set `HOST_BIND_ADDRESS=127.0.0.1` (or the container's LAN IP) — the tunnel daemon runs on the same host and connects locally; the port need not be reachable from outside.
+- Enable **Cloudflare Zero Trust Access** policies on the tunnel to require authentication before reaching the service (optional but recommended for the admin panel).
+- Disable `proxy_ssl_verify` only if you use a self-signed cert between cloudflared and the app — prefer plain HTTP on localhost.
+
+### Egress containment with Cloudflare Tunnel
+
+`cloudflared` runs as a **host process**, not inside the Docker container. The container itself still gets Option A (`internal: true`) or Option B FORWARD rules — those remain unchanged.
+
+The `cloudflared` daemon on the host needs outbound HTTPS to Cloudflare's infrastructure. If you apply host-wide egress rules, add the following ACCEPT before any DROP:
+
+```bash
+# Cloudflare infrastructure ranges (used by cloudflared)
+iptables -I OUTPUT -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
+iptables -I OUTPUT -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
+iptables -I OUTPUT -d 198.41.192.0/24 -p tcp --dport 443 -j ACCEPT
+```
+
+### Privacy considerations
+
+> **Summary: Cloudflare Tunnel does NOT break the zero-knowledge file guarantee, but it does expose metadata to Cloudflare.**
+
+| What Cloudflare can see | Impact on Archivum Null |
+|---|---|
+| Client IP addresses of every request | IP metadata is exposed to Cloudflare (and any legal demand served on them) |
+| Request paths (`/api/vault/<id>`, timestamps) | Vault access patterns are visible — Cloudflare knows which vault IDs were accessed and when |
+| HTTP headers, User-Agent strings | Browser/client fingerprinting data retained in Cloudflare logs |
+| TLS termination at Cloudflare edge | Cloudflare decrypts TLS and re-encrypts to your origin — they see plaintext HTTP, including uploaded ciphertext blobs |
+| URL path — **not** the fragment (`#KEY`) | The encryption key in the URL fragment is **never** sent in HTTP requests; browsers strip it. Cloudflare **cannot** see the decryption key |
+
+**What Cloudflare cannot see:**
+- File contents (uploaded as AES-256-GCM ciphertext — Cloudflare receives the same encrypted blob as any transit node)
+- The decryption key (lives in the URL fragment `#`, which browsers never transmit in HTTP)
+- Original filename or MIME type (encrypted inside the blob)
+
+**Additional concerns:**
+- Cloudflare logs are subject to legal demands in US and EU jurisdictions. An operator cannot prevent Cloudflare from complying with a valid subpoena for access logs.
+- Cloudflare's [DDoS and abuse detection](https://developers.cloudflare.com/fundamentals/privacy/) systems may analyse request patterns.
+- If you enable **Cloudflare WAF** or **Cloudflare Workers** in front of the tunnel, those can inspect request bodies (the ciphertext blob). This does not expose plaintext but breaks the "only the server I control sees the ciphertext" model.
+- Log retention defaults vary by Cloudflare plan. Review and minimise log retention in the **Cloudflare dashboard → Analytics & Logs → Logpush**.
+
+**Recommendation:** If operator privacy from intermediaries is a priority, use WireGuard + self-hosted VPS instead. Cloudflare Tunnel is a valid trade-off for ease of setup when the operator accepts Cloudflare's role as a metadata-visible transit.
+
+---
+
+## Tailscale (optional)
+
+Tailscale is a WireGuard-based mesh VPN. It automatically handles NAT traversal — no VPS, no port forwarding, no public IP needed. Devices join a shared network ("tailnet") and get stable `100.x.x.x` addresses.
+
+```
+Internet client  →  (not applicable — Tailscale is for admin/internal access)
+Admin device  →  Tailscale mesh  →  Archivum Null host (100.x.x.x)
+```
+
+> **Use case distinction:** Tailscale is primarily suited for **restricting admin access** to the Archivum Null host and admin panel, not for serving the public-facing upload interface. For public access, combine Tailscale with a VPS reverse proxy or use Cloudflare Tunnel.
+
+### Setup
+
+```bash
+# Install Tailscale (Debian/Ubuntu)
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up
+```
+
+Note the assigned `100.x.x.x` address:
+```bash
+tailscale ip -4
+```
+
+Bind Archivum Null to the Tailscale IP in `.env`:
+```bash
+HOST_BIND_ADDRESS=100.x.x.x   # Tailscale IP of this host
+```
+
+The service is now reachable only from devices in the same tailnet.
+
+### Hardening
+
+- **ACLs:** restrict access to port 3000 to specific tailnet nodes only. Edit the ACL policy at `https://login.tailscale.com/admin/acls`:
+
+```json
+{
+  "acls": [
+    // Deny all by default, allow only your admin nodes to reach port 3000
+    {
+      "action": "accept",
+      "src": ["tag:admin"],
+      "dst": ["tag:archivum:3000"]
+    }
+  ],
+  "tagOwners": {
+    "tag:admin": ["autogroup:owner"],
+    "tag:archivum": ["autogroup:owner"]
+  }
+}
+```
+
+- **Disable subnet routing** unless you explicitly need it — it can expose LAN subnets to other tailnet nodes.
+- **Enable MagicDNS** for stable hostnames: set `BIND_ADDRESS` to the MagicDNS name as well as the IP.
+- **Key expiry:** set short key expiry for the Archivum Null node (e.g. 90 days) and rotate regularly.
+- For Proxmox LXC: run `tailscale up` inside the container or on the host and use the Tailscale IP as `HOST_BIND_ADDRESS`.
+
+### Self-hosted coordination — Headscale
+
+If you want to eliminate Tailscale the company as a metadata observer, run [Headscale](https://headscale.net/) — a self-hosted, open-source implementation of the Tailscale control plane:
+
+```bash
+# On a self-controlled server
+docker run -d --name headscale \
+  -v ./headscale/config:/etc/headscale \
+  -p 8080:8080 headscale/headscale:latest headscale serve
+```
+
+Clients connect to your Headscale instance instead of Tailscale's servers:
+
+```bash
+tailscale up --login-server https://headscale.yourdomain.com
+```
+
+With Headscale, the control-plane metadata stays entirely on infrastructure you control.
+
+### Privacy considerations
+
+> **Summary: Tailscale (hosted) exposes device and network metadata to Tailscale Inc.; file contents and encryption keys are unaffected.**
+
+| What Tailscale (the company) can see | Impact |
+|---|---|
+| Device identities and their `100.x.x.x` addresses | Tailscale's coordination server knows every node in your tailnet and its connected identity (Google/GitHub/Microsoft account) |
+| Connection timestamps and online/offline events | Network activity patterns are logged by the coordination server |
+| DERP relay traffic (when direct P2P fails) | When NAT traversal fails, encrypted WireGuard packets flow through Tailscale-operated DERP servers. Tailscale sees packet sizes and timing but **cannot decrypt** the WireGuard payload |
+| Identity provider linkage | Login requires an SSO provider (Google, GitHub, Microsoft). Your device identity is linked to that account |
+
+**What Tailscale cannot see:**
+- WireGuard payload (all traffic is end-to-end encrypted with WireGuard keys; Tailscale's coordination server holds no WireGuard private keys)
+- File contents, encryption keys, vault URLs (never reach Tailscale infrastructure)
+- Request-level metadata (Tailscale is a network layer; it does not inspect HTTP)
+
+**Additional concerns:**
+- Tailscale's coordination server is hosted in the US and subject to US legal process.
+- The SSO login requirement (Google/GitHub/Microsoft) links device identity to a third-party account. If that account is compromised, tailnet access is at risk — enable 2FA on the SSO account.
+- `tailscale up --advertise-exit-node` or `--advertise-routes` on the Archivum Null host can unintentionally expose LAN subnets to the tailnet. Do not use these flags unless deliberately routing LAN traffic.
+- Logs: Tailscale retains audit logs. Review the [Tailscale privacy policy](https://tailscale.com/privacy-policy) and optionally configure [log streaming](https://tailscale.com/kb/1255/log-streaming) to your own SIEM.
+
+**Recommendation:** For operators who want the convenience of Tailscale without the metadata exposure, replace it with Headscale. For operators who are comfortable with Tailscale's data practices, the hosted service is acceptable — WireGuard encryption protects all payload, so only metadata is at risk.
 
 ---
 
