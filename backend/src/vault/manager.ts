@@ -48,18 +48,19 @@ export class VaultManager {
 
   private async purgeExpired(): Promise<void> {
     const now = Date.now();
-    for (const [id, meta] of vaults.entries()) {
-      if (meta.expiresAt <= now || meta.remainingDownloads <= 0) {
-        await this.deleteVault(id);
-      }
-    }
-    // Purge stale upload sessions
-    for (const [id, session] of uploadSessions.entries()) {
-      if (session.expiresAt <= now) {
+
+    const expiredVaults = Array.from(vaults.entries())
+      .filter(([, meta]) => meta.expiresAt <= now || meta.remainingDownloads <= 0)
+      .map(([id]) => this.deleteVault(id));
+
+    const expiredSessions = Array.from(uploadSessions.entries())
+      .filter(([, session]) => session.expiresAt <= now)
+      .map(([id]) => {
         uploadSessions.delete(id);
-        await storage.deleteChunkedUpload(id).catch(() => {});
-      }
-    }
+        return storage.deleteChunkedUpload(id).catch(() => {});
+      });
+
+    await Promise.allSettled([...expiredVaults, ...expiredSessions]);
   }
 
   async createVault(
@@ -160,15 +161,26 @@ export class VaultManager {
       );
     }
 
-    const chunkBytes = await storage.appendChunk(
-      uploadId,
-      stream,
-      session.totalSize,
-      session.receivedBytes
-    );
+    // Increment BEFORE the async call to prevent concurrent requests with the
+    // same chunkIndex from both passing the guard above.
+    session.nextChunkIndex += 1;
+    const prevReceivedBytes = session.receivedBytes;
+
+    let chunkBytes: number;
+    try {
+      chunkBytes = await storage.appendChunk(
+        uploadId,
+        stream,
+        session.totalSize,
+        prevReceivedBytes
+      );
+    } catch (err) {
+      // Rollback on failure so the client can retry the same chunk index
+      session.nextChunkIndex -= 1;
+      throw err;
+    }
 
     session.receivedBytes += chunkBytes;
-    session.nextChunkIndex += 1;
     return session;
   }
 
