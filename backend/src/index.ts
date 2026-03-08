@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     reply.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'"
+      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     );
     reply.header(
       'Strict-Transport-Security',
