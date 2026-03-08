@@ -16,6 +16,8 @@ export async function verifyTurnstile(
 ): Promise<void> {
   if (!config.TURNSTILE_ENABLED) return;
 
+  // Fastify types headers as string | string[] | undefined; the custom header is always a single string.
+  // The body type is unknown at this point — we only need the turnstileToken field.
   const token =
     (request.headers['x-turnstile-token'] as string) ||
     ((request.body as Record<string, unknown>)?.turnstileToken as string);
@@ -37,6 +39,7 @@ export async function verifyTurnstile(
       body: formData.toString(),
     });
 
+    // fetch().json() returns unknown; cast to the Turnstile API shape defined above.
     const data = (await res.json()) as TurnstileResponse;
 
     if (!data.success) {

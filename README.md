@@ -1,5 +1,5 @@
 <div align="center">
-    <img src=frontend/public/logo-text-modern.svg width="80%">
+    <img src=frontend/public/logo-text-modern.svg width="85%">
 <br \><br \>
 
 # Archivum Null
@@ -138,9 +138,9 @@ Backend API: `http://localhost:3000`
 
 > **First-time deploy checklist** — complete in order.
 
-**1. Provision the VPS.** Install nginx or Caddy. Open ports 80 and 443 only. Keep port 3000 closed (see [VPS Hardening](#vps-hardening)).
+**1. Provision the VPS.** Install nginx or Caddy. Open ports 80 and 443 only. Keep port 3000 closed (see [VPS Hardening](docs/HARDENING.md#vps-hardening)).
 
-**2. Set up a private tunnel.** WireGuard is recommended — see [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement). Note the tunnel IP assigned to your homelab machine (e.g. `10.8.0.2`).
+**2. Set up a private tunnel.** WireGuard is recommended — see [WireGuard — Prevent Lateral LAN Movement](docs/HARDENING.md#wireguard--prevent-lateral-lan-movement). Note the tunnel IP assigned to your homelab machine (e.g. `10.8.0.2`).
 
 **3. Configure DNS.** Point your domain `A` record to the VPS public IP.
 
@@ -169,7 +169,7 @@ HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab Wire
 docker compose up -d --build
 ```
 
-**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
+**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
 
 **8. Validate the deployment posture** on the homelab host.
 
@@ -197,9 +197,9 @@ Variables prefixed with `VITE_` are baked into the frontend bundle at build time
 | `RATE_LIMIT_MAX` | `10` | Max upload (`POST /api/vault`) requests per window per IP |
 | `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
 | `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
-| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h) |
-| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d) |
-| `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault |
+| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
+| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
+| `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
 | `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
@@ -219,8 +219,8 @@ These mirror the backend values above. Change both when you change a setting.
 |---|---|---|
 | `VITE_TURNSTILE_SITE_KEY` | `0x000…` | Cloudflare Turnstile site key embedded in bundle |
 | `VITE_MAX_FILE_SIZE` | `104857600` | Max upload size shown/enforced in the UI |
-| `VITE_DEFAULT_TTL` | `86400` | Pre-selected TTL in the upload form |
-| `VITE_DEFAULT_MAX_DOWNLOADS` | `10` | Pre-selected download limit in the upload form |
+| `VITE_DEFAULT_TTL` | `86400` | Pre-selected TTL in the upload form. Must be one of: `300`, `1800`, `3600`, `21600`, `86400`, `259200`, `604800`. Other values are silently snapped to the nearest option. |
+| `VITE_DEFAULT_MAX_DOWNLOADS` | `10` | Pre-selected download limit in the upload form. Must be one of: `1`, `3`, `5`, `10`, `25`, `50`, `100`. Other values are silently snapped to the nearest option. |
 | `VITE_CHUNK_SIZE` | `52428800` | Chunk upload threshold — blobs larger than this use the chunked protocol; keep in sync with backend `CHUNK_SIZE` |
 
 ## Deployment Architecture
@@ -231,117 +231,40 @@ These mirror the backend values above. Change both when you change a setting.
 Internet
   → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
   → private tunnel (WireGuard, SSH tunnel, VPN overlay, …)
-  → Archivum Null VM (tunnel interface IP only)
+  → Archivum Null VM / homelab host (tunnel interface IP only)
 ```
 
 **Key requirements:**
-- Docker port published ONLY on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
-- No LAN access
-- Container runs as non-root with read-only filesystem
-- All capabilities dropped
+- Docker port published **only** on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
+- No direct LAN access to port 3000
+- Container runs as non-root with read-only filesystem and all capabilities dropped
+- VPS exposes only ports 80 and 443 — port 3000 is never public
 
-### Example Firewall Rules
+For the full hardening guide — inbound firewall rules, reverse proxy config (nginx/Caddy), VPS lockdown, WireGuard scope, and egress containment — see **[docs/HARDENING.md](docs/HARDENING.md)**.
 
-> **Important:** use a _whitelist-first_ order. Tunnel interfaces often use private-range IPs (e.g. WireGuard at `10.8.0.1`) — if you DROP those subnets first, tunnel traffic is blocked before the ACCEPT rule is reached.
+To apply firewall rules without copying commands manually:
 
-**iptables**
 ```bash
-# 1. Accept traffic arriving on the tunnel interface (e.g. wg0, tun0)
-iptables -A INPUT -i <tunnel-iface> -p tcp --dport 3000 -j ACCEPT
-
-# 2. Drop everything else to the app port (covers LAN, WAN, etc.)
-iptables -A INPUT -p tcp --dport 3000 -j DROP
+sudo bash scripts/setup-firewall.sh
 ```
 
-**nftables** (modern default on Debian/Ubuntu/Fedora)
+### Proxmox LXC Deployment
+
+Running Archivum Null as a Proxmox LXC container is a lightweight alternative to a full VM. No Docker is needed — Node.js runs directly inside the LXC.
+
+For full instructions covering container creation, manual installation, the Community Scripts quick installer, systemd service hardening, Proxmox Firewall egress rules, and SDN/VLAN isolation, see **[docs/PROXMOX.md](docs/PROXMOX.md)**.
+
+**Quick start (Proxmox host shell):**
+
 ```bash
-# Accept on tunnel interface, drop all other traffic to the port
-nft add rule inet filter input tcp dport 3000 iifname "<tunnel-iface>" accept
-nft add rule inet filter input tcp dport 3000 drop
+bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
 ```
 
-### Reverse Proxy Configuration
+**Update existing LXC:**
 
-Any reverse proxy with TLS termination and `proxy_pass`/`reverse_proxy` support works (nginx, Caddy, Traefik, HAProxy, …).
-
-> Replace `<TUNNEL_IP>` with the IP of your homelab tunnel interface as seen from the VPS.
-
-#### nginx
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name archivum.yourdomain.com;
-
-    # TLS — managed by your reverse proxy / Let's Encrypt / acme.sh / etc.
-
-    client_max_body_size 105m;  # Slightly above MAX_FILE_SIZE
-
-    location / {
-        proxy_pass http://<TUNNEL_IP>:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Streaming support
-        proxy_request_buffering off;
-        proxy_buffering off;
-    }
-}
-```
-
-#### Caddy (recommended — automatic TLS via Let's Encrypt)
-```caddyfile
-archivum.yourdomain.com {
-    # Caddy handles TLS automatically — no certificate config needed
-
-    request_body max 105MB
-
-    reverse_proxy <TUNNEL_IP>:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-
-        # Streaming support — disable request buffering
-        flush_interval -1
-    }
-}
-```
-
-### VPS Hardening
-
-The VPS runs only the reverse proxy. Port 3000 must **not** be reachable from the public internet — only 80 (HTTP→HTTPS redirect) and 443 (HTTPS).
-
-**UFW (Ubuntu/Debian)**
 ```bash
-ufw default deny incoming
-ufw allow 22/tcp    # SSH — restrict to your admin IP if possible
-ufw allow 80/tcp    # HTTP (Let's Encrypt challenge / redirect)
-ufw allow 443/tcp   # HTTPS
-# Port 3000 is intentionally absent — must never be public
-ufw enable
+bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)" -- --update <vmid>
 ```
-
-**nftables**
-```bash
-nft add rule inet filter input tcp dport { 22, 80, 443 } accept
-nft add rule inet filter input drop
-```
-
-### WireGuard — Prevent Lateral LAN Movement
-
-Scope `AllowedIPs` on each WireGuard peer to only the tunnel interface address. **Do not** use `0.0.0.0/0` on the homelab peer unless you intend to route all traffic through the tunnel.
-
-```ini
-# /etc/wireguard/wg0.conf  (on the VPS)
-[Peer]
-PublicKey = <homelab-peer-pubkey>
-# Restrict to tunnel interface IP only — prevents accidental LAN routing
-AllowedIPs = <homelab-tunnel-ip>/32   # e.g. 10.8.0.2/32
-```
-
-With a `/32` `AllowedIPs`, even if the container is misconfigured, WireGuard will only route packets destined for the tunnel IP — LAN subnets remain unreachable from the VPS.
 
 ### Deployment Validation
 
@@ -366,8 +289,6 @@ It checks:
 
 Images are published to `ghcr.io/whiteravens20/archivum-null`.
 
-| Tag | Source | Stable | Purpose |
-|---|---|---|---|
 | Tag | Source | Stable | Purpose |
 |---|---|---|---|
 | `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
@@ -481,6 +402,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 | Abuse / spam | Turnstile CAPTCHA + 3-tier rate limiting per IP |
 | Large file DoS | Streaming size enforcement — no full file held in memory |
 | Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
+| Compromised container initiating outbound LAN/WAN connections | Docker `internal` network or host FORWARD egress rules block container-to-LAN and container-to-internet traffic; see [Egress Containment](docs/HARDENING.md#egress-containment) |
 
 ### Threat Model Limitations
 
@@ -517,9 +439,18 @@ Before exposing this service publicly:
 - [ ] Add your contact information to TOS.md (`Replace with your contact information`)
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
+- [ ] Apply egress containment rules — Option A (`internal: true`) if Turnstile is off, Option B (FORWARD rules) if Turnstile is on (see [Egress Containment](#egress-containment--blocking-outbound-from-a-compromised-container))
 - [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
 
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for coding guidelines, testing requirements, and the secure contributing checklist before opening a pull request.
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](LICENSE) and [ATTRIBUTION](ATTRIBUTION.md).
