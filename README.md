@@ -9,6 +9,24 @@
 Anonymous, zero-knowledge encrypted file sharing with expiring vaults.
 
 No accounts. No cookies. No tracking.
+
+<br />
+
+[![Tests](https://github.com/whiteravens20/archivum-null/actions/workflows/test.yml/badge.svg?branch=dev)](https://github.com/whiteravens20/archivum-null/actions/workflows/test.yml)
+[![Snapshot build](https://github.com/whiteravens20/archivum-null/actions/workflows/docker-snapshot.yml/badge.svg?branch=dev)](https://github.com/whiteravens20/archivum-null/actions/workflows/docker-snapshot.yml)
+[![Release](https://github.com/whiteravens20/archivum-null/actions/workflows/release.yml/badge.svg)](https://github.com/whiteravens20/archivum-null/actions/workflows/release.yml)
+[![CodeQL](https://github.com/whiteravens20/archivum-null/actions/workflows/codeql.yml/badge.svg)](https://github.com/whiteravens20/archivum-null/actions/workflows/codeql.yml)
+[![Security scan](https://github.com/whiteravens20/archivum-null/actions/workflows/security.yml/badge.svg)](https://github.com/whiteravens20/archivum-null/actions/workflows/security.yml)
+
+<br />
+
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-5FA04E?style=flat&logo=nodedotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-00B386?style=flat&logo=fastify&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-6E9F18?style=flat&logo=vitest&logoColor=white)
+
 </div>
 
 ---
