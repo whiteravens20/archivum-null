@@ -11,18 +11,26 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
 
 ## Table of Contents
 
-- [Security Considerations](#security-considerations)
-- [Production Architecture](#production-architecture)
-- [Inbound Firewall Rules — App Port](#inbound-firewall-rules--app-port)
-- [Reverse Proxy Configuration](#reverse-proxy-configuration)
-- [VPS Hardening](#vps-hardening)
-- [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement)
-- [Egress Containment](#egress-containment)
-  - [Option A — Docker internal network](#option-a--docker-internal-network)
-  - [Option B — Host FORWARD rules (Docker with Turnstile)](#option-b--host-forward-rules-docker-with-turnstile)
-  - [Option C — Bare-metal / systemd UID rules](#option-c--bare-metal--systemd-uid-rules)
-  - [Summary — which option to apply](#summary--which-option-to-apply)
-- [Quick Setup with setup-firewall.sh](#quick-setup-with-setup-firewallsh)
+- [Deployment Hardening Guide](#deployment-hardening-guide)
+  - [Table of Contents](#table-of-contents)
+  - [Security Considerations](#security-considerations)
+    - [What these rules protect against](#what-these-rules-protect-against)
+    - [What these rules do NOT protect against](#what-these-rules-do-not-protect-against)
+    - [Rule ordering is critical](#rule-ordering-is-critical)
+    - [Persistence](#persistence)
+  - [Production Architecture](#production-architecture)
+  - [Inbound Firewall Rules — App Port](#inbound-firewall-rules--app-port)
+  - [Reverse Proxy Configuration](#reverse-proxy-configuration)
+    - [nginx](#nginx)
+    - [Caddy (recommended — automatic TLS via Let's Encrypt)](#caddy-recommended--automatic-tls-via-lets-encrypt)
+  - [VPS Hardening](#vps-hardening)
+  - [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement)
+  - [Egress Containment](#egress-containment)
+    - [Option A — Docker `internal` network](#option-a--docker-internal-network)
+    - [Option B — Host FORWARD rules (Docker with Turnstile)](#option-b--host-forward-rules-docker-with-turnstile)
+    - [Option C — Bare-metal / systemd UID rules](#option-c--bare-metal--systemd-uid-rules)
+    - [Summary — which option to apply](#summary--which-option-to-apply)
+  - [Quick Setup with setup-firewall.sh](#quick-setup-with-setup-firewallsh)
 
 ---
 
