@@ -72,6 +72,11 @@ describe('config', () => {
     const { config } = await import('../config.js');
     expect(config.RATE_LIMIT_DOWNLOAD_MAX).toBe(30);
   });
+
+  it('should default RATE_LIMIT_ADMIN_MAX to 10', async () => {
+    const { config } = await import('../config.js');
+    expect(config.RATE_LIMIT_ADMIN_MAX).toBe(10);
+  });
 });
 
 describe('validateConfig', () => {

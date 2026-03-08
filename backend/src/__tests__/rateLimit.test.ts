@@ -25,6 +25,7 @@ describe('Rate-limit middleware', () => {
     vi.stubEnv('RATE_LIMIT_MAX', '3');           // Upload limit
     vi.stubEnv('RATE_LIMIT_API_MAX', '5');       // General API limit
     vi.stubEnv('RATE_LIMIT_DOWNLOAD_MAX', '2');  // Download limit
+    vi.stubEnv('RATE_LIMIT_ADMIN_MAX', '2');     // Admin limit
 
     app = Fastify({ logger: false });
 
@@ -40,6 +41,7 @@ describe('Rate-limit middleware', () => {
     app.post('/api/vault/upload/:uploadId/chunk', async () => ({ receivedBytes: 100 }));
     app.post('/api/vault/upload/:uploadId/complete', async () => ({ vaultId: 'v1' }));
     app.get('/api/vault/test-id/download', async () => ({ data: 'ok' }));
+    app.get('/api/admin/stats', async () => ({ totalVaults: 0 }));
     app.get('/not-api', async () => ({ ok: true }));
 
     await app.ready();
@@ -142,5 +144,28 @@ describe('Rate-limit middleware', () => {
     const body = res.json();
     expect(body).toHaveProperty('retryAfter');
     expect(body.retryAfter).toBeGreaterThan(0);
+  });
+
+  it('should enforce admin-specific rate limit on /api/admin/* routes', async () => {
+    // Admin limit is 2
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
+      expect(res.statusCode).toBe(200);
+    }
+
+    // 3rd admin request should be rate-limited
+    const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('should not affect non-admin routes with admin rate limit', async () => {
+    // Exhaust admin limit
+    for (let i = 0; i < 2; i++) {
+      await app.inject({ method: 'GET', url: '/api/admin/stats' });
+    }
+
+    // Non-admin API route should still work (general limit not yet exhausted)
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.statusCode).toBe(200);
   });
 });
