@@ -13,9 +13,21 @@ vi.mock('../api/vault.js', () => ({
   uploadVault: vi.fn(),
 }));
 
+const mockConfig = {
+  maxFileSize: 104857600,
+  chunkSize: 52428800,
+  defaultTtl: 86400,
+  defaultMaxDownloads: 10,
+  turnstileSiteKey: '0x0000000000000000000000',
+  turnstileEnabled: false,
+};
+
 describe('Home', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(mockConfig),
+    }));
   });
 
   it('should render the heading', async () => {
