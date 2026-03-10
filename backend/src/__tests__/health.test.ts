@@ -2,6 +2,30 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type * as NodeFs from 'node:fs';
 import Fastify from 'fastify';
 
+describe('GET /api/config', () => {
+  it('should return public runtime config with correct shape', async () => {
+    vi.resetModules();
+    const app = Fastify({ logger: false });
+    const { healthRoutes } = await import('../routes/health.js');
+    await app.register(healthRoutes);
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/config' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toHaveProperty('maxFileSize');
+    expect(body).toHaveProperty('chunkSize');
+    expect(body).toHaveProperty('defaultTtl');
+    expect(body).toHaveProperty('defaultMaxDownloads');
+    expect(body).toHaveProperty('turnstileSiteKey');
+    expect(body).toHaveProperty('turnstileEnabled');
+    expect(typeof body.maxFileSize).toBe('number');
+    expect(typeof body.turnstileEnabled).toBe('boolean');
+
+    await app.close();
+  });
+});
+
 describe('healthRoutes', () => {
   let app: ReturnType<typeof Fastify>;
 
