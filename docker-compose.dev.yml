@@ -7,10 +7,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      args:
+        - PORT=${PORT:-3000}
     container_name: archivum-dev-backend
     restart: unless-stopped
     ports:
-      - "0.0.0.0:3000:3000"
+      - "0.0.0.0:${PORT:-3000}:${PORT:-3000}"
     volumes:
       - ./backend/src:/app/backend/src
       - ./TOS.md:/app/TOS.md:ro
@@ -20,7 +22,7 @@ services:
     environment:
       - NODE_ENV=development
       - BIND_ADDRESS=0.0.0.0
-      - PORT=3000
+      - PORT=${PORT:-3000}
     command: npx tsx watch src/index.ts
     working_dir: /app/backend
 

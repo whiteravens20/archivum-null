@@ -18,6 +18,7 @@ COPY backend/ ./backend/
 
 WORKDIR /app/backend
 
-EXPOSE 3000
+ARG PORT=3000
+EXPOSE ${PORT}
 
 CMD ["npx", "tsx", "watch", "src/index.ts"]

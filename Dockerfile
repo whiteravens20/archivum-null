@@ -71,7 +71,10 @@ USER archivum
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health || exit 1
 
-EXPOSE 3000
+# PORT is a runtime env var (set via env_file / environment: in compose).
+# Declaring it as ARG here lets EXPOSE track it at build time when --build-arg PORT=<n> is passed.
+ARG PORT=3000
+EXPOSE ${PORT}
 
 ENV NODE_ENV=production
 ENV STORAGE_PATH=/data/vaults
