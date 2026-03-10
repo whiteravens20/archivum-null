@@ -32,9 +32,9 @@ red()    { printf '\033[0;31m✗\033[0m %s\n' "$*"; }
 yellow() { printf '\033[0;33m⚠\033[0m %s\n' "$*"; }
 header() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
-pass()  { green  "$*"; (( PASS++ ));  }
-fail()  { red    "$*"; (( FAIL++ ));  }
-warn()  { yellow "$*"; (( WARN++ ));  }
+pass()  { green  "$*"; PASS=$(( PASS + 1 ));  }
+fail()  { red    "$*"; FAIL=$(( FAIL + 1 ));  }
+warn()  { yellow "$*"; WARN=$(( WARN + 1 ));  }
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
