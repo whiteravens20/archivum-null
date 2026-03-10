@@ -31,14 +31,6 @@ No accounts. No cookies. No tracking.
 
 ---
 
-> [!WARNING]
-> **Beta — not production-ready.**
-> This project is under active testing. The architecture, API, and storage format may change without notice.
-> A stable release and official Docker image will be published when the build is considered production-ready.
-> Do not rely on it for sensitive data yet.
-
----
-
 > [!NOTE]
 > **This project was developed with AI assistance.**
 >
