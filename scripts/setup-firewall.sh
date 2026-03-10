@@ -159,6 +159,18 @@ apply_inbound_nftables() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  DOCKER-USER chain — allow tunnel interface traffic through Docker's chain
+# ─────────────────────────────────────────────────────────────────────────────
+
+apply_docker_user_iptables() {
+  local iface="$1"
+  echo
+  bold "── DOCKER-USER chain rule (iptables) ──"
+  run iptables -I DOCKER-USER -i "$iface" -j ACCEPT
+  green "  DOCKER-USER: traffic from $iface accepted (Docker won't block tunnel packets)"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  MODE: docker  — FORWARD rules on bridge
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -170,12 +182,12 @@ apply_docker_iptables() {
   run iptables -I FORWARD -i "$br" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
   for cidr in "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" "169.254.0.0/16"; do
-    run iptables -I FORWARD -i "$br" -d "$cidr" -j DROP
+    run iptables -A FORWARD -i "$br" -d "$cidr" -j DROP
   done
 
   if [[ "${turnstile,,}" == "yes" ]]; then
     for cf in "${CF_RANGES[@]}"; do
-      run iptables -I FORWARD -i "$br" -d "$cf" -p tcp --dport 443 -j ACCEPT
+      run iptables -A FORWARD -i "$br" -d "$cf" -p tcp --dport 443 -j ACCEPT
     done
     green "  Cloudflare Turnstile ACCEPT rules added"
   fi
@@ -258,12 +270,12 @@ apply_proxmox_iptables() {
   run iptables -I FORWARD -i "$veth" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
   for cidr in "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" "169.254.0.0/16"; do
-    run iptables -I FORWARD -i "$veth" -d "$cidr" -j DROP
+    run iptables -A FORWARD -i "$veth" -d "$cidr" -j DROP
   done
 
   if [[ "${turnstile,,}" == "yes" ]]; then
     for cf in "${CF_RANGES[@]}"; do
-      run iptables -I FORWARD -i "$veth" -d "$cf" -p tcp --dport 443 -j ACCEPT
+      run iptables -A FORWARD -i "$veth" -d "$cf" -p tcp --dport 443 -j ACCEPT
     done
     green "  Cloudflare Turnstile ACCEPT rules added"
   fi
@@ -416,6 +428,7 @@ echo "  App port:  $APP_PORT"
 [[ "$MODE" == "bare-metal" ]]   && echo "  App UID:   $APP_UID"
 [[ "$MODE" == "proxmox-veth" ]] && echo "  veth:      $VETH"
 [[ -n "$TUNNEL_IFACE" ]]        && echo "  Inbound guard on: $TUNNEL_IFACE"
+[[ "$MODE" == "docker" && -n "$TUNNEL_IFACE" && "$BACKEND" == "iptables" ]] && echo "  DOCKER-USER rule: $TUNNEL_IFACE → ACCEPT"
 [[ $AUTO_PERSIST -eq 1 ]]       && echo "  Persist:   yes"
 [[ $DRY_RUN -eq 1 ]]            && echo "  Dry run:   yes"
 bold "───────────────────────────────────────────"
@@ -435,6 +448,11 @@ if [[ -n "$TUNNEL_IFACE" ]]; then
   else
     apply_inbound_nftables "$TUNNEL_IFACE" "$APP_PORT"
   fi
+fi
+
+# DOCKER-USER chain fix (docker + iptables + tunnel interface)
+if [[ "$MODE" == "docker" && -n "$TUNNEL_IFACE" && "$BACKEND" == "iptables" ]]; then
+  apply_docker_user_iptables "$TUNNEL_IFACE"
 fi
 
 # Egress
