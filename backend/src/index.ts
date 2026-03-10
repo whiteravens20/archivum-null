@@ -85,7 +85,6 @@ async function main(): Promise<void> {
     await app.register(fastifyStatic, {
       root: frontendDist,
       prefix: '/',
-      decorateReply: false,
     });
 
     // SPA fallback — serve index.html for non-API routes
