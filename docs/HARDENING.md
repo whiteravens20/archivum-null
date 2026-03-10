@@ -375,6 +375,14 @@ HOST_BIND_ADDRESS=100.x.x.x   # Tailscale IP of this host
 
 The service is now reachable only from devices in the same tailnet.
 
+> **Docker + iptables:** Docker manages its own `DOCKER-USER` iptables chain. By default, packets arriving on a tunnel interface (`tailscale0`, `wg0`, etc.) may be silently dropped by that chain before any other rules are evaluated. Add an explicit ACCEPT rule on the homelab host:
+>
+> ```bash
+> sudo iptables -I DOCKER-USER -i tailscale0 -j ACCEPT   # replace with your tunnel iface
+> ```
+>
+> `setup-firewall.sh` applies this automatically when `--mode docker --tunnel-iface <iface>` is set with the `iptables` backend.
+
 ### Hardening
 
 - **ACLs:** restrict access to port 3000 to specific tailnet nodes only. Edit the ACL policy at `https://login.tailscale.com/admin/acls`:
@@ -501,22 +509,24 @@ Rebuild the network once: `docker compose down && docker compose up -d`
 ```bash
 BRIDGE=br-archivum
 
-# Allow return traffic for inbound connections
+# 1. Allow return traffic for inbound connections (MUST be first)
 iptables -I FORWARD -i $BRIDGE -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
-# Block container → RFC 1918 LAN and link-local (always)
-iptables -I FORWARD -i $BRIDGE -d 10.0.0.0/8     -j DROP
-iptables -I FORWARD -i $BRIDGE -d 172.16.0.0/12  -j DROP
-iptables -I FORWARD -i $BRIDGE -d 192.168.0.0/16 -j DROP
-iptables -I FORWARD -i $BRIDGE -d 169.254.0.0/16 -j DROP
+# 2. Block container → RFC 1918 LAN and link-local (always)
+iptables -A FORWARD -i $BRIDGE -d 10.0.0.0/8     -j DROP
+iptables -A FORWARD -i $BRIDGE -d 172.16.0.0/12  -j DROP
+iptables -A FORWARD -i $BRIDGE -d 192.168.0.0/16 -j DROP
+iptables -A FORWARD -i $BRIDGE -d 169.254.0.0/16 -j DROP
 
-# If Turnstile IS enabled — allow Cloudflare challenge endpoints only
-iptables -I FORWARD -i $BRIDGE -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
-iptables -I FORWARD -i $BRIDGE -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
+# 3. If Turnstile IS enabled — allow Cloudflare challenge endpoints only
+iptables -A FORWARD -i $BRIDGE -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
+iptables -A FORWARD -i $BRIDGE -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
 
-# Drop everything else outbound from the container
+# 4. Drop everything else outbound from the container
 iptables -A FORWARD -i $BRIDGE -j DROP
 ```
+
+> **Critical:** use `-I` (insert) only for the ESTABLISHED,RELATED rule so it lands at position 1. All subsequent rules use `-A` (append). If you use `-I` for the RFC 1918 DROP rules too, they get prepended one by one and push ESTABLISHED,RELATED to the bottom — return packets destined for container IPs in `172.16.0.0/12` (Docker's default bridge range) hit the DROP rule before the ACCEPT, breaking all client connections.
 
 **nftables**
 ```bash
@@ -549,14 +559,14 @@ id archivum          # if a dedicated system user exists
 APP_UID=1001         # adjust to match
 
 # Block app process → RFC 1918 / link-local
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 10.0.0.0/8     -j DROP
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 172.16.0.0/12  -j DROP
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 192.168.0.0/16 -j DROP
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 169.254.0.0/16 -j DROP
+iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 10.0.0.0/8     -j DROP
+iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 172.16.0.0/12  -j DROP
+iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 192.168.0.0/16 -j DROP
+iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 169.254.0.0/16 -j DROP
 
 # If Turnstile IS enabled — allow Cloudflare only
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
-iptables -I OUTPUT -m owner --uid-owner $APP_UID -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
+iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
+iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
 
 # Drop all remaining outbound from the app UID
 iptables -A OUTPUT -m owner --uid-owner $APP_UID -j DROP
