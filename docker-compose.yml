@@ -28,6 +28,7 @@ services:
         - DEFAULT_TTL=${DEFAULT_TTL:-86400}
         - DEFAULT_MAX_DOWNLOADS=${DEFAULT_MAX_DOWNLOADS:-10}
         - CHUNK_SIZE=${CHUNK_SIZE:-52428800}
+        - PORT=${PORT:-3000}
     container_name: archivum-null
     restart: unless-stopped
 
@@ -58,7 +59,7 @@ services:
     # on all interfaces inside the container's own network namespace; Docker's
     # port mapping is the actual enforcement boundary.
     ports:
-      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
 
     # Environment
     env_file:
@@ -80,7 +81,7 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
