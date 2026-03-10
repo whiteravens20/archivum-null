@@ -23,11 +23,6 @@ services:
     build:
       context: .
       args:
-        - MAX_FILE_SIZE=${MAX_FILE_SIZE:-104857600}
-        - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-0x0000000000000000000000}
-        - DEFAULT_TTL=${DEFAULT_TTL:-86400}
-        - DEFAULT_MAX_DOWNLOADS=${DEFAULT_MAX_DOWNLOADS:-10}
-        - CHUNK_SIZE=${CHUNK_SIZE:-52428800}
         - PORT=${PORT:-3000}
     container_name: archivum-null
     restart: unless-stopped
