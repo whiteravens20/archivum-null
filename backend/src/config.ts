@@ -61,4 +61,13 @@ export function validateConfig(): void {
   if (!isFinite(config.DEFAULT_MAX_DOWNLOADS) || config.DEFAULT_MAX_DOWNLOADS <= 0) {
     throw new Error('DEFAULT_MAX_DOWNLOADS must be a positive number');
   }
+  if (!isFinite(config.CHUNK_SIZE) || config.CHUNK_SIZE <= 0) {
+    throw new Error('CHUNK_SIZE must be a positive number');
+  }
+  if (!isFinite(config.UPLOAD_SESSION_TTL) || config.UPLOAD_SESSION_TTL <= 0) {
+    throw new Error('UPLOAD_SESSION_TTL must be a positive number');
+  }
+  if (!isFinite(config.MAX_TOTAL_STORAGE) || config.MAX_TOTAL_STORAGE < 0) {
+    throw new Error('MAX_TOTAL_STORAGE must be a non-negative number');
+  }
 }
