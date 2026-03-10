@@ -66,7 +66,7 @@ jobs:
           format: sarif
           output: trivy-fs.sarif
           trivyignores: .trivyignore
-          exit-code: '0'  # Report only — do not fail the build yet (beta)
+          exit-code: '1'  # Fail the build on HIGH/CRITICAL vulnerabilities
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v4
@@ -97,7 +97,7 @@ jobs:
           format: sarif
           output: trivy-docker.sarif
           trivyignores: .trivyignore
-          exit-code: '0'  # Report only — do not fail the build yet (beta)
+          exit-code: '1'  # Fail the build on HIGH/CRITICAL vulnerabilities
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v4
