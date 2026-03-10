@@ -200,6 +200,13 @@ export class VaultManager {
       throw Object.assign(new Error('No chunks received'), { statusCode: 400 });
     }
 
+    if (session.receivedBytes !== session.totalSize) {
+      throw Object.assign(
+        new Error(`Upload incomplete: expected ${session.totalSize} bytes, got ${session.receivedBytes}`),
+        { statusCode: 400 }
+      );
+    }
+
     const vaultId = nanoid(24);
     const now = Date.now();
 
