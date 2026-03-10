@@ -37,7 +37,9 @@ UPDATE_VMID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --update) MODE="update"; UPDATE_VMID="${2:-}"; shift 2 ;;
+    --update)
+      [[ $# -ge 2 ]] || die "--update requires a <vmid> argument."
+      MODE="update"; UPDATE_VMID="$2"; shift 2 ;;
     --help|-h)
       echo "Usage:"
       echo "  install-lxc.sh                     # create a new LXC and install"
