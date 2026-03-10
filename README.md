@@ -180,11 +180,13 @@ HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab Wire
 # TURNSTILE_SITE_KEY=<your-cf-site-key>
 ```
 
-**6. Build and start** the production container.
+**6. Start** the production container (pull prebuilt image — no local build needed).
 
 ```bash
-docker compose up -d --build
+docker compose pull && docker compose up -d
 ```
+
+> To build locally from source instead: `docker compose up -d --build`
 
 **7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
 
@@ -205,7 +207,7 @@ All variables live in a single `.env` file at the project root. Copy `.env.examp
 | Variable | Default | Description |
 |---|---|---|
 | `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) — enforced by the backend |
-| `TURNSTILE_SITE_KEY` | — | Cloudflare Turnstile site key (passed to backend via env) |
+| `TURNSTILE_SITE_KEY` | `0x0000000000000000000000` | Cloudflare Turnstile **public** site key — served to the browser at runtime via `GET /api/config`; never exposed as a secret |
 | `TURNSTILE_SECRET` | — | Cloudflare Turnstile secret key |
 | `TURNSTILE_HOSTNAME` | — | Expected hostname in Turnstile response (e.g. `example.com`); leave empty to skip |
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
