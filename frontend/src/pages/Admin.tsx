@@ -253,13 +253,3 @@ export default function Admin() {
     </div>
   );
 }
-
-
-interface VaultMeta {
-  vaultId: string;
-  ciphertextSize: number;
-  createdAt: number;
-  expiresAt: number;
-  remainingDownloads: number;
-  maxDownloads: number;
-}
