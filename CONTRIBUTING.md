@@ -46,7 +46,7 @@ Thank you for considering a contribution to Archivum Null. This project handles 
 - For large changes or new features, open an issue first to discuss the approach before investing time in code.
 - By contributing, you agree to the project [License](LICENSE) and [Code of Conduct](CODE_OF_CONDUCT.md).
 
-> **This project is beta software.** Architecture, API shape, and storage format may still change. Coordinate on the issue tracker before starting deep refactors.
+> While contributions are welcome, coordinate on the issue tracker before starting major refactors.
 
 ---
 
