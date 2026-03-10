@@ -7,15 +7,8 @@
 #
 # ── Required repository configuration ────────────────────────────────────────
 #
-# REPOSITORY VARIABLES  (Settings → Secrets and variables → Variables)
-# These are non-sensitive build-time constants baked into the frontend bundle.
-# They are visible to everyone who downloads the image — they are NOT secrets.
-#
-#   MAX_FILE_SIZE         Max upload size in bytes (default: 104857600)
-#   TURNSTILE_SITE_KEY    Cloudflare Turnstile public site key
-#   DEFAULT_TTL           Default vault TTL in seconds (default: 86400)
-#   DEFAULT_MAX_DOWNLOADS Default max downloads per vault (default: 10)
-#   CHUNK_SIZE            Chunk size threshold in bytes (default: 52428800)
+# No repository variables are required. All runtime configuration is read
+# from the operator's .env file at container start via /api/config.
 #
 # ── Image ─────────────────────────────────────────────────────────────────────
 # Published to: ghcr.io/<owner>/<repo>
@@ -132,15 +125,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # These are PUBLIC build-time constants embedded in the JS bundle.
-          # Store them as Repository Variables (not Secrets) — they are NOT sensitive.
-          # Fallback defaults are used when variables are not set.
-          build-args: |
-            MAX_FILE_SIZE=${{ vars.MAX_FILE_SIZE || '104857600' }}
-            TURNSTILE_SITE_KEY=${{ vars.TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
-            DEFAULT_TTL=${{ vars.DEFAULT_TTL || '86400' }}
-            DEFAULT_MAX_DOWNLOADS=${{ vars.DEFAULT_MAX_DOWNLOADS || '10' }}
-            CHUNK_SIZE=${{ vars.CHUNK_SIZE || '52428800' }}
           # GitHub Actions cache — dramatically speeds up repeated builds
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -2,22 +2,6 @@
 #
 # Publishes a Docker image on every push to dev or main.
 # These are NOT production releases — use a semver tag for that.
-#
-# Tags produced:
-#   dev  branch push  →  ghcr.io/<owner>/<repo>:dev
-#                        ghcr.io/<owner>/<repo>:dev-<7-char-sha>
-#   main branch push  →  ghcr.io/<owner>/<repo>:edge
-#                        ghcr.io/<owner>/<repo>:edge-<7-char-sha>
-#
-# ⚠️  Both :dev and :edge are snapshot builds and are NOT production releases.
-#    The :main tag is reserved exclusively for versioned production releases
-#    (see release.yml). For a stable production image use :main, :latest, or
-#    a specific versioned tag (e.g. :1.2.3).
-#
-# The short-sha tag lets you pin a specific snapshot by commit if needed.
-#
-# VITE_ build-args fall back to safe defaults when repository variables are not
-# set, so the workflow works out of the box on a fresh fork.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Snapshot build
@@ -77,14 +61,6 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.prefix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.prefix }}-${{ steps.tag.outputs.sha }}
-          # These are public build-time constants. Fallback defaults are used
-          # when repository variables are not configured.
-          build-args: |
-            MAX_FILE_SIZE=${{ vars.MAX_FILE_SIZE || '104857600' }}
-            TURNSTILE_SITE_KEY=${{ vars.TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
-            DEFAULT_TTL=${{ vars.DEFAULT_TTL || '86400' }}
-            DEFAULT_MAX_DOWNLOADS=${{ vars.DEFAULT_MAX_DOWNLOADS || '10' }}
-            CHUNK_SIZE=${{ vars.CHUNK_SIZE || '52428800' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
