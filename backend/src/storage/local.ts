@@ -1,6 +1,6 @@
 import type { StorageBackend } from './index.js';
 import type { VaultMetadata } from '../vault/types.js';
-import type { Readable } from 'node:stream';
+import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -36,7 +36,7 @@ export class LocalStorage implements StorageBackend {
     const writeStream = fs.createWriteStream(filePath);
 
     let size = 0;
-    const counter = new (await import('node:stream')).Transform({
+    const counter = new Transform({
       transform(chunk, _encoding, callback) {
         size += chunk.length;
         if (maxSize !== undefined && size > maxSize) {
@@ -130,7 +130,7 @@ export class LocalStorage implements StorageBackend {
     const writeStream = fs.createWriteStream(filePath, { flags: 'a' });
 
     let chunkBytes = 0;
-    const counter = new (await import('node:stream')).Transform({
+    const counter = new Transform({
       transform(chunk, _encoding, callback) {
         chunkBytes += chunk.length;
         if (currentSize + chunkBytes > maxTotalSize) {
