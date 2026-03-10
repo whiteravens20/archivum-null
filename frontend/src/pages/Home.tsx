@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import UploadZone from '../components/UploadZone.tsx';
 import VaultConfig from '../components/VaultConfig.tsx';
 import ProgressBar from '../components/ProgressBar.tsx';
@@ -6,9 +6,6 @@ import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
 import { generateKey, exportKey, encryptFile } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
-
-const MAX_FILE_SIZE = Number(import.meta.env.VITE_MAX_FILE_SIZE) || 100 * 1024 * 1024;
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '0x0000000000000000000000';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
 const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
@@ -19,28 +16,43 @@ function nearestInList(value: number, list: number[]): number {
   );
 }
 
-const _rawTtl = Number(import.meta.env.VITE_DEFAULT_TTL) || 86400;
-const DEFAULT_TTL = nearestInList(_rawTtl, TTL_OPTION_VALUES);
-if (import.meta.env.DEV && !TTL_OPTION_VALUES.includes(_rawTtl)) {
-  console.warn(`[VaultConfig] VITE_DEFAULT_TTL=${_rawTtl} is not a valid TTL option. Snapped to nearest: ${DEFAULT_TTL}s. Valid options: ${TTL_OPTION_VALUES.join(', ')}`);
+interface RuntimeConfig {
+  maxFileSize: number;
+  chunkSize: number;
+  defaultTtl: number;
+  defaultMaxDownloads: number;
+  turnstileSiteKey: string;
+  turnstileEnabled: boolean;
 }
 
-const _rawDownloads = Number(import.meta.env.VITE_DEFAULT_MAX_DOWNLOADS) || 10;
-const DEFAULT_MAX_DOWNLOADS = nearestInList(_rawDownloads, DOWNLOAD_OPTION_VALUES);
-if (import.meta.env.DEV && !DOWNLOAD_OPTION_VALUES.includes(_rawDownloads)) {
-  console.warn(`[VaultConfig] VITE_DEFAULT_MAX_DOWNLOADS=${_rawDownloads} is not a valid download option. Snapped to nearest: ${DEFAULT_MAX_DOWNLOADS}. Valid options: ${DOWNLOAD_OPTION_VALUES.join(', ')}`);
-}
-// Blobs larger than this threshold use the chunked upload protocol so each
-// HTTP request stays below Cloudflare's 100 MB per-request limit.
-const CHUNK_UPLOAD_THRESHOLD = Number(import.meta.env.VITE_CHUNK_SIZE) || 50 * 1024 * 1024;
+const DEFAULT_CONFIG: RuntimeConfig = {
+  maxFileSize: 100 * 1024 * 1024,
+  chunkSize: 50 * 1024 * 1024,
+  defaultTtl: 86400,
+  defaultMaxDownloads: 10,
+  turnstileSiteKey: '0x0000000000000000000000',
+  turnstileEnabled: false,
+};
 
 type Stage = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
 
 export default function Home() {
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
   const [file, setFile] = useState<File | null>(null);
-  const [ttl, setTtl] = useState(DEFAULT_TTL);
-  const [maxDownloads, setMaxDownloads] = useState(DEFAULT_MAX_DOWNLOADS);
+  const [ttl, setTtl] = useState(DEFAULT_CONFIG.defaultTtl);
+  const [maxDownloads, setMaxDownloads] = useState(DEFAULT_CONFIG.defaultMaxDownloads);
   const [stage, setStage] = useState<Stage>('idle');
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then((r) => r.json())
+      .then((cfg: RuntimeConfig) => {
+        setRuntimeConfig(cfg);
+        setTtl(nearestInList(cfg.defaultTtl, TTL_OPTION_VALUES));
+        setMaxDownloads(nearestInList(cfg.defaultMaxDownloads, DOWNLOAD_OPTION_VALUES));
+      })
+      .catch(() => { /* keep defaults on network error */ });
+  }, []);
   const [progress, setProgress] = useState(0);
   const [vaultUrl, setVaultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +60,10 @@ export default function Home() {
 
   const handleUpload = useCallback(async () => {
     if (!file) return;
+    if (file.size > runtimeConfig.maxFileSize) {
+      setError(`File exceeds maximum size of ${formatSize(runtimeConfig.maxFileSize)}`);
+      return;
+    }
 
     try {
       setError(null);
@@ -67,7 +83,7 @@ export default function Home() {
       // 3. Upload encrypted blob — use chunked protocol for large files
       setStage('uploading');
       let result;
-      if (encryptedBlob.size > CHUNK_UPLOAD_THRESHOLD) {
+      if (encryptedBlob.size > runtimeConfig.chunkSize) {
         result = await uploadVaultChunked(
           encryptedBlob,
           ttl,
@@ -103,7 +119,7 @@ export default function Home() {
       setStage('error');
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
-  }, [file, ttl, maxDownloads, turnstileToken]);
+  }, [file, ttl, maxDownloads, turnstileToken, runtimeConfig]);
 
   const handleReset = () => {
     setFile(null);
@@ -164,7 +180,7 @@ export default function Home() {
         <div className="space-y-6">
           <UploadZone
             onFileSelect={setFile}
-            maxSize={MAX_FILE_SIZE}
+            maxSize={runtimeConfig.maxFileSize}
             disabled={stage !== 'idle'}
           />
 
@@ -194,10 +210,12 @@ export default function Home() {
                 disabled={stage !== 'idle'}
               />
 
-              <Turnstile
-                siteKey={TURNSTILE_SITE_KEY}
-                onVerify={setTurnstileToken}
-              />
+              {runtimeConfig.turnstileEnabled && (
+                <Turnstile
+                  siteKey={runtimeConfig.turnstileSiteKey}
+                  onVerify={setTurnstileToken}
+                />
+              )}
 
               {(stage === 'encrypting' || stage === 'uploading') && (
                 <ProgressBar

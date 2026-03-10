@@ -1,6 +1,8 @@
 const envSchema = {
   MAX_FILE_SIZE: Number(process.env.MAX_FILE_SIZE || 104857600),
   TURNSTILE_SECRET: process.env.TURNSTILE_SECRET || '',
+  // Public site key — safe to expose to the browser via /api/config
+  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY || '0x0000000000000000000000',
   TURNSTILE_ENABLED: !!process.env.TURNSTILE_SECRET && process.env.TURNSTILE_SECRET !== '0x0000000000000000000000',
   // Expected hostname in Turnstile response (e.g. 'example.com'). Leave empty to skip hostname check.
   TURNSTILE_HOSTNAME: process.env.TURNSTILE_HOSTNAME || '',
