@@ -129,7 +129,7 @@ describe('VaultManager — download counter atomicity', () => {
     const smallManager = new mod.VaultManager();
     await smallManager.init();
 
-    const bigData = 'x'.repeat(100); // 100 bytes > 10 byte limit
+    const bigData = 'x'.repeat(2000); // 2000 bytes > 10 + ENCRYPTION_OVERHEAD (1034)
     await expect(
       smallManager.createVault(makeStream(bigData), 3600, 1)
     ).rejects.toThrow();
