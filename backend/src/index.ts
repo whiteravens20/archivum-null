@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import { config, validateConfig } from './config.js';
+import { config, validateConfig, ENCRYPTION_OVERHEAD } from './config.js';
 import { vaultRoutes } from './routes/vault.js';
 import { adminRoutes } from './routes/admin.js';
 import { healthRoutes } from './routes/health.js';
@@ -57,15 +57,11 @@ async function main(): Promise<void> {
   });
 
   // Multipart (streaming)
-  // AES-GCM encryption overhead: 12-byte IV + 2-byte name len + name + 2-byte mime len
-  // + mime + 16-byte GCM tag. Worst case ≈ 800 bytes; use 1 KiB to be safe.
-  // This lets valid max-size files through while the streaming check in writeFile
-  // enforces the true MAX_FILE_SIZE limit on the stored ciphertext.
-  const ENCRYPTION_OVERHEAD = 1024;
-
+  // The per-request file size limit must accommodate both single-shot uploads
+  // (up to MAX_FILE_SIZE) and individual chunk requests (up to CHUNK_SIZE).
   await app.register(multipart, {
     limits: {
-      fileSize: config.MAX_FILE_SIZE + ENCRYPTION_OVERHEAD,
+      fileSize: Math.max(config.CHUNK_SIZE, config.MAX_FILE_SIZE) + ENCRYPTION_OVERHEAD,
       files: 1,
       fields: 10,
     },
