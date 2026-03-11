@@ -4,6 +4,7 @@ import Home from './pages/Home.tsx';
 import Vault from './pages/Vault.tsx';
 import Admin from './pages/Admin.tsx';
 import Tos from './pages/Tos.tsx';
+import NotFound from './pages/NotFound.tsx';
 import Footer from './components/Footer.tsx';
 
 function ScrollToTop() {
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/vault/:vaultId" element={<Vault />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/tos" element={<Tos />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <Footer />
