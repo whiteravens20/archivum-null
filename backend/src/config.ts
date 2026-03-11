@@ -36,6 +36,10 @@ const envSchema = {
 
 export const config = Object.freeze(envSchema);
 
+// AES-GCM encryption overhead: 12-byte IV + 2-byte name len + name + 2-byte mime len
+// + mime + 16-byte GCM tag. Worst case ≈ 800 bytes; use 1 KiB to be safe.
+export const ENCRYPTION_OVERHEAD = 1024;
+
 export function validateConfig(): void {
   if (!config.ADMIN_PASSWORD || config.ADMIN_PASSWORD === 'CHANGE_ME_IMMEDIATELY') {
     console.warn('[WARN] ADMIN_PASSWORD is not set or uses default. Admin panel will be inaccessible.');
