@@ -21,8 +21,8 @@
 - [x] Path traversal protection on vault IDs
 - [x] File size enforced at frontend, backend, and proxy levels:
   - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
-  - Backend multipart: `@fastify/multipart` stream truncation + explicit `truncated` check → 413
-  - Backend streaming: transform stream aborts early in `writeFile` → no full oversized write to disk
+  - Backend multipart: `@fastify/multipart` limit set to `max(CHUNK_SIZE, MAX_FILE_SIZE) + ENCRYPTION_OVERHEAD` — accommodates both single-shot uploads and individual chunk requests; stream truncation + explicit `truncated` check → 413
+  - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + ENCRYPTION_OVERHEAD` in `writeFile` — allows for AES-GCM overhead (IV + tag + metadata) while preventing oversized writes to disk
   - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
