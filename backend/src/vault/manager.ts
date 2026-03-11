@@ -1,5 +1,5 @@
 import type { VaultMetadata, ChunkedUploadSession } from './types.js';
-import { config } from '../config.js';
+import { config, ENCRYPTION_OVERHEAD } from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
 import type { Readable } from 'node:stream';
@@ -90,7 +90,7 @@ export class VaultManager {
     // limit is exceeded — avoids writing the full oversized blob to disk first.
     let size: number;
     try {
-      size = await storage.writeFile(vaultId, stream, config.MAX_FILE_SIZE);
+      size = await storage.writeFile(vaultId, stream, config.MAX_FILE_SIZE + ENCRYPTION_OVERHEAD);
     } catch (err) {
       // Ensure the vault directory is fully removed on any write failure
       await storage.deleteVault(vaultId).catch(() => {});
@@ -115,7 +115,7 @@ export class VaultManager {
   // ── Chunked upload ────────────────────────────────────────────────────────
 
   initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number): ChunkedUploadSession {
-    if (totalSize <= 0 || totalSize > config.MAX_FILE_SIZE) {
+    if (totalSize <= 0 || totalSize > config.MAX_FILE_SIZE + ENCRYPTION_OVERHEAD) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
 
