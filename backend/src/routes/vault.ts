@@ -194,4 +194,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
     }
   });
+
+  // 4. Abort — cancel a chunked upload and delete partial data
+  app.delete<{ Params: UploadParams }>('/api/vault/upload/:uploadId', async (request, reply) => {
+    const { uploadId } = request.params;
+
+    await vaultManager.abortChunkedUpload(uploadId);
+    return reply.status(204).send();
+  });
 }

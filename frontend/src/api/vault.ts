@@ -73,6 +73,7 @@ export async function uploadVault(
   maxDownloads: number,
   turnstileToken?: string,
   onProgress?: (progress: number) => void,
+  signal?: AbortSignal,
 ): Promise<VaultCreateResponse> {
   const header = buildMetadataHeader(file.name, file.type);
   const totalPlaintext = header.length + file.size;
@@ -81,6 +82,7 @@ export async function uploadVault(
   // Encrypt all crypto chunks
   const encryptedParts: Uint8Array[] = [];
   for (let i = 0; i < numCryptoChunks; i++) {
+    signal?.throwIfAborted();
     const start = i * chunkPlaintextSize;
     const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
     const plaintext = await readVirtualRange(header, file, start, end);
@@ -88,6 +90,7 @@ export async function uploadVault(
     onProgress?.(((i + 1) / numCryptoChunks) * 0.3);
   }
 
+  signal?.throwIfAborted();
   const encryptedBlob = new Blob(encryptedParts);
 
   const formData = new FormData();
@@ -125,6 +128,14 @@ export async function uploadVault(
     };
 
     xhr.onerror = () => reject(new Error('Network error during upload'));
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        xhr.abort();
+        reject(signal.reason ?? new DOMException('Upload cancelled', 'AbortError'));
+      });
+    }
+
     xhr.send(formData);
   });
 }
@@ -152,6 +163,14 @@ export async function downloadVault(vaultId: string): Promise<Blob> {
 // of crypto chunks, concatenate them, and upload via the init → chunk × N →
 // complete protocol.
 
+/** Ask the server to abort a chunked upload session and delete partial data. */
+async function abortUploadSession(uploadId: string): Promise<void> {
+  await fetch(
+    `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}`,
+    { method: 'DELETE' },
+  );
+}
+
 /**
  * Upload a file using the chunked upload protocol with streaming encryption.
  * Crypto chunks are grouped into HTTP-sized batches and uploaded sequentially.
@@ -164,6 +183,7 @@ export async function uploadVaultChunked(
   maxDownloads: number,
   turnstileToken?: string,
   onProgress?: (progress: number) => void,
+  signal?: AbortSignal,
 ): Promise<VaultCreateResponse> {
   const header = buildMetadataHeader(file.name, file.type);
   const totalPlaintext = header.length + file.size;
@@ -178,6 +198,7 @@ export async function uploadVaultChunked(
     method: 'POST',
     headers: initHeaders,
     body: JSON.stringify({ totalSize: totalEncrypted, ttl, maxDownloads, chunkPlaintextSize }),
+    signal,
   });
 
   if (!initRes.ok) {
@@ -193,40 +214,48 @@ export async function uploadVaultChunked(
   let cryptoIdx = 0;
   let httpChunkIdx = 0;
 
-  while (cryptoIdx < numCryptoChunks) {
-    const batchEnd = Math.min(cryptoIdx + cryptoChunksPerHttp, numCryptoChunks);
-    const parts: Uint8Array[] = [];
+  try {
+    while (cryptoIdx < numCryptoChunks) {
+      signal?.throwIfAborted();
+      const batchEnd = Math.min(cryptoIdx + cryptoChunksPerHttp, numCryptoChunks);
+      const parts: Uint8Array[] = [];
 
-    for (let i = cryptoIdx; i < batchEnd; i++) {
-      const start = i * chunkPlaintextSize;
-      const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
-      const plaintext = await readVirtualRange(header, file, start, end);
-      parts.push(await encryptChunk(plaintext, key, i));
+      for (let i = cryptoIdx; i < batchEnd; i++) {
+        signal?.throwIfAborted();
+        const start = i * chunkPlaintextSize;
+        const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
+        const plaintext = await readVirtualRange(header, file, start, end);
+        parts.push(await encryptChunk(plaintext, key, i));
+      }
+
+      const form = new FormData();
+      form.append('chunkIndex', String(httpChunkIdx));
+      form.append('file', new Blob(parts), 'chunk.bin');
+
+      const chunkRes = await fetch(
+        `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`,
+        { method: 'POST', body: form, signal },
+      );
+
+      if (!chunkRes.ok) {
+        const err = await chunkRes.json().catch(() => ({ error: 'Chunk upload failed' }));
+        throw new Error(err.error || `Chunk ${httpChunkIdx} upload failed (${chunkRes.status})`);
+      }
+
+      cryptoIdx = batchEnd;
+      httpChunkIdx++;
+      onProgress?.(cryptoIdx / numCryptoChunks);
     }
-
-    const form = new FormData();
-    form.append('chunkIndex', String(httpChunkIdx));
-    form.append('file', new Blob(parts), 'chunk.bin');
-
-    const chunkRes = await fetch(
-      `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`,
-      { method: 'POST', body: form },
-    );
-
-    if (!chunkRes.ok) {
-      const err = await chunkRes.json().catch(() => ({ error: 'Chunk upload failed' }));
-      throw new Error(err.error || `Chunk ${httpChunkIdx} upload failed (${chunkRes.status})`);
-    }
-
-    cryptoIdx = batchEnd;
-    httpChunkIdx++;
-    onProgress?.(cryptoIdx / numCryptoChunks);
+  } catch (err) {
+    // On any failure (including abort), tell the server to clean up partial data
+    await abortUploadSession(uploadId).catch(() => {});
+    throw err;
   }
 
   // 3. Complete
   const completeRes = await fetch(
     `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/complete`,
-    { method: 'POST' },
+    { method: 'POST', signal },
   );
 
   if (!completeRes.ok) {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import UploadZone from '../components/UploadZone.tsx';
 import VaultConfig from '../components/VaultConfig.tsx';
 import ProgressBar from '../components/ProgressBar.tsx';
@@ -59,6 +59,7 @@ export default function Home() {
   const [vaultUrl, setVaultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleUpload = useCallback(async () => {
     if (!file) return;
@@ -71,6 +72,9 @@ export default function Home() {
       setError(null);
       setStage('uploading');
       setProgress(0);
+
+      const ac = new AbortController();
+      abortRef.current = ac;
 
       const key = await generateKey();
       const keyString = await exportKey(key);
@@ -89,12 +93,14 @@ export default function Home() {
           file, key, chunkPlaintextSize,
           ttl, maxDownloads, turnstileToken,
           (p) => setProgress(p),
+          ac.signal,
         );
       } else {
         result = await uploadVault(
           file, key, chunkPlaintextSize,
           ttl, maxDownloads, turnstileToken,
           (p) => setProgress(p),
+          ac.signal,
         );
       }
 
@@ -113,8 +119,15 @@ export default function Home() {
       setStage('done');
       setProgress(1);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // User cancelled — reset to idle without showing an error
+        handleReset();
+        return;
+      }
       setStage('error');
       setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      abortRef.current = null;
     }
   }, [file, ttl, maxDownloads, turnstileToken, runtimeConfig]);
 
@@ -124,6 +137,10 @@ export default function Home() {
     setProgress(0);
     setVaultUrl(null);
     setError(null);
+  };
+
+  const handleCancel = () => {
+    abortRef.current?.abort(new DOMException('Upload cancelled', 'AbortError'));
   };
 
   return (
@@ -215,10 +232,18 @@ export default function Home() {
               )}
 
               {stage === 'uploading' && (
-                <ProgressBar
-                  progress={progress}
-                  label="Encrypting & uploading..."
-                />
+                <>
+                  <ProgressBar
+                    progress={progress}
+                    label="Encrypting & uploading..."
+                  />
+                  <button
+                    onClick={handleCancel}
+                    className="w-full py-2 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg transition-colors"
+                  >
+                    Cancel upload
+                  </button>
+                </>
               )}
 
               {error && (
