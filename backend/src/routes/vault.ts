@@ -15,7 +15,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   // Upload (create vault)
   app.post('/api/vault', {
     preHandler: verifyTurnstile,
-    bodyLimit: config.MAX_FILE_SIZE + 1024 * 64, // metadata overhead
+    bodyLimit: config.CHUNK_SIZE + 1024 * 64, // with streaming encryption, single uploads also fit in one CHUNK_SIZE
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const data = await request.file();
     if (!data) {
@@ -34,12 +34,14 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     const fields = data.fields as Record<string, { value?: string }>;
     const ttl = Number(fields?.ttl?.value) || config.DEFAULT_TTL;
     const maxDownloads = Number(fields?.maxDownloads?.value) || config.DEFAULT_MAX_DOWNLOADS;
+    const chunkPlaintextSize = Number(fields?.chunkPlaintextSize?.value) || config.CRYPTO_CHUNK_SIZE;
 
     try {
       const meta = await vaultManager.createVault(
         data.file,
         ttl,
-        maxDownloads
+        maxDownloads,
+        chunkPlaintextSize
       );
 
       return reply.status(201).send({
@@ -76,6 +78,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({
       vaultId: meta.vaultId,
       ciphertextSize: meta.ciphertextSize,
+      chunkPlaintextSize: meta.chunkPlaintextSize,
       createdAt: meta.createdAt,
       expiresAt: meta.expiresAt,
       remainingDownloads: meta.remainingDownloads,
@@ -113,13 +116,14 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     const totalSize = Number(body?.totalSize);
     const ttl = Number(body?.ttl) || config.DEFAULT_TTL;
     const maxDownloads = Number(body?.maxDownloads) || config.DEFAULT_MAX_DOWNLOADS;
+    const chunkPlaintextSize = Number(body?.chunkPlaintextSize) || config.CRYPTO_CHUNK_SIZE;
 
     if (!totalSize || totalSize <= 0) {
       return reply.status(400).send({ error: 'totalSize is required and must be positive' });
     }
 
     try {
-      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads);
+      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize);
       return reply.status(201).send({
         uploadId: session.uploadId,
         chunkSize: config.CHUNK_SIZE,

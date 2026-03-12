@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import { config, validateConfig, ENCRYPTION_OVERHEAD } from './config.js';
+import { config, validateConfig } from './config.js';
 import { vaultRoutes } from './routes/vault.js';
 import { adminRoutes } from './routes/admin.js';
 import { healthRoutes } from './routes/health.js';
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     // Trust only as many proxy hops as configured (default: 1 — nearest proxy).
     // Do NOT use `true` (trust all) in production — clients can spoof X-Forwarded-For.
     trustProxy: config.TRUST_PROXY,
-    bodyLimit: config.MAX_FILE_SIZE + 1024 * 64,
+    bodyLimit: config.CHUNK_SIZE + 1024 * 64,
   });
 
   // Security headers
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   // (up to MAX_FILE_SIZE) and individual chunk requests (up to CHUNK_SIZE).
   await app.register(multipart, {
     limits: {
-      fileSize: Math.max(config.CHUNK_SIZE, config.MAX_FILE_SIZE) + ENCRYPTION_OVERHEAD,
+      fileSize: config.CHUNK_SIZE + 1024 * 64,
       files: 1,
       fields: 10,
     },

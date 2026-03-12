@@ -26,6 +26,7 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({
       maxFileSize: config.MAX_FILE_SIZE,
       chunkSize: config.CHUNK_SIZE,
+      cryptoChunkSize: config.CRYPTO_CHUNK_SIZE,
       defaultTtl: config.DEFAULT_TTL,
       defaultMaxDownloads: config.DEFAULT_MAX_DOWNLOADS,
       turnstileSiteKey: config.TURNSTILE_SITE_KEY,

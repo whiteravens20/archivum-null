@@ -1,24 +1,36 @@
 /**
- * Archivum Null — Client-side Zero-Knowledge Encryption
+ * Archivum Null — Client-side Zero-Knowledge Streaming Encryption
  *
  * Uses WebCrypto API exclusively:
  *   - AES-256-GCM (authenticated encryption)
  *   - 256-bit key from crypto.getRandomValues
- *   - Unique IV per encryption
+ *   - Unique IV per chunk (96 bits, random)
  *   - Key NEVER leaves the browser (stored in URL fragment only)
  *
- * Payload format (plaintext before AES-GCM):
- *   [uint16 BE: nameLen][nameLen bytes: filename UTF-8]
- *   [uint16 BE: mimeLen][mimeLen bytes: MIME type UTF-8]
- *   [remaining bytes: file content]
+ * Streaming encryption format (v2):
+ *   Each crypto chunk is encrypted independently:
+ *     [IV (12 bytes)][AES-GCM ciphertext + 16-byte auth tag]
+ *   Chunks are concatenated sequentially on disk:
+ *     [chunk_0][chunk_1]...[chunk_N]
+ *
+ *   Additional Authenticated Data (AAD) = chunk index (uint32 BE)
+ *   This prevents chunk reordering attacks.
+ *
+ * Plaintext layout (before per-chunk AES-GCM encryption):
+ *   Chunk 0: [uint16 BE: nameLen][filename UTF-8][uint16 BE: mimeLen][MIME UTF-8][file bytes...]
+ *   Chunk 1..N: [file bytes continued]
  *
  * The server never receives the filename or MIME type — they are
- * encrypted inside the payload and recovered exclusively client-side.
+ * encrypted inside the first chunk's payload and recovered exclusively client-side.
  */
 
 const ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256;
-const IV_LENGTH = 12; // 96 bits recommended for AES-GCM
+export const IV_LENGTH = 12; // 96 bits recommended for AES-GCM
+const GCM_TAG_LENGTH = 16;
+
+/** Per-chunk overhead: 12-byte IV + 16-byte GCM tag */
+export const PER_CHUNK_OVERHEAD = IV_LENGTH + GCM_TAG_LENGTH; // 28
 
 /** Maximum byte lengths accepted when encoding/decoding header fields */
 const MAX_NAME_BYTES = 510; // ~255 chars worst-case UTF-8
@@ -52,96 +64,124 @@ export async function importKey(base64url: string): Promise<CryptoKey> {
 }
 
 /**
- * Encrypt a file.
- *
- * Plaintext layout before AES-GCM encryption:
- *   [uint16 BE: nameLen][filename UTF-8][uint16 BE: mimeLen][MIME UTF-8][file bytes]
- *
- * Wire format stored on server:
- *   IV (12 bytes) || AES-GCM ciphertext
- *
- * The server never receives (and never can read) the filename or MIME type.
+ * Build the metadata header that is prepended to the first crypto chunk's plaintext.
+ * Format: [uint16 BE: nameLen][filename UTF-8][uint16 BE: mimeLen][MIME UTF-8]
  */
-export async function encryptFile(
-  file: File,
-  key: CryptoKey,
-  onProgress?: (progress: number) => void
-): Promise<Blob> {
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-
-  // Encode filename (capped) and MIME type into header bytes
+export function buildMetadataHeader(filename: string, mimeType: string): Uint8Array {
   const encoder = new TextEncoder();
-  const rawName = file.name || 'file';
-  // Cap so the encoded form fits within MAX_NAME_BYTES
+  const rawName = filename || 'file';
   const nameBytes = encoder.encode(rawName.slice(0, MAX_NAME_BYTES));
-  const mimeBytes = encoder.encode((file.type || 'application/octet-stream').slice(0, MAX_MIME_BYTES));
+  const mimeBytes = encoder.encode((mimeType || 'application/octet-stream').slice(0, MAX_MIME_BYTES));
 
-  const fileBytes = await readFileAsArrayBuffer(file, onProgress);
-
-  // Build header + content buffer
-  const headerLen = 2 + nameBytes.length + 2 + mimeBytes.length;
-  const plaintext = new Uint8Array(headerLen + fileBytes.byteLength);
-  const view = new DataView(plaintext.buffer);
+  const header = new Uint8Array(2 + nameBytes.length + 2 + mimeBytes.length);
+  const view = new DataView(header.buffer);
   let offset = 0;
 
   view.setUint16(offset, nameBytes.length, false); offset += 2;
-  plaintext.set(nameBytes, offset);               offset += nameBytes.length;
+  header.set(nameBytes, offset);                   offset += nameBytes.length;
   view.setUint16(offset, mimeBytes.length, false); offset += 2;
-  plaintext.set(mimeBytes, offset);               offset += mimeBytes.length;
-  plaintext.set(new Uint8Array(fileBytes), offset);
+  header.set(mimeBytes, offset);
 
-  const ciphertext = await crypto.subtle.encrypt({ name: ALGORITHM, iv }, key, plaintext);
-
-  // Prepend IV to ciphertext
-  const wire = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
-  wire.set(iv, 0);
-  wire.set(new Uint8Array(ciphertext), IV_LENGTH);
-
-  return new Blob([wire], { type: 'application/octet-stream' });
+  return header;
 }
 
 /**
- * Decrypt ciphertext and recover the original file with its original name and
- * MIME type — both extracted from the encrypted payload header.
- *
- * Expects wire format: IV (12 bytes) || AES-GCM ciphertext
+ * Parse the metadata header from decrypted first-chunk plaintext.
+ * Returns filename, MIME type, and the byte offset where file content begins.
  */
-export async function decryptFile(
-  encryptedBlob: Blob,
-  key: CryptoKey,
-): Promise<File> {
-  const data = new Uint8Array(await encryptedBlob.arrayBuffer());
-
-  // Minimum: IV + 4-byte header (2+2 empty name+mime) + 16-byte GCM tag
-  if (data.length < IV_LENGTH + 4 + 16) {
-    throw new Error('Invalid encrypted data: too short');
-  }
-
-  const iv = data.slice(0, IV_LENGTH);
-  const ciphertext = data.slice(IV_LENGTH);
-
-  const decrypted = new Uint8Array(
-    await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext)
-  );
-
-  // Parse header
-  if (decrypted.length < 4) throw new Error('Decrypted payload header too short');
-  const dv = new DataView(decrypted.buffer);
+export function parseMetadataHeader(plaintext: Uint8Array): {
+  filename: string;
+  mimeType: string;
+  contentOffset: number;
+} {
+  if (plaintext.length < 4) throw new Error('Decrypted payload header too short');
+  const dv = new DataView(plaintext.buffer, plaintext.byteOffset, plaintext.byteLength);
+  const decoder = new TextDecoder();
   let pos = 0;
 
   const nameLen = dv.getUint16(pos, false); pos += 2;
-  if (pos + nameLen + 2 > decrypted.length) throw new Error('Corrupt payload: name out of bounds');
-  const decoder = new TextDecoder();
-  const fileName = sanitizeFilename(decoder.decode(decrypted.slice(pos, pos + nameLen)));
+  if (pos + nameLen + 2 > plaintext.length) throw new Error('Corrupt payload: name out of bounds');
+  const filename = sanitizeFilename(decoder.decode(plaintext.slice(pos, pos + nameLen)));
   pos += nameLen;
 
   const mimeLen = dv.getUint16(pos, false); pos += 2;
-  if (pos + mimeLen > decrypted.length) throw new Error('Corrupt payload: mime out of bounds');
-  const mimeType = decoder.decode(decrypted.slice(pos, pos + mimeLen)) || 'application/octet-stream';
+  if (pos + mimeLen > plaintext.length) throw new Error('Corrupt payload: mime out of bounds');
+  const mimeType = decoder.decode(plaintext.slice(pos, pos + mimeLen)) || 'application/octet-stream';
   pos += mimeLen;
 
-  const fileContent = decrypted.slice(pos);
-  return new File([fileContent], fileName, { type: mimeType });
+  return { filename, mimeType, contentOffset: pos };
+}
+
+/**
+ * Encrypt a single plaintext chunk with AES-256-GCM.
+ *
+ * @param plaintext  Raw chunk bytes (≤ cryptoChunkSize)
+ * @param key        AES-256-GCM CryptoKey
+ * @param chunkIndex 0-based index, used as AAD to prevent reordering
+ * @returns [IV (12 bytes) || ciphertext || GCM tag (16 bytes)]
+ */
+export async function encryptChunk(
+  plaintext: Uint8Array,
+  key: CryptoKey,
+  chunkIndex: number
+): Promise<Uint8Array> {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const aad = new ArrayBuffer(4);
+  new DataView(aad).setUint32(0, chunkIndex, false);
+
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: ALGORITHM, iv, additionalData: aad },
+    key,
+    plaintext
+  );
+
+  const result = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
+  result.set(iv, 0);
+  result.set(new Uint8Array(ciphertext), IV_LENGTH);
+  return result;
+}
+
+/**
+ * Decrypt a single ciphertext chunk with AES-256-GCM.
+ *
+ * @param chunk      [IV (12 bytes) || ciphertext || GCM tag (16 bytes)]
+ * @param key        AES-256-GCM CryptoKey
+ * @param chunkIndex Must match the index used during encryption (AAD)
+ * @returns Decrypted plaintext bytes
+ */
+export async function decryptChunk(
+  chunk: Uint8Array,
+  key: CryptoKey,
+  chunkIndex: number
+): Promise<Uint8Array> {
+  if (chunk.length < IV_LENGTH + GCM_TAG_LENGTH) {
+    throw new Error('Invalid encrypted chunk: too short');
+  }
+
+  const iv = chunk.slice(0, IV_LENGTH);
+  const ciphertext = chunk.slice(IV_LENGTH);
+  const aad = new ArrayBuffer(4);
+  new DataView(aad).setUint32(0, chunkIndex, false);
+
+  const plaintext = await crypto.subtle.decrypt(
+    { name: ALGORITHM, iv, additionalData: aad },
+    key,
+    ciphertext
+  );
+
+  return new Uint8Array(plaintext);
+}
+
+/**
+ * Calculate the total encrypted size for a file with metadata header.
+ * Useful to determine totalSize before starting upload.
+ */
+export function calculateTotalEncryptedSize(
+  plaintextSize: number,
+  chunkPlaintextSize: number
+): number {
+  const numChunks = Math.max(1, Math.ceil(plaintextSize / chunkPlaintextSize));
+  return plaintextSize + numChunks * PER_CHUNK_OVERHEAD;
 }
 
 /**
@@ -165,26 +205,6 @@ function sanitizeFilename(raw: string): string {
       // Limit to 255 characters
       .slice(0, 255) || 'file'
   );
-}
-
-/** Read file to ArrayBuffer with progress tracking */
-function readFileAsArrayBuffer(
-  file: File,
-  onProgress?: (progress: number) => void
-): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    if (onProgress) {
-      reader.onprogress = (e) => {
-        if (e.lengthComputable) {
-          onProgress(e.loaded / e.total);
-        }
-      };
-    }
-    reader.readAsArrayBuffer(file);
-  });
 }
 
 /** ArrayBuffer → base64url (no padding) */

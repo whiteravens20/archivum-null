@@ -1,5 +1,5 @@
 import type { VaultMetadata, ChunkedUploadSession } from './types.js';
-import { config, ENCRYPTION_OVERHEAD } from '../config.js';
+import { config, calcEncryptionOverhead } from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
 import type { Readable } from 'node:stream';
@@ -66,7 +66,8 @@ export class VaultManager {
   async createVault(
     stream: Readable,
     ttl: number,
-    maxDownloads: number
+    maxDownloads: number,
+    chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE
   ): Promise<VaultMetadata> {
     // Enforce global storage quota before accepting a new upload
     if (config.MAX_TOTAL_STORAGE > 0) {
@@ -88,9 +89,10 @@ export class VaultManager {
 
     // Pass MAX_FILE_SIZE into writeFile so the stream is aborted early if the
     // limit is exceeded — avoids writing the full oversized blob to disk first.
+    const maxSize = config.MAX_FILE_SIZE + calcEncryptionOverhead(config.MAX_FILE_SIZE);
     let size: number;
     try {
-      size = await storage.writeFile(vaultId, stream, config.MAX_FILE_SIZE + ENCRYPTION_OVERHEAD);
+      size = await storage.writeFile(vaultId, stream, maxSize);
     } catch (err) {
       // Ensure the vault directory is fully removed on any write failure
       await storage.deleteVault(vaultId).catch(() => {});
@@ -100,6 +102,7 @@ export class VaultManager {
     const meta: VaultMetadata = {
       vaultId,
       ciphertextSize: size,
+      chunkPlaintextSize,
       createdAt: now,
       expiresAt: now + clampedTtl * 1000,
       remainingDownloads: clampedDownloads,
@@ -114,8 +117,9 @@ export class VaultManager {
 
   // ── Chunked upload ────────────────────────────────────────────────────────
 
-  initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number): ChunkedUploadSession {
-    if (totalSize <= 0 || totalSize > config.MAX_FILE_SIZE + ENCRYPTION_OVERHEAD) {
+  initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE): ChunkedUploadSession {
+    const maxAllowed = config.MAX_FILE_SIZE + calcEncryptionOverhead(config.MAX_FILE_SIZE);
+    if (totalSize <= 0 || totalSize > maxAllowed) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
 
@@ -138,6 +142,7 @@ export class VaultManager {
       nextChunkIndex: 0,
       ttl: Math.min(Math.max(ttl, 60), config.MAX_TTL),
       maxDownloads: Math.min(Math.max(maxDownloads, 1), 1000),
+      chunkPlaintextSize,
       expiresAt: Date.now() + config.UPLOAD_SESSION_TTL * 1000,
     };
     uploadSessions.set(uploadId, session);
@@ -216,6 +221,7 @@ export class VaultManager {
     const meta: VaultMetadata = {
       vaultId,
       ciphertextSize: session.receivedBytes,
+      chunkPlaintextSize: session.chunkPlaintextSize,
       createdAt: now,
       expiresAt: now + session.ttl * 1000,
       remainingDownloads: session.maxDownloads,

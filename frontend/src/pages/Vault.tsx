@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
-import { importKey, decryptFile, formatBytes } from '../crypto/encrypt.ts';
+import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes } from '../crypto/encrypt.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
 
 type Stage = 'loading' | 'ready' | 'downloading' | 'decrypting' | 'done' | 'error';
@@ -48,22 +48,43 @@ export default function Vault() {
   }, [vaultId]);
 
   const handleDownload = async () => {
-    if (!vaultId || !keyFragment) return;
+    if (!vaultId || !keyFragment || !info) return;
 
     try {
       setStage('downloading');
-      setProgress(0.1);
+      setProgress(0.05);
 
-      // Download encrypted blob
       const encryptedBlob = await downloadVault(vaultId);
-      setProgress(0.5);
+      setProgress(0.4);
 
-      // Import key from the key portion of the URL fragment
       setStage('decrypting');
       const key = await importKey(keyFragment);
 
-      // Decrypt — filename and MIME type are recovered from the encrypted payload
-      const decryptedFile = await decryptFile(encryptedBlob, key);
+      // Streaming per-chunk decryption
+      const chunkPT = info.chunkPlaintextSize;
+      const chunkCT = chunkPT + PER_CHUNK_OVERHEAD;
+      const numChunks = Math.ceil(encryptedBlob.size / chunkCT);
+      const decryptedParts: Uint8Array[] = [];
+
+      for (let i = 0; i < numChunks; i++) {
+        const start = i * chunkCT;
+        const end = Math.min(start + chunkCT, encryptedBlob.size);
+        const chunkBytes = new Uint8Array(await encryptedBlob.slice(start, end).arrayBuffer());
+        decryptedParts.push(await decryptChunk(chunkBytes, key, i));
+        setProgress(0.4 + ((i + 1) / numChunks) * 0.55);
+      }
+
+      // Parse metadata header from first decrypted chunk
+      const firstChunk = decryptedParts[0];
+      const { filename, mimeType, contentOffset } = parseMetadataHeader(firstChunk);
+
+      // Assemble file: first chunk minus header, then remaining chunks
+      const contentParts: BlobPart[] = [firstChunk.slice(contentOffset)];
+      for (let i = 1; i < decryptedParts.length; i++) {
+        contentParts.push(decryptedParts[i]);
+      }
+
+      const decryptedFile = new File(contentParts, filename, { type: mimeType });
       setProgress(1);
 
       // Trigger browser download

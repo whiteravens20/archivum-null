@@ -4,7 +4,7 @@ import VaultConfig from '../components/VaultConfig.tsx';
 import ProgressBar from '../components/ProgressBar.tsx';
 import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
-import { generateKey, exportKey, encryptFile } from '../crypto/encrypt.ts';
+import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
@@ -19,6 +19,7 @@ function nearestInList(value: number, list: number[]): number {
 interface RuntimeConfig {
   maxFileSize: number;
   chunkSize: number;
+  cryptoChunkSize: number;
   defaultTtl: number;
   defaultMaxDownloads: number;
   turnstileSiteKey: string;
@@ -27,14 +28,15 @@ interface RuntimeConfig {
 
 const DEFAULT_CONFIG: RuntimeConfig = {
   maxFileSize: 100 * 1024 * 1024,
-  chunkSize: 50 * 1024 * 1024,
+  chunkSize: 10 * 1024 * 1024,
+  cryptoChunkSize: 5 * 1024 * 1024,
   defaultTtl: 86400,
   defaultMaxDownloads: 10,
   turnstileSiteKey: '0x0000000000000000000000',
   turnstileEnabled: false,
 };
 
-type Stage = 'idle' | 'encrypting' | 'uploading' | 'done' | 'error';
+type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
 export default function Home() {
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
@@ -67,37 +69,32 @@ export default function Home() {
 
     try {
       setError(null);
-
-      // 1. Generate encryption key
-      setStage('encrypting');
+      setStage('uploading');
       setProgress(0);
 
       const key = await generateKey();
       const keyString = await exportKey(key);
+      const chunkPlaintextSize = runtimeConfig.cryptoChunkSize;
 
-      // 2. Encrypt file client-side
-      const encryptedBlob = await encryptFile(file, key, (p) => {
-        setProgress(p * 0.5); // First 50% is encryption
-      });
+      // Decide single vs chunked based on total encrypted size
+      const header = buildMetadataHeader(file.name, file.type);
+      const totalEncrypted = calculateTotalEncryptedSize(
+        header.length + file.size,
+        chunkPlaintextSize,
+      );
 
-      // 3. Upload encrypted blob — use chunked protocol for large files
-      setStage('uploading');
       let result;
-      if (encryptedBlob.size > runtimeConfig.chunkSize) {
+      if (totalEncrypted > runtimeConfig.chunkSize) {
         result = await uploadVaultChunked(
-          encryptedBlob,
-          ttl,
-          maxDownloads,
-          turnstileToken,
-          (p) => setProgress(0.5 + p * 0.5) // Second 50% is upload
+          file, key, chunkPlaintextSize,
+          ttl, maxDownloads, turnstileToken,
+          (p) => setProgress(p),
         );
       } else {
         result = await uploadVault(
-          encryptedBlob,
-          ttl,
-          maxDownloads,
-          turnstileToken,
-          (p) => setProgress(0.5 + p * 0.5) // Second 50% is upload
+          file, key, chunkPlaintextSize,
+          ttl, maxDownloads, turnstileToken,
+          (p) => setProgress(p),
         );
       }
 
@@ -217,10 +214,10 @@ export default function Home() {
                 />
               )}
 
-              {(stage === 'encrypting' || stage === 'uploading') && (
+              {stage === 'uploading' && (
                 <ProgressBar
                   progress={progress}
-                  label={stage === 'encrypting' ? 'Encrypting...' : 'Uploading...'}
+                  label="Encrypting & uploading..."
                 />
               )}
 
@@ -247,9 +244,7 @@ export default function Home() {
                 >
                   {stage === 'idle'
                     ? 'Encrypt & Upload'
-                    : stage === 'encrypting'
-                    ? 'Encrypting...'
-                    : 'Uploading...'}
+                    : 'Processing...'}
                 </button>
               )}
             </>

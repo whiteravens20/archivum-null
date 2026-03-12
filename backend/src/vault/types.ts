@@ -1,6 +1,8 @@
 export interface VaultMetadata {
   vaultId: string;
   ciphertextSize: number;
+  /** Per-chunk plaintext size used for client-side streaming AES-GCM encryption. */
+  chunkPlaintextSize: number;
   createdAt: number;
   expiresAt: number;
   remainingDownloads: number;
@@ -32,6 +34,8 @@ export interface ChunkedUploadSession {
   /** Vault config supplied at init time. */
   ttl: number;
   maxDownloads: number;
+  /** Per-chunk plaintext size for streaming AES-GCM encryption. */
+  chunkPlaintextSize: number;
   /** Absolute timestamp (ms) after which the session is garbage-collected. */
   expiresAt: number;
 }

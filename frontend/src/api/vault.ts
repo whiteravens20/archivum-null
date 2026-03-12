@@ -1,3 +1,10 @@
+import {
+  encryptChunk,
+  buildMetadataHeader,
+  calculateTotalEncryptedSize,
+  PER_CHUNK_OVERHEAD,
+} from '../crypto/encrypt.ts';
+
 const API_BASE = '/api';
 
 export interface VaultCreateResponse {
@@ -10,57 +17,110 @@ export interface VaultCreateResponse {
 export interface VaultInfo {
   vaultId: string;
   ciphertextSize: number;
+  chunkPlaintextSize: number;
   createdAt: number;
   expiresAt: number;
   remainingDownloads: number;
 }
 
+interface ChunkInitResponse {
+  uploadId: string;
+  chunkSize: number;
+  expiresAt: number;
+}
+
+// ── Virtual plaintext stream ────────────────────────────────────────────────
+// Composed of [metadata header | file bytes].  Allows reading arbitrary ranges
+// across the boundary without materialising the entire plaintext in memory.
+
+async function readVirtualRange(
+  header: Uint8Array,
+  file: File,
+  start: number,
+  end: number,
+): Promise<Uint8Array> {
+  const result = new Uint8Array(end - start);
+  let offset = 0;
+
+  if (start < header.length) {
+    const headerEnd = Math.min(header.length, end);
+    result.set(header.subarray(start, headerEnd), offset);
+    offset += headerEnd - start;
+  }
+
+  if (end > header.length) {
+    const fileStart = Math.max(0, start - header.length);
+    const fileEnd = end - header.length;
+    const ab = await file.slice(fileStart, fileEnd).arrayBuffer();
+    result.set(new Uint8Array(ab), offset);
+  }
+
+  return result;
+}
+
+// ── Single-request upload ───────────────────────────────────────────────────
+
+/**
+ * Upload a file using single-request protocol with streaming encryption.
+ * Crypto chunks are produced first, then the combined ciphertext is sent
+ * in a single XHR for upload progress tracking.
+ */
 export async function uploadVault(
-  encryptedBlob: Blob,
+  file: File,
+  key: CryptoKey,
+  chunkPlaintextSize: number,
   ttl: number,
   maxDownloads: number,
   turnstileToken?: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
 ): Promise<VaultCreateResponse> {
+  const header = buildMetadataHeader(file.name, file.type);
+  const totalPlaintext = header.length + file.size;
+  const numCryptoChunks = Math.max(1, Math.ceil(totalPlaintext / chunkPlaintextSize));
+
+  // Encrypt all crypto chunks
+  const encryptedParts: Uint8Array[] = [];
+  for (let i = 0; i < numCryptoChunks; i++) {
+    const start = i * chunkPlaintextSize;
+    const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
+    const plaintext = await readVirtualRange(header, file, start, end);
+    encryptedParts.push(await encryptChunk(plaintext, key, i));
+    onProgress?.(((i + 1) / numCryptoChunks) * 0.3);
+  }
+
+  const encryptedBlob = new Blob(encryptedParts);
+
   const formData = new FormData();
   // Text fields must come before the file — @fastify/multipart only exposes
   // fields already parsed before the file stream starts (data.fields).
   formData.append('ttl', String(ttl));
   formData.append('maxDownloads', String(maxDownloads));
+  formData.append('chunkPlaintextSize', String(chunkPlaintextSize));
   formData.append('file', encryptedBlob, 'encrypted.bin');
 
   const headers: Record<string, string> = {};
-  if (turnstileToken) {
-    headers['x-turnstile-token'] = turnstileToken;
-  }
+  if (turnstileToken) headers['x-turnstile-token'] = turnstileToken;
 
-  // Use XMLHttpRequest for upload progress
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE}/vault`);
-
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
-        onProgress(e.loaded / e.total);
+        onProgress(0.3 + (e.loaded / e.total) * 0.7);
       }
     };
 
     xhr.onload = () => {
       if (xhr.status === 201) {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch {
-          reject(new Error('Invalid response from server after upload'));
-        }
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch { reject(new Error('Invalid response from server after upload')); }
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
           reject(new Error(err.error || `Upload failed (${xhr.status})`));
-        } catch {
-          reject(new Error(`Upload failed (${xhr.status}) – backend unreachable`));
-        }
+        } catch { reject(new Error(`Upload failed (${xhr.status}) – backend unreachable`)); }
       }
     };
 
@@ -88,27 +148,28 @@ export async function downloadVault(vaultId: string): Promise<Blob> {
 }
 
 // ── Chunked upload ──────────────────────────────────────────────────────────
-// Splits the encrypted blob into chunks that individually stay below a size
-// limit (e.g. Cloudflare's 100 MB per-request cap) and uploads them through
-// an init → chunk × N → complete flow.
-
-interface ChunkInitResponse {
-  uploadId: string;
-  chunkSize: number;
-  expiresAt: number;
-}
+// Interleaves encryption with upload: for each HTTP chunk, encrypt a batch
+// of crypto chunks, concatenate them, and upload via the init → chunk × N →
+// complete protocol.
 
 /**
- * Upload an encrypted blob using the chunked upload protocol.
- * Falls back to single-request upload if the blob is small enough.
+ * Upload a file using the chunked upload protocol with streaming encryption.
+ * Crypto chunks are grouped into HTTP-sized batches and uploaded sequentially.
  */
 export async function uploadVaultChunked(
-  encryptedBlob: Blob,
+  file: File,
+  key: CryptoKey,
+  chunkPlaintextSize: number,
   ttl: number,
   maxDownloads: number,
   turnstileToken?: string,
   onProgress?: (progress: number) => void,
 ): Promise<VaultCreateResponse> {
+  const header = buildMetadataHeader(file.name, file.type);
+  const totalPlaintext = header.length + file.size;
+  const totalEncrypted = calculateTotalEncryptedSize(totalPlaintext, chunkPlaintextSize);
+  const numCryptoChunks = Math.max(1, Math.ceil(totalPlaintext / chunkPlaintextSize));
+
   // 1. Init session
   const initHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
   if (turnstileToken) initHeaders['x-turnstile-token'] = turnstileToken;
@@ -116,7 +177,7 @@ export async function uploadVaultChunked(
   const initRes = await fetch(`${API_BASE}/vault/upload/init`, {
     method: 'POST',
     headers: initHeaders,
-    body: JSON.stringify({ totalSize: encryptedBlob.size, ttl, maxDownloads }),
+    body: JSON.stringify({ totalSize: totalEncrypted, ttl, maxDownloads, chunkPlaintextSize }),
   });
 
   if (!initRes.ok) {
@@ -124,36 +185,49 @@ export async function uploadVaultChunked(
     throw new Error(err.error || `Upload init failed (${initRes.status})`);
   }
 
-  const { uploadId, chunkSize } = (await initRes.json()) as ChunkInitResponse;
+  const { uploadId, chunkSize: httpChunkSize } = (await initRes.json()) as ChunkInitResponse;
 
-  // 2. Upload chunks sequentially
-  const totalChunks = Math.ceil(encryptedBlob.size / chunkSize);
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(start + chunkSize, encryptedBlob.size);
-    const chunkBlob = encryptedBlob.slice(start, end);
+  // 2. Encrypt + upload crypto chunks grouped into HTTP chunks
+  const encryptedChunkSize = chunkPlaintextSize + PER_CHUNK_OVERHEAD;
+  const cryptoChunksPerHttp = Math.max(1, Math.floor(httpChunkSize / encryptedChunkSize));
+  let cryptoIdx = 0;
+  let httpChunkIdx = 0;
+
+  while (cryptoIdx < numCryptoChunks) {
+    const batchEnd = Math.min(cryptoIdx + cryptoChunksPerHttp, numCryptoChunks);
+    const parts: Uint8Array[] = [];
+
+    for (let i = cryptoIdx; i < batchEnd; i++) {
+      const start = i * chunkPlaintextSize;
+      const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
+      const plaintext = await readVirtualRange(header, file, start, end);
+      parts.push(await encryptChunk(plaintext, key, i));
+    }
 
     const form = new FormData();
-    form.append('chunkIndex', String(i));
-    form.append('file', chunkBlob, 'chunk.bin');
+    form.append('chunkIndex', String(httpChunkIdx));
+    form.append('file', new Blob(parts), 'chunk.bin');
 
-    const chunkRes = await fetch(`${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`, {
-      method: 'POST',
-      body: form,
-    });
+    const chunkRes = await fetch(
+      `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`,
+      { method: 'POST', body: form },
+    );
 
     if (!chunkRes.ok) {
       const err = await chunkRes.json().catch(() => ({ error: 'Chunk upload failed' }));
-      throw new Error(err.error || `Chunk ${i} upload failed (${chunkRes.status})`);
+      throw new Error(err.error || `Chunk ${httpChunkIdx} upload failed (${chunkRes.status})`);
     }
 
-    onProgress?.((i + 1) / totalChunks);
+    cryptoIdx = batchEnd;
+    httpChunkIdx++;
+    onProgress?.(cryptoIdx / numCryptoChunks);
   }
 
   // 3. Complete
-  const completeRes = await fetch(`${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/complete`, {
-    method: 'POST',
-  });
+  const completeRes = await fetch(
+    `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/complete`,
+    { method: 'POST' },
+  );
 
   if (!completeRes.ok) {
     const err = await completeRes.json().catch(() => ({ error: 'Upload finalization failed' }));

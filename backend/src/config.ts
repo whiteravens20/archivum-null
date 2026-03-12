@@ -20,10 +20,15 @@ const envSchema = {
   DEFAULT_MAX_DOWNLOADS: Number(process.env.DEFAULT_MAX_DOWNLOADS || 10),
   // Global storage quota — 0 means unlimited
   MAX_TOTAL_STORAGE: Number(process.env.MAX_TOTAL_STORAGE || 0),
-  // Chunked upload — chunk size per request in bytes (default 50 MB, safe under Cloudflare's 100 MB limit)
-  CHUNK_SIZE: Number(process.env.CHUNK_SIZE || 52428800),
-  // How long an incomplete chunked upload session stays alive (seconds, default 30 min)
-  UPLOAD_SESSION_TTL: Number(process.env.UPLOAD_SESSION_TTL || 1800),
+  // Chunked upload — chunk size per HTTP request in bytes (default 10 MB, works well with homelab/tailscale/VPS setups).
+  // Keep below 100 MB when using Cloudflare Tunnel (Cloudflare Free/Pro per-request limit).
+  CHUNK_SIZE: Number(process.env.CHUNK_SIZE || 10485760),
+  // How long an incomplete chunked upload session stays alive (seconds, default 60 min).
+  // Must be long enough for the largest allowed file on the slowest expected link.
+  UPLOAD_SESSION_TTL: Number(process.env.UPLOAD_SESSION_TTL || 3600),
+  // Per-chunk plaintext size for client-side AES-GCM streaming encryption (default 5 MB).
+  // Each chunk is encrypted independently with a unique IV and chunkIndex in AAD.
+  CRYPTO_CHUNK_SIZE: Number(process.env.CRYPTO_CHUNK_SIZE || 5242880),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
@@ -36,9 +41,18 @@ const envSchema = {
 
 export const config = Object.freeze(envSchema);
 
-// AES-GCM encryption overhead: 12-byte IV + 2-byte name len + name + 2-byte mime len
-// + mime + 16-byte GCM tag. Worst case ≈ 800 bytes; use 1 KiB to be safe.
-export const ENCRYPTION_OVERHEAD = 1024;
+// Per-chunk AES-GCM overhead: 12-byte IV + 16-byte GCM authentication tag = 28 bytes per chunk.
+const PER_CHUNK_OVERHEAD = 28;
+
+/**
+ * Calculate total encryption overhead for a given plaintext size.
+ * Each crypto chunk adds 28 bytes (12-byte IV + 16-byte GCM tag).
+ */
+export function calcEncryptionOverhead(plaintextSize: number): number {
+  const chunkSize = config.CRYPTO_CHUNK_SIZE;
+  const numChunks = Math.max(1, Math.ceil(plaintextSize / chunkSize));
+  return numChunks * PER_CHUNK_OVERHEAD;
+}
 
 export function validateConfig(): void {
   if (!config.ADMIN_PASSWORD || config.ADMIN_PASSWORD === 'CHANGE_ME_IMMEDIATELY') {
@@ -67,6 +81,9 @@ export function validateConfig(): void {
   }
   if (!isFinite(config.CHUNK_SIZE) || config.CHUNK_SIZE <= 0) {
     throw new Error('CHUNK_SIZE must be a positive number');
+  }
+  if (!isFinite(config.CRYPTO_CHUNK_SIZE) || config.CRYPTO_CHUNK_SIZE <= 0) {
+    throw new Error('CRYPTO_CHUNK_SIZE must be a positive number');
   }
   if (!isFinite(config.UPLOAD_SESSION_TTL) || config.UPLOAD_SESSION_TTL <= 0) {
     throw new Error('UPLOAD_SESSION_TTL must be a positive number');
