@@ -4,8 +4,9 @@ FROM node:24-alpine
 # Upgrade all Alpine packages to latest patched versions (catches zlib CVE-2026-22184 and any future OS-level CVEs)
 RUN apk upgrade --no-cache
 
-# Update npm to get patched minimatch + tar (CVE-2026-26996, CVE-2026-27903, CVE-2026-27904, CVE-2026-26960)
-RUN npm install -g npm@latest
+# Update npm to get patched minimatch + tar (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
+# npm@11.11.1 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
+RUN npm install -g npm@11.11.1
 
 WORKDIR /app
 
