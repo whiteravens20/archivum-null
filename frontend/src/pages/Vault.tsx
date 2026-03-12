@@ -79,9 +79,9 @@ export default function Vault() {
       const { filename, mimeType, contentOffset } = parseMetadataHeader(firstChunk);
 
       // Assemble file: first chunk minus header, then remaining chunks
-      const contentParts: BlobPart[] = [firstChunk.slice(contentOffset)];
+      const contentParts: BlobPart[] = [firstChunk.slice(contentOffset) as BlobPart];
       for (let i = 1; i < decryptedParts.length; i++) {
-        contentParts.push(decryptedParts[i]);
+        contentParts.push(decryptedParts[i] as BlobPart);
       }
 
       const decryptedFile = new File(contentParts, filename, { type: mimeType });

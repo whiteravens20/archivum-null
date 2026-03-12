@@ -121,10 +121,10 @@ export function parseMetadataHeader(plaintext: Uint8Array): {
  * @returns [IV (12 bytes) || ciphertext || GCM tag (16 bytes)]
  */
 export async function encryptChunk(
-  plaintext: Uint8Array,
+  plaintext: BufferSource,
   key: CryptoKey,
   chunkIndex: number
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const aad = new ArrayBuffer(4);
   new DataView(aad).setUint32(0, chunkIndex, false);
@@ -153,7 +153,7 @@ export async function decryptChunk(
   chunk: Uint8Array,
   key: CryptoKey,
   chunkIndex: number
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   if (chunk.length < IV_LENGTH + GCM_TAG_LENGTH) {
     throw new Error('Invalid encrypted chunk: too short');
   }

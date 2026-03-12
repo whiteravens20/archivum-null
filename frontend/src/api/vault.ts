@@ -80,13 +80,13 @@ export async function uploadVault(
   const numCryptoChunks = Math.max(1, Math.ceil(totalPlaintext / chunkPlaintextSize));
 
   // Encrypt all crypto chunks
-  const encryptedParts: Uint8Array[] = [];
+  const encryptedParts: BlobPart[] = [];
   for (let i = 0; i < numCryptoChunks; i++) {
     signal?.throwIfAborted();
     const start = i * chunkPlaintextSize;
     const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
     const plaintext = await readVirtualRange(header, file, start, end);
-    encryptedParts.push(await encryptChunk(plaintext, key, i));
+    encryptedParts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i));
     onProgress?.(((i + 1) / numCryptoChunks) * 0.3);
   }
 
@@ -218,14 +218,14 @@ export async function uploadVaultChunked(
     while (cryptoIdx < numCryptoChunks) {
       signal?.throwIfAborted();
       const batchEnd = Math.min(cryptoIdx + cryptoChunksPerHttp, numCryptoChunks);
-      const parts: Uint8Array[] = [];
+      const parts: BlobPart[] = [];
 
       for (let i = cryptoIdx; i < batchEnd; i++) {
         signal?.throwIfAborted();
         const start = i * chunkPlaintextSize;
         const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
         const plaintext = await readVirtualRange(header, file, start, end);
-        parts.push(await encryptChunk(plaintext, key, i));
+        parts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i));
       }
 
       const form = new FormData();
