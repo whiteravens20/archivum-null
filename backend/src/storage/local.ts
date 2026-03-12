@@ -166,4 +166,19 @@ export class LocalStorage implements StorageBackend {
   async deleteChunkedUpload(uploadId: string): Promise<void> {
     await fsp.rm(this.uploadDir(uploadId), { recursive: true, force: true }).catch(() => {});
   }
+
+  async purgeOrphanedUploads(activeUploadIds: Set<string>): Promise<void> {
+    const uploadsDir = path.join(this.basePath, '_uploads');
+    try {
+      const entries = await fsp.readdir(uploadsDir, { withFileTypes: true });
+      const orphans = entries
+        .filter((e) => e.isDirectory() && !activeUploadIds.has(e.name))
+        .map((e) =>
+          fsp.rm(path.join(uploadsDir, e.name), { recursive: true, force: true }).catch(() => {})
+        );
+      await Promise.allSettled(orphans);
+    } catch {
+      // _uploads dir doesn't exist yet — nothing to purge
+    }
+  }
 }

@@ -15,4 +15,6 @@ export interface StorageBackend {
   finalizeChunkedUpload(uploadId: string, vaultId: string): Promise<void>;
   /** Remove temporary chunk directory (cleanup on abort / timeout). */
   deleteChunkedUpload(uploadId: string): Promise<void>;
+  /** Remove all _uploads directories that have no matching in-memory session (orphan cleanup on restart). */
+  purgeOrphanedUploads(activeUploadIds: Set<string>): Promise<void>;
 }

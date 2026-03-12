@@ -18,6 +18,10 @@ export class VaultManager {
     await storage.init();
     // Restore metadata from disk
     await this.restoreMetadata();
+    // Remove any orphaned _uploads directories left after a crash / restart.
+    // At this point uploadSessions is empty, so every _uploads/* dir is an orphan.
+    const activeIds = new Set(Array.from(uploadSessions.keys()));
+    await storage.purgeOrphanedUploads(activeIds);
     this.startCleanup();
   }
 
