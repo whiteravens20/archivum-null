@@ -23,7 +23,7 @@
 - [x] File size enforced at frontend, backend, and proxy levels:
   - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
   - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk; stream truncation + explicit `truncated` check → 413
-  - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + calcEncryptionOverhead(MAX_FILE_SIZE)` in `writeFile` — dynamic overhead based on `ceil(fileSize / CRYPTO_CHUNK_SIZE) * 28` (28 bytes per chunk: 12-byte IV + 16-byte GCM tag)
+  - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + MAX_METADATA_HEADER(768) + calcEncryptionOverhead(…)` in `writeFile` — `MAX_FILE_SIZE` refers to the user's raw file; the 768-byte metadata-header allowance accounts for the encrypted filename + MIME header the frontend prepends; encryption overhead is `ceil(plaintextMax / CRYPTO_CHUNK_SIZE) * 28` (28 bytes per chunk: 12-byte IV + 16-byte GCM tag)
   - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
