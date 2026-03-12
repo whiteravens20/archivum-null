@@ -34,7 +34,10 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     const fields = data.fields as Record<string, { value?: string }>;
     const ttl = Number(fields?.ttl?.value) || config.DEFAULT_TTL;
     const maxDownloads = Number(fields?.maxDownloads?.value) || config.DEFAULT_MAX_DOWNLOADS;
-    const chunkPlaintextSize = Number(fields?.chunkPlaintextSize?.value) || config.CRYPTO_CHUNK_SIZE;
+    const rawCPS = Number(fields?.chunkPlaintextSize?.value);
+    const chunkPlaintextSize = (Number.isFinite(rawCPS) && rawCPS > 0 && Number.isInteger(rawCPS))
+      ? rawCPS
+      : config.CRYPTO_CHUNK_SIZE;
 
     try {
       const meta = await vaultManager.createVault(
@@ -116,7 +119,10 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     const totalSize = Number(body?.totalSize);
     const ttl = Number(body?.ttl) || config.DEFAULT_TTL;
     const maxDownloads = Number(body?.maxDownloads) || config.DEFAULT_MAX_DOWNLOADS;
-    const chunkPlaintextSize = Number(body?.chunkPlaintextSize) || config.CRYPTO_CHUNK_SIZE;
+    const rawCPS = Number(body?.chunkPlaintextSize);
+    const chunkPlaintextSize = (Number.isFinite(rawCPS) && rawCPS > 0 && Number.isInteger(rawCPS))
+      ? rawCPS
+      : config.CRYPTO_CHUNK_SIZE;
 
     if (!totalSize || totalSize <= 0) {
       return reply.status(400).send({ error: 'totalSize is required and must be positive' });
