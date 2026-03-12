@@ -217,5 +217,25 @@ describe('LocalStorage', () => {
         fspInner.access(path.join(tempDir, '_uploads', 'cleanup-test'))
       ).rejects.toThrow();
     });
+
+    it('should purge orphaned uploads not in active set', async () => {
+      // Create two upload dirs
+      await storage.appendChunk('active-upload', createTestStream('data'), 100, 0);
+      await storage.appendChunk('orphan-upload', createTestStream('data'), 100, 0);
+
+      // Purge with only active-upload in the active set
+      await storage.purgeOrphanedUploads(new Set(['active-upload']));
+
+      const { default: fspInner } = await import('node:fs/promises');
+      // active-upload should still exist
+      await expect(fspInner.access(path.join(tempDir, '_uploads', 'active-upload'))).resolves.toBeUndefined();
+      // orphan-upload should be gone
+      await expect(fspInner.access(path.join(tempDir, '_uploads', 'orphan-upload'))).rejects.toThrow();
+    });
+
+    it('should handle purgeOrphanedUploads when _uploads dir does not exist', async () => {
+      // Should not throw even if _uploads directory doesn't exist
+      await expect(storage.purgeOrphanedUploads(new Set())).resolves.toBeUndefined();
+    });
   });
 });
