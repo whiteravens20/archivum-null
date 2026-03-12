@@ -168,4 +168,42 @@ describe('validateConfig', () => {
     const { validateConfig } = await import('../config.js');
     expect(() => validateConfig()).not.toThrow();
   });
+
+  it('should auto-derive CRYPTO_CHUNK_SIZE from CHUNK_SIZE when not set', async () => {
+    vi.stubEnv('CHUNK_SIZE', '2000000');            // 2 MB — smaller than 5 MB default
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
+    const { config } = await import('../config.js');
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000);  // clamped to CHUNK_SIZE
+  });
+
+  it('should default CRYPTO_CHUNK_SIZE to 5 MB when CHUNK_SIZE is larger', async () => {
+    vi.stubEnv('CHUNK_SIZE', '50000000');            // 50 MB
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
+    const { config } = await import('../config.js');
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);  // 5 MB default
+  });
+
+  it('should warn when RATE_LIMIT_MAX exceeds RATE_LIMIT_API_MAX', async () => {
+    vi.stubEnv('RATE_LIMIT_MAX', '200');
+    vi.stubEnv('RATE_LIMIT_API_MAX', '100');
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('RATE_LIMIT_MAX > RATE_LIMIT_API_MAX')
+    );
+  });
+
+  it('should warn when RATE_LIMIT_DOWNLOAD_MAX exceeds RATE_LIMIT_API_MAX', async () => {
+    vi.stubEnv('RATE_LIMIT_DOWNLOAD_MAX', '200');
+    vi.stubEnv('RATE_LIMIT_API_MAX', '100');
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('RATE_LIMIT_DOWNLOAD_MAX > RATE_LIMIT_API_MAX')
+    );
+  });
 });

@@ -1,3 +1,6 @@
+// Pre-compute CHUNK_SIZE so CRYPTO_CHUNK_SIZE can reference it in the same schema.
+const _CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 10485760);
+
 const envSchema = {
   MAX_FILE_SIZE: Number(process.env.MAX_FILE_SIZE || 104857600),
   TURNSTILE_SECRET: process.env.TURNSTILE_SECRET || '',
@@ -22,13 +25,14 @@ const envSchema = {
   MAX_TOTAL_STORAGE: Number(process.env.MAX_TOTAL_STORAGE || 0),
   // Chunked upload — chunk size per HTTP request in bytes (default 10 MB, works well with homelab/tailscale/VPS setups).
   // Keep below 100 MB when using Cloudflare Tunnel (Cloudflare Free/Pro per-request limit).
-  CHUNK_SIZE: Number(process.env.CHUNK_SIZE || 10485760),
+  CHUNK_SIZE: _CHUNK_SIZE,
   // How long an incomplete chunked upload session stays alive (seconds, default 60 min).
   // Must be long enough for the largest allowed file on the slowest expected link.
   UPLOAD_SESSION_TTL: Number(process.env.UPLOAD_SESSION_TTL || 3600),
-  // Per-chunk plaintext size for client-side AES-GCM streaming encryption (default 5 MB).
+  // Per-chunk plaintext size for client-side AES-GCM streaming encryption.
   // Each chunk is encrypted independently with a unique IV and chunkIndex in AAD.
-  CRYPTO_CHUNK_SIZE: Number(process.env.CRYPTO_CHUNK_SIZE || 5242880),
+  // Default: min(5 MB, CHUNK_SIZE) — auto-clamped so smaller CHUNK_SIZE values don't crash.
+  CRYPTO_CHUNK_SIZE: Number(process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE)),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
@@ -96,5 +100,16 @@ export function validateConfig(): void {
   }
   if (config.CHUNK_SIZE > config.MAX_FILE_SIZE) {
     throw new Error('CHUNK_SIZE must not exceed MAX_FILE_SIZE');
+  }
+  // Soft warnings for rate limit tiers that will never trigger independently
+  // because the general API limit (applied to ALL /api/ routes) is lower.
+  if (config.RATE_LIMIT_MAX > config.RATE_LIMIT_API_MAX) {
+    console.warn('[WARN] RATE_LIMIT_MAX > RATE_LIMIT_API_MAX — upload limit will never trigger (API limit fires first).');
+  }
+  if (config.RATE_LIMIT_DOWNLOAD_MAX > config.RATE_LIMIT_API_MAX) {
+    console.warn('[WARN] RATE_LIMIT_DOWNLOAD_MAX > RATE_LIMIT_API_MAX — download limit will never trigger (API limit fires first).');
+  }
+  if (config.RATE_LIMIT_ADMIN_MAX > config.RATE_LIMIT_API_MAX) {
+    console.warn('[WARN] RATE_LIMIT_ADMIN_MAX > RATE_LIMIT_API_MAX — admin limit will never trigger (API limit fires first).');
   }
 }
