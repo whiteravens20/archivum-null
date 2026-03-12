@@ -82,8 +82,10 @@ The table below lists the only hard requirement and optional conveniences.
 │                                                          │
 │  1. Select file                                          │
 │  2. Generate AES-256-GCM key (WebCrypto)                 │
-│  3. Encrypt file client-side                             │
-│     Payload: [filename][MIME type][file bytes] → AES-GCM │
+│  3. Encrypt file client-side (streaming per-chunk)    │
+│     Plaintext split into 5 MB chunks, each encrypted   │
+│     independently: AES-256-GCM with unique IV + AAD    │
+│     (chunk index prevents reordering attacks)           │
 │  4. Upload ciphertext to server                          │
 │  5. Receive vault URL:                                   │
 │       /vault/{id}#BASE64_KEY.BASE64_FILENAME             │
@@ -213,8 +215,9 @@ All variables live in a single `.env` file at the project root. Copy `.env.examp
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
 | `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
-| `CHUNK_SIZE` | `52428800` | Chunk size in bytes for the chunked upload protocol (default 50 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. |
-| `UPLOAD_SESSION_TTL` | `1800` | How long an incomplete chunked upload session stays alive in seconds (default 30 min) |
+| `CHUNK_SIZE` | `10485760` | Chunk size in bytes for the chunked upload protocol (default 10 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. Smaller chunks work better for homelab/Tailscale/VPS setups with limited bandwidth. |
+| `CRYPTO_CHUNK_SIZE` | `5242880` | Crypto chunk size in bytes (default 5 MB) — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV and chunk index as AAD. Smaller values reduce peak memory; larger values reduce per-chunk overhead (28 bytes per chunk). |
+| `UPLOAD_SESSION_TTL` | `3600` | How long an incomplete chunked upload session stays alive in seconds (default 60 min) — increased from 30 min to support 1 GB uploads on slow links (5 Mbps ≈ 26 min) |
 | `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod |
 | `BIND_ADDRESS` | `0.0.0.0` | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace) |
 | `PORT` | `3000` | Server port |

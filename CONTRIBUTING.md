@@ -248,6 +248,7 @@ Archivum Null is a security-sensitive project. The following rules apply strictl
 
 - **Do not change or replace cryptographic primitives** without opening a dedicated security issue first.
 - The key derivation, encryption scheme (AES-256-GCM, 256-bit key, 96-bit IV, URL fragment delivery) and zero-server-knowledge guarantee must be preserved.
+- **Per-chunk encryption is mandatory.** Each plaintext chunk is encrypted independently with a unique random IV and the chunk index as Additional Authenticated Data (AAD). Do not modify the AAD scheme — it prevents chunk reordering attacks.
 - Do not introduce server-side access to the encryption key under any circumstances.
 
 ### Input handling

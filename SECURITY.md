@@ -4,7 +4,8 @@
 
 - [x] AES-256-GCM (authenticated encryption)
 - [x] 256-bit key from `crypto.getRandomValues()`
-- [x] Unique IV (96-bit) per encryption
+- [x] Unique IV (96-bit) per **chunk** (not per file)
+- [x] Additional Authenticated Data (AAD) = chunk index (uint32 BE) — prevents chunk reordering attacks
 - [x] WebCrypto API (hardware-accelerated, constant-time)
 - [x] Key stored exclusively in URL fragment (`#`) — never sent to server
 - [x] Server receives only ciphertext — zero-knowledge
@@ -21,8 +22,8 @@
 - [x] Path traversal protection on vault IDs
 - [x] File size enforced at frontend, backend, and proxy levels:
   - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
-  - Backend multipart: `@fastify/multipart` limit set to `max(CHUNK_SIZE, MAX_FILE_SIZE) + ENCRYPTION_OVERHEAD` — accommodates both single-shot uploads and individual chunk requests; stream truncation + explicit `truncated` check → 413
-  - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + ENCRYPTION_OVERHEAD` in `writeFile` — allows for AES-GCM overhead (IV + tag + metadata) while preventing oversized writes to disk
+  - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk; stream truncation + explicit `truncated` check → 413
+  - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + calcEncryptionOverhead(MAX_FILE_SIZE)` in `writeFile` — dynamic overhead based on `ceil(fileSize / CRYPTO_CHUNK_SIZE) * 28` (28 bytes per chunk: 12-byte IV + 16-byte GCM tag)
   - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
