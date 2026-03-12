@@ -1,23 +1,4 @@
 # Trivy vulnerability suppressions
 # Each entry must include a justification.
 
-# CVE-2026-27903 / CVE-2026-27904 — minimatch DoS via glob backtracking
-# Located at: usr/local/lib/node_modules/npm/node_modules/minimatch
-# These CVEs are in minimatch bundled *inside* npm itself (build tooling).
-# npm is only present in the image to install production deps during Docker build;
-# it is never invoked at runtime and is not accessible to external users.
-# minimatch@10.2.4 (fix) is published, but npm@11.11.0 (latest as of 2026-03-06)
-# still bundles minimatch@10.2.2 — awaiting an npm release that picks up 10.2.4.
-CVE-2026-27903
-CVE-2026-27904
-
-# CVE-2026-29786 — tar Hardlink Path Traversal via Drive-Relative Linkpath (HIGH)
-# CVE-2026-31802 — tar Symlink Path Traversal via Drive-Relative Linkpath (HIGH)
-# Located at: usr/local/lib/node_modules/npm/node_modules/tar
-# tar is bundled *inside* npm itself (build tooling), not a runtime dependency.
-# npm is only used during Docker build to install production deps; it is not
-# accessible to external users at runtime.
-# tar@7.5.11 (fix for both) is published, but npm@latest (as of 2026-03-11)
-# still bundles tar < 7.5.11 — awaiting an npm release that picks up 7.5.11.
-CVE-2026-29786
-CVE-2026-31802
+# No active suppressions.
