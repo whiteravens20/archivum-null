@@ -91,4 +91,10 @@ export function validateConfig(): void {
   if (!isFinite(config.MAX_TOTAL_STORAGE) || config.MAX_TOTAL_STORAGE < 0) {
     throw new Error('MAX_TOTAL_STORAGE must be a non-negative number');
   }
+  if (config.CRYPTO_CHUNK_SIZE > config.CHUNK_SIZE) {
+    throw new Error('CRYPTO_CHUNK_SIZE must not exceed CHUNK_SIZE');
+  }
+  if (config.CHUNK_SIZE > config.MAX_FILE_SIZE) {
+    throw new Error('CHUNK_SIZE must not exceed MAX_FILE_SIZE');
+  }
 }

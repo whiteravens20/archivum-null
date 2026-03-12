@@ -146,4 +146,26 @@ describe('validateConfig', () => {
     const { validateConfig } = await import('../config.js');
     expect(() => validateConfig()).not.toThrow();
   });
+
+  it('should throw when CRYPTO_CHUNK_SIZE exceeds CHUNK_SIZE', async () => {
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', '20000000');
+    vi.stubEnv('CHUNK_SIZE', '10000000');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('CRYPTO_CHUNK_SIZE must not exceed CHUNK_SIZE');
+  });
+
+  it('should throw when CHUNK_SIZE exceeds MAX_FILE_SIZE', async () => {
+    vi.stubEnv('CHUNK_SIZE', '200000000');
+    vi.stubEnv('MAX_FILE_SIZE', '100000000');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('CHUNK_SIZE must not exceed MAX_FILE_SIZE');
+  });
+
+  it('should not throw when CRYPTO_CHUNK_SIZE equals CHUNK_SIZE', async () => {
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', '10000000');
+    vi.stubEnv('CHUNK_SIZE', '10000000');
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).not.toThrow();
+  });
 });
