@@ -8,6 +8,10 @@ const storage = new LocalStorage(config.STORAGE_PATH);
 const vaults = new Map<string, VaultMetadata>();
 const uploadSessions = new Map<string, ChunkedUploadSession>();
 
+// Max bytes the client-side metadata header can occupy:
+// 2 (nameLen) + 510 (MAX_NAME_BYTES) + 2 (mimeLen) + 254 (MAX_MIME_BYTES)
+const MAX_METADATA_HEADER = 768;
+
 // Cleanup interval — every 60 seconds, purge expired vaults
 const CLEANUP_INTERVAL = 60_000;
 
@@ -91,9 +95,10 @@ export class VaultManager {
     const clampedTtl = Math.min(Math.max(ttl, 60), config.MAX_TTL);
     const clampedDownloads = Math.min(Math.max(maxDownloads, 1), 1000);
 
-    // Pass MAX_FILE_SIZE into writeFile so the stream is aborted early if the
-    // limit is exceeded — avoids writing the full oversized blob to disk first.
-    const maxSize = config.MAX_FILE_SIZE + calcEncryptionOverhead(config.MAX_FILE_SIZE);
+    // MAX_FILE_SIZE refers to the user's raw file — account for the encrypted
+    // metadata header (filename + MIME) that the frontend prepends before encryption.
+    const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
+    const maxSize = plaintextMax + calcEncryptionOverhead(plaintextMax);
     let size: number;
     try {
       size = await storage.writeFile(vaultId, stream, maxSize);
@@ -122,7 +127,8 @@ export class VaultManager {
   // ── Chunked upload ────────────────────────────────────────────────────────
 
   initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE): ChunkedUploadSession {
-    const maxAllowed = config.MAX_FILE_SIZE + calcEncryptionOverhead(config.MAX_FILE_SIZE);
+    const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
+    const maxAllowed = plaintextMax + calcEncryptionOverhead(plaintextMax);
     if (totalSize <= 0 || totalSize > maxAllowed) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
