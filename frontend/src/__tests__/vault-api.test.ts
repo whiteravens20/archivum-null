@@ -118,6 +118,7 @@ describe('vault API client', () => {
           open: vi.fn(),
           setRequestHeader: vi.fn(),
           send: vi.fn(() => resolveSend()),
+          abort: vi.fn(),
           upload: {},
           status: 201,
           responseText: '{}',
@@ -219,6 +220,28 @@ describe('vault API client', () => {
 
       (inst.onload as () => void)();
       await promise;
+    });
+
+    it('should abort XHR when signal is aborted', async () => {
+      const XhrCtor = createMockXhr({
+        status: 201,
+        responseText: '{}',
+      });
+      vi.stubGlobal('XMLHttpRequest', XhrCtor);
+
+      const ac = new AbortController();
+      const { uploadVault } = await import('../api/vault.js');
+      const file = new File(['data'], 'test.txt', { type: 'text/plain' });
+      const mockKey = {} as CryptoKey;
+      const promise = uploadVault(file, mockKey, 5242880, 3600, 5, undefined, undefined, ac.signal);
+
+      await XhrCtor.sendCalled;
+      const inst = XhrCtor._instance;
+
+      ac.abort(new DOMException('Upload cancelled', 'AbortError'));
+
+      await expect(promise).rejects.toThrow('Upload cancelled');
+      expect(inst.abort).toHaveBeenCalled();
     });
   });
 });

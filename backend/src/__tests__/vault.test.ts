@@ -63,6 +63,7 @@ function makeMockVaultManager() {
       maxDownloads: 5,
       ciphertextSize: 200,
     })),
+    abortChunkedUpload: vi.fn(async () => {}),
   };
 }
 
@@ -400,5 +401,15 @@ describe('Vault routes', () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toContain('not found');
+  });
+
+  it('DELETE /api/vault/upload/:uploadId returns 204 and calls abort', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/vault/upload/upload-abc',
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(mockManager.abortChunkedUpload).toHaveBeenCalledWith('upload-abc');
   });
 });
