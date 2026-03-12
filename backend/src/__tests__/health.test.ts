@@ -15,6 +15,7 @@ describe('GET /api/config', () => {
     const body = res.json();
     expect(body).toHaveProperty('maxFileSize');
     expect(body).toHaveProperty('chunkSize');
+    expect(body).toHaveProperty('cryptoChunkSize');
     expect(body).toHaveProperty('defaultTtl');
     expect(body).toHaveProperty('defaultMaxDownloads');
     expect(body).toHaveProperty('turnstileSiteKey');

@@ -6,6 +6,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Mock crypto module — vault.ts now does encryption internally
+vi.mock('../crypto/encrypt.js', () => ({
+  buildMetadataHeader: () => new Uint8Array([0, 4, 116, 101, 115, 116, 0, 0]),
+  encryptChunk: async (plaintext: Uint8Array) => plaintext, // passthrough
+  calculateTotalEncryptedSize: (size: number) => size,
+  PER_CHUNK_OVERHEAD: 28,
+}));
+
 describe('vault API client', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -20,6 +28,7 @@ describe('vault API client', () => {
       const mockInfo = {
         vaultId: 'test-id',
         ciphertextSize: 1024,
+        chunkPlaintextSize: 5242880,
         createdAt: 1000,
         expiresAt: 9999,
         remainingDownloads: 5,
@@ -101,24 +110,24 @@ describe('vault API client', () => {
 
   describe('uploadVault', () => {
     function createMockXhr(overrides: Record<string, unknown> = {}) {
-      const instance: Record<string, unknown> = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        upload: {},
-        status: 201,
-        responseText: '{}',
-        onload: null,
-        onerror: null,
-        ...overrides,
-      };
-      // Must be a real function (not arrow) so `new` works
+      let resolveSend: () => void;
+      const sendCalled = new Promise<void>(r => { resolveSend = r; });
+
       const Ctor = function (this: Record<string, unknown>) {
-        Object.assign(this, instance);
-        // Expose the live instance so caller can trigger onload/onerror
+        Object.assign(this, {
+          open: vi.fn(),
+          setRequestHeader: vi.fn(),
+          send: vi.fn(() => resolveSend()),
+          upload: {},
+          status: 201,
+          responseText: '{}',
+          onload: null,
+          onerror: null,
+          ...overrides,
+        });
         Ctor._instance = this;
-      } as unknown as { new (): typeof instance; _instance: Record<string, unknown> };
-      Ctor._instance = instance;
+      } as unknown as { new (): Record<string, unknown>; _instance: Record<string, unknown>; sendCalled: Promise<void> };
+      Ctor.sendCalled = sendCalled;
       return Ctor;
     }
 
@@ -136,9 +145,11 @@ describe('vault API client', () => {
       vi.stubGlobal('XMLHttpRequest', XhrCtor);
 
       const { uploadVault } = await import('../api/vault.js');
-      const blob = new Blob(['data']);
-      const promise = uploadVault(blob, 3600, 5, 'token123');
+      const file = new File(['data'], 'test.txt', { type: 'text/plain' });
+      const mockKey = {} as CryptoKey;
+      const promise = uploadVault(file, mockKey, 5242880, 3600, 5, 'token123');
 
+      await XhrCtor.sendCalled;
       const inst = XhrCtor._instance;
       (inst.onload as () => void)();
 
@@ -153,9 +164,11 @@ describe('vault API client', () => {
       vi.stubGlobal('XMLHttpRequest', XhrCtor);
 
       const { uploadVault } = await import('../api/vault.js');
-      const blob = new Blob(['data']);
-      const promise = uploadVault(blob, 3600, 5);
+      const file = new File(['data'], 'test.txt', { type: 'text/plain' });
+      const mockKey = {} as CryptoKey;
+      const promise = uploadVault(file, mockKey, 5242880, 3600, 5);
 
+      await XhrCtor.sendCalled;
       (XhrCtor._instance.onerror as () => void)();
 
       await expect(promise).rejects.toThrow('Network error');
@@ -169,9 +182,11 @@ describe('vault API client', () => {
       vi.stubGlobal('XMLHttpRequest', XhrCtor);
 
       const { uploadVault } = await import('../api/vault.js');
-      const blob = new Blob(['data']);
-      const promise = uploadVault(blob, 3600, 5);
+      const file = new File(['data'], 'test.txt', { type: 'text/plain' });
+      const mockKey = {} as CryptoKey;
+      const promise = uploadVault(file, mockKey, 5242880, 3600, 5);
 
+      await XhrCtor.sendCalled;
       (XhrCtor._instance.onload as () => void)();
 
       await expect(promise).rejects.toThrow('File too large');
@@ -186,13 +201,21 @@ describe('vault API client', () => {
 
       const onProgress = vi.fn();
       const { uploadVault } = await import('../api/vault.js');
-      const blob = new Blob(['data']);
-      const promise = uploadVault(blob, 3600, 5, undefined, onProgress);
+      const file = new File(['data'], 'test.txt', { type: 'text/plain' });
+      const mockKey = {} as CryptoKey;
+      const promise = uploadVault(file, mockKey, 5242880, 3600, 5, undefined, onProgress);
 
+      await XhrCtor.sendCalled;
       const inst = XhrCtor._instance;
+
+      // Encryption progress callbacks happen before XHR (30%)
+      // XHR upload progress maps to 30-100% range
       const upload = inst.upload as { onprogress: (e: unknown) => void };
       upload.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
-      expect(onProgress).toHaveBeenCalledWith(0.5);
+      // XHR upload progress: 0.3 + (50/100) * 0.7 ≈ 0.65
+      const xhrCall = onProgress.mock.calls.find(c => c[0] > 0.6);
+      expect(xhrCall).toBeDefined();
+      expect(xhrCall![0]).toBeCloseTo(0.65, 10);
 
       (inst.onload as () => void)();
       await promise;

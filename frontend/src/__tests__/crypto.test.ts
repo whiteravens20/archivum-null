@@ -4,44 +4,21 @@
  * Uses Node environment instead of jsdom because jsdom's ArrayBuffer
  * is from a different realm, causing WebCrypto to reject it.
  * Node 20+ has native File, Blob, and crypto.subtle support.
- * We polyfill FileReader since it's not available in Node.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   generateKey,
   exportKey,
   importKey,
-  encryptFile,
-  decryptFile,
+  encryptChunk,
+  decryptChunk,
+  buildMetadataHeader,
+  parseMetadataHeader,
+  calculateTotalEncryptedSize,
   formatBytes,
+  IV_LENGTH,
+  PER_CHUNK_OVERHEAD,
 } from '../crypto/encrypt.js';
-
-// Minimal FileReader polyfill for Node environment
-class FileReaderPolyfill {
-  result: ArrayBuffer | null = null;
-  onload: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  onprogress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null = null;
-
-  readAsArrayBuffer(blob: Blob) {
-    blob.arrayBuffer().then((buf) => {
-      this.result = buf;
-      if (this.onprogress) {
-        this.onprogress({ lengthComputable: true, loaded: buf.byteLength, total: buf.byteLength });
-      }
-      if (this.onload) this.onload();
-    }).catch(() => {
-      if (this.onerror) this.onerror();
-    });
-  }
-}
-
-beforeAll(() => {
-  if (typeof globalThis.FileReader === 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).FileReader = FileReaderPolyfill;
-  }
-});
 
 describe('crypto/encrypt', () => {
   describe('generateKey', () => {
@@ -78,101 +55,231 @@ describe('crypto/encrypt', () => {
     });
   });
 
-  describe('encryptFile / decryptFile', () => {
-    it('should encrypt and decrypt a file roundtrip', async () => {
-      const key = await generateKey();
-      const content = 'Hello, Archivum Null! 🔐';
-      const file = new File([content], 'test.txt', { type: 'text/plain' });
-
-      const encrypted = await encryptFile(file, key);
-      expect(encrypted.size).toBeGreaterThan(file.size); // IV + tag overhead
-
-      const decrypted = await decryptFile(encrypted, key);
-      expect(decrypted.name).toBe('test.txt');
-      expect(decrypted.type).toBe('text/plain');
-
-      const text = await decrypted.text();
-      expect(text).toBe(content);
+  describe('buildMetadataHeader / parseMetadataHeader', () => {
+    it('should roundtrip filename and MIME type', () => {
+      const header = buildMetadataHeader('photo.jpg', 'image/jpeg');
+      const parsed = parseMetadataHeader(header);
+      expect(parsed.filename).toBe('photo.jpg');
+      expect(parsed.mimeType).toBe('image/jpeg');
+      expect(parsed.contentOffset).toBe(header.length);
     });
 
-    it('should produce different ciphertexts for same plaintext (unique IV)', async () => {
+    it('should handle empty filename', () => {
+      const header = buildMetadataHeader('', 'text/plain');
+      const parsed = parseMetadataHeader(header);
+      expect(parsed.filename).toBe('file'); // sanitized fallback
+      expect(parsed.mimeType).toBe('text/plain');
+    });
+
+    it('should handle empty MIME type', () => {
+      const header = buildMetadataHeader('test.bin', '');
+      const parsed = parseMetadataHeader(header);
+      expect(parsed.filename).toBe('test.bin');
+      expect(parsed.mimeType).toBe('application/octet-stream'); // fallback
+    });
+
+    it('should handle unicode filename', () => {
+      const header = buildMetadataHeader('日本語ファイル.txt', 'text/plain');
+      const parsed = parseMetadataHeader(header);
+      expect(parsed.filename).toBe('日本語ファイル.txt');
+    });
+
+    it('should sanitize path traversal in filename', () => {
+      const header = buildMetadataHeader('../../../etc/passwd', 'text/plain');
+      const parsed = parseMetadataHeader(header);
+      // Path separators must be stripped; '..' without separators is harmless
+      expect(parsed.filename).not.toContain('/');
+      expect(parsed.filename).not.toContain('\\');
+    });
+
+    it('should parse header with trailing content bytes', () => {
+      const header = buildMetadataHeader('test.txt', 'text/plain');
+      const withContent = new Uint8Array(header.length + 10);
+      withContent.set(header, 0);
+      withContent.set(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), header.length);
+
+      const parsed = parseMetadataHeader(withContent);
+      expect(parsed.filename).toBe('test.txt');
+      expect(parsed.contentOffset).toBe(header.length);
+    });
+
+    it('should reject too-short header', () => {
+      expect(() => parseMetadataHeader(new Uint8Array(3))).toThrow('too short');
+    });
+  });
+
+  describe('encryptChunk / decryptChunk', () => {
+    it('should encrypt and decrypt a chunk roundtrip', async () => {
       const key = await generateKey();
-      const file = new File(['same data'], 'test.bin', { type: 'application/octet-stream' });
+      const plaintext = new TextEncoder().encode('Hello, streaming encryption! 🔐');
 
-      const enc1 = await encryptFile(file, key);
-      const enc2 = await encryptFile(file, key);
+      const encrypted = await encryptChunk(plaintext, key, 0);
+      expect(encrypted.length).toBe(plaintext.length + PER_CHUNK_OVERHEAD);
 
-      const buf1 = new Uint8Array(await enc1.arrayBuffer());
-      const buf2 = new Uint8Array(await enc2.arrayBuffer());
+      const decrypted = await decryptChunk(encrypted, key, 0);
+      expect(decrypted).toEqual(plaintext);
+    });
 
-      // IVs are the first 12 bytes — they should differ
-      const iv1 = buf1.slice(0, 12);
-      const iv2 = buf2.slice(0, 12);
+    it('should produce unique IVs for each chunk', async () => {
+      const key = await generateKey();
+      const plaintext = new Uint8Array([1, 2, 3]);
+
+      const enc1 = await encryptChunk(plaintext, key, 0);
+      const enc2 = await encryptChunk(plaintext, key, 1);
+
+      const iv1 = enc1.slice(0, IV_LENGTH);
+      const iv2 = enc2.slice(0, IV_LENGTH);
       expect(iv1).not.toEqual(iv2);
     });
 
     it('should fail decryption with wrong key', async () => {
       const key1 = await generateKey();
       const key2 = await generateKey();
-      const file = new File(['secret'], 'test.bin');
+      const plaintext = new Uint8Array([1, 2, 3]);
 
-      const encrypted = await encryptFile(file, key1);
+      const encrypted = await encryptChunk(plaintext, key1, 0);
 
-      await expect(
-        decryptFile(encrypted, key2)
-      ).rejects.toThrow();
+      await expect(decryptChunk(encrypted, key2, 0)).rejects.toThrow();
+    });
+
+    it('should fail decryption with wrong chunkIndex (reorder protection)', async () => {
+      const key = await generateKey();
+      const plaintext = new Uint8Array([1, 2, 3]);
+
+      const encrypted = await encryptChunk(plaintext, key, 0);
+
+      // Decrypt with chunkIndex=1 instead of 0 — AAD mismatch → GCM auth failure
+      await expect(decryptChunk(encrypted, key, 1)).rejects.toThrow();
     });
 
     it('should reject too-short data', async () => {
       const key = await generateKey();
-      const tooShort = new Blob([new Uint8Array(20)]); // Less than IV + tag
+      const tooShort = new Uint8Array(20); // Less than IV + tag
 
-      await expect(
-        decryptFile(tooShort, key)
-      ).rejects.toThrow();
+      await expect(decryptChunk(tooShort, key, 0)).rejects.toThrow('too short');
     });
 
-    it('should handle empty file encryption', async () => {
+    it('should handle empty chunk', async () => {
       const key = await generateKey();
-      const file = new File([], 'empty.bin', { type: 'application/octet-stream' });
+      const empty = new Uint8Array(0);
 
-      const encrypted = await encryptFile(file, key);
-      // IV (12) + header (2+9+2+24=37) + empty content (0) + GCM tag (16) = 65
-      expect(encrypted.size).toBe(65);
+      const encrypted = await encryptChunk(empty, key, 0);
+      expect(encrypted.length).toBe(PER_CHUNK_OVERHEAD); // just IV + tag
 
-      const decrypted = await decryptFile(encrypted, key);
-      expect(decrypted.name).toBe('empty.bin');
-      expect(decrypted.size).toBe(0);
+      const decrypted = await decryptChunk(encrypted, key, 0);
+      expect(decrypted.length).toBe(0);
     });
 
-    it('should handle large binary data', async () => {
+    it('should handle single-byte chunk', async () => {
       const key = await generateKey();
-      const data = new Uint8Array(1024 * 100); // 100KB
-      // Fill in chunks (getRandomValues has 65536 byte limit)
+      const single = new Uint8Array([42]);
+
+      const encrypted = await encryptChunk(single, key, 0);
+      const decrypted = await decryptChunk(encrypted, key, 0);
+      expect(decrypted).toEqual(single);
+    });
+
+    it('should handle large chunk (100 KB)', async () => {
+      const key = await generateKey();
+      const data = new Uint8Array(102400);
       for (let i = 0; i < data.length; i += 65536) {
-        const chunk = data.subarray(i, Math.min(i + 65536, data.length));
-        crypto.getRandomValues(chunk);
+        crypto.getRandomValues(data.subarray(i, Math.min(i + 65536, data.length)));
       }
-      const file = new File([data], 'large.bin');
 
-      const encrypted = await encryptFile(file, key);
-      const decrypted = await decryptFile(encrypted, key);
+      const encrypted = await encryptChunk(data, key, 0);
+      const decrypted = await decryptChunk(encrypted, key, 0);
+      expect(decrypted).toEqual(data);
+    });
+  });
 
-      const original = new Uint8Array(await new Blob([data]).arrayBuffer());
-      const result = new Uint8Array(await decrypted.arrayBuffer());
-      expect(result).toEqual(original);
+  describe('multi-chunk streaming flow', () => {
+    it('should encrypt and decrypt a file split into multiple chunks', async () => {
+      const key = await generateKey();
+      const chunkSize = 64; // small chunk for testing
+
+      // Build plaintext: header + file content
+      const header = buildMetadataHeader('multi.bin', 'application/octet-stream');
+      const fileContent = new Uint8Array(200);
+      crypto.getRandomValues(fileContent);
+
+      const fullPlaintext = new Uint8Array(header.length + fileContent.length);
+      fullPlaintext.set(header, 0);
+      fullPlaintext.set(fileContent, header.length);
+
+      // Split into chunks and encrypt
+      const encryptedChunks: Uint8Array[] = [];
+      let offset = 0;
+      let chunkIndex = 0;
+      while (offset < fullPlaintext.length) {
+        const end = Math.min(offset + chunkSize, fullPlaintext.length);
+        const chunk = fullPlaintext.slice(offset, end);
+        encryptedChunks.push(await encryptChunk(chunk, key, chunkIndex));
+        offset = end;
+        chunkIndex++;
+      }
+
+      // Decrypt all chunks
+      const decryptedParts: Uint8Array[] = [];
+      for (let i = 0; i < encryptedChunks.length; i++) {
+        decryptedParts.push(await decryptChunk(encryptedChunks[i], key, i));
+      }
+
+      // Reassemble
+      const totalLen = decryptedParts.reduce((sum, p) => sum + p.length, 0);
+      const reassembled = new Uint8Array(totalLen);
+      let pos = 0;
+      for (const part of decryptedParts) {
+        reassembled.set(part, pos);
+        pos += part.length;
+      }
+
+      // Parse header from reassembled plaintext
+      const parsed = parseMetadataHeader(reassembled);
+      expect(parsed.filename).toBe('multi.bin');
+      expect(parsed.mimeType).toBe('application/octet-stream');
+
+      const recoveredContent = reassembled.slice(parsed.contentOffset);
+      expect(recoveredContent).toEqual(fileContent);
     });
 
-    it('should call progress callback during encryption', async () => {
+    it('should detect chunk reordering in multi-chunk flow', async () => {
       const key = await generateKey();
-      const file = new File(['test data for progress'], 'test.bin');
-      const progressCalls: number[] = [];
+      const chunk0 = await encryptChunk(new Uint8Array([1, 2, 3]), key, 0);
+      const chunk1 = await encryptChunk(new Uint8Array([4, 5, 6]), key, 1);
 
-      await encryptFile(file, key, (p) => progressCalls.push(p));
+      // Swapped: try to decrypt chunk1 as index 0 and vice versa
+      await expect(decryptChunk(chunk1, key, 0)).rejects.toThrow();
+      await expect(decryptChunk(chunk0, key, 1)).rejects.toThrow();
 
-      // FileReader progress may or may not fire in jsdom,
-      // but the function should not throw
-      expect(true).toBe(true);
+      // Correct order works
+      await expect(decryptChunk(chunk0, key, 0)).resolves.toEqual(new Uint8Array([1, 2, 3]));
+      await expect(decryptChunk(chunk1, key, 1)).resolves.toEqual(new Uint8Array([4, 5, 6]));
+    });
+  });
+
+  describe('calculateTotalEncryptedSize', () => {
+    it('should calculate size for single chunk', () => {
+      const size = calculateTotalEncryptedSize(100, 5242880);
+      // 1 chunk → 100 + 28 = 128
+      expect(size).toBe(128);
+    });
+
+    it('should calculate size for multiple chunks', () => {
+      // 10 MB plaintext, 5 MB chunk size = 2 chunks
+      const size = calculateTotalEncryptedSize(10485760, 5242880);
+      expect(size).toBe(10485760 + 2 * PER_CHUNK_OVERHEAD);
+    });
+
+    it('should calculate size at exact chunk boundary', () => {
+      // Exactly 5 MB = 1 chunk (not 2)
+      const size = calculateTotalEncryptedSize(5242880, 5242880);
+      expect(size).toBe(5242880 + PER_CHUNK_OVERHEAD);
+    });
+
+    it('should handle zero plaintext', () => {
+      const size = calculateTotalEncryptedSize(0, 5242880);
+      // At least 1 chunk
+      expect(size).toBe(PER_CHUNK_OVERHEAD);
     });
   });
 

@@ -26,6 +26,7 @@ function makeMockVaultManager() {
         return {
           vaultId: 'abc123',
           ciphertextSize: 42,
+          chunkPlaintextSize: 5242880,
           createdAt: 1000000,
           expiresAt: 9999999999,
           remainingDownloads: 3,
@@ -42,13 +43,14 @@ function makeMockVaultManager() {
       }
       return null;
     }),
-    initChunkedUpload: vi.fn((_totalSize: number, _ttl: number, _maxDownloads: number) => ({
+    initChunkedUpload: vi.fn((_totalSize: number, _ttl: number, _maxDownloads: number, _chunkPlaintextSize?: number) => ({
       uploadId: 'upload-abc',
       totalSize: 200,
       receivedBytes: 0,
       nextChunkIndex: 0,
       ttl: 3600,
       maxDownloads: 5,
+      chunkPlaintextSize: 5242880,
       expiresAt: 9999999999,
     })),
     appendChunk: vi.fn(async (_uploadId: string, _chunkIndex: number, stream: Readable) => {
@@ -224,7 +226,8 @@ describe('Vault routes', () => {
     expect(mockManager.createVault).toHaveBeenCalledWith(
       expect.anything(),
       86400,  // DEFAULT_TTL
-      10      // DEFAULT_MAX_DOWNLOADS
+      10,     // DEFAULT_MAX_DOWNLOADS
+      5242880 // CRYPTO_CHUNK_SIZE default
     );
   });
 
@@ -242,6 +245,7 @@ describe('Vault routes', () => {
     const json = res.json();
     expect(json).toHaveProperty('vaultId', 'abc123');
     expect(json).toHaveProperty('ciphertextSize');
+    expect(json).toHaveProperty('chunkPlaintextSize', 5242880);
     expect(json).toHaveProperty('createdAt');
     expect(json).toHaveProperty('expiresAt');
     expect(json).toHaveProperty('remainingDownloads');
@@ -294,7 +298,7 @@ describe('Vault routes', () => {
       method: 'POST',
       url: '/api/vault/upload/init',
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ totalSize: 200, ttl: 3600, maxDownloads: 5 }),
+      payload: JSON.stringify({ totalSize: 200, ttl: 3600, maxDownloads: 5, chunkPlaintextSize: 5242880 }),
     });
 
     expect(res.statusCode).toBe(201);

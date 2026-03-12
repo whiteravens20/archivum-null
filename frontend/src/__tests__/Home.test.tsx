@@ -6,16 +6,19 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../crypto/encrypt.js', () => ({
   generateKey: vi.fn(),
   exportKey: vi.fn(),
-  encryptFile: vi.fn(),
+  buildMetadataHeader: vi.fn(() => new Uint8Array(8)),
+  calculateTotalEncryptedSize: vi.fn((_size: number) => 100),
 }));
 
 vi.mock('../api/vault.js', () => ({
   uploadVault: vi.fn(),
+  uploadVaultChunked: vi.fn(),
 }));
 
 const mockConfig = {
   maxFileSize: 104857600,
-  chunkSize: 52428800,
+  chunkSize: 10485760,
+  cryptoChunkSize: 5242880,
   defaultTtl: 86400,
   defaultMaxDownloads: 10,
   turnstileSiteKey: '0x0000000000000000000000',

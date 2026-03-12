@@ -5,7 +5,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 // Mock crypto and API modules
 vi.mock('../crypto/encrypt.js', () => ({
   importKey: vi.fn(),
-  decryptFile: vi.fn(),
+  decryptChunk: vi.fn(),
+  parseMetadataHeader: vi.fn(),
+  PER_CHUNK_OVERHEAD: 28,
   formatBytes: (n: number) => `${n} B`,
 }));
 
@@ -59,6 +61,7 @@ describe('Vault page', () => {
     mockGetVaultInfo.mockResolvedValue({
       vaultId: 'abc',
       ciphertextSize: 2048,
+      chunkPlaintextSize: 5242880,
       createdAt: Date.now(),
       expiresAt: Date.now() + 3600_000,
       remainingDownloads: 3,
@@ -76,6 +79,7 @@ describe('Vault page', () => {
     mockGetVaultInfo.mockResolvedValue({
       vaultId: 'abc',
       ciphertextSize: 100,
+      chunkPlaintextSize: 5242880,
       createdAt: Date.now(),
       expiresAt: Date.now() + 3600_000,
       remainingDownloads: 1,
