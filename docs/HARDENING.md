@@ -148,11 +148,13 @@ server {
 
     # TLS — managed by your reverse proxy / Let's Encrypt / acme.sh / etc.
 
-    # Must exceed CHUNK_SIZE (default 50 MB) so individual chunk requests pass
+    # Must exceed CHUNK_SIZE (default 10 MB) so individual chunk requests pass
     # through. Set slightly above MAX_FILE_SIZE if you also want the single-
     # request upload path to work for files up to MAX_FILE_SIZE.
     # With chunked uploads each HTTP request body is bounded by CHUNK_SIZE,
-    # not the total file size — so 55m is enough for the default 50 MB chunks.
+    # not the total file size — so 15m is enough for the default 10 MB chunks.
+    # Smaller default chunks (10 MB vs 50 MB) work better for homelab/Tailscale/VPS
+    # setups with limited bandwidth and flaky connections.
     client_max_body_size 105m;
 
     location / {
@@ -177,10 +179,12 @@ server {
 archivum.yourdomain.com {
     # Caddy handles TLS automatically — no certificate config needed
 
-    # Must exceed CHUNK_SIZE (default 50 MB). With chunked uploads each HTTP
+    # Must exceed CHUNK_SIZE (default 10 MB). With chunked uploads each HTTP
     # request body is bounded by CHUNK_SIZE, not the total file size — so
-    # 55MB is enough for the default 50 MB chunks. 105MB covers the single-
+    # 15MB is enough for the default 10 MB chunks. 105MB covers the single-
     # request upload path up to MAX_FILE_SIZE as well.
+    # Smaller default chunks (10 MB vs 50 MB) work better for homelab/Tailscale/VPS
+    # setups with limited bandwidth.
     request_body max 105MB
 
     reverse_proxy <TUNNEL_IP>:3000 {
