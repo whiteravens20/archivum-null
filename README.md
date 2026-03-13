@@ -82,17 +82,17 @@ The table below lists the only hard requirement and optional conveniences.
 │                                                          │
 │  1. Select file                                          │
 │  2. Generate AES-256-GCM key (WebCrypto)                 │
-│  3. Encrypt file client-side (streaming per-chunk)    │
-│     Plaintext split into 5 MB chunks, each encrypted   │
-│     independently: AES-256-GCM with unique IV + AAD    │
-│     (chunk index prevents reordering attacks)           │
+│  3. Encrypt file client-side (streaming per-chunk)       │
+│     Plaintext split into 5 MB chunks, each encrypted     │
+│     independently: AES-256-GCM with unique IV + AAD      │
+│     (chunk index prevents reordering attacks)            │
 │  4. Upload ciphertext to server                          │
 │  5. Receive vault URL:                                   │
 │       /vault/{id}#BASE64_KEY.BASE64_FILENAME             │
 │                                                          │
 │  Key and filename NEVER leave the browser via HTTP.      │
 │  URL fragment (#) is NOT included in HTTP requests.      │
-└──────────────┬───────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
                │ HTTPS (encrypted blob + vault config only)
                ▼
 ┌──────────────────────────────────────────────────────────┐
