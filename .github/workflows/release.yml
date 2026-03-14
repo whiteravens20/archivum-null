@@ -159,6 +159,46 @@ jobs:
             echo "GH_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Build release tarball
+        run: |
+          VERSION="${{ github.ref_name }}"
+          ARCHIVE_NAME="archivum-null-${VERSION}.tar.gz"
+
+          tar czf "${ARCHIVE_NAME}" \
+            --exclude='node_modules' \
+            --exclude='coverage' \
+            --exclude='dist' \
+            --exclude='__tests__' \
+            --exclude='*.test.ts' \
+            --exclude='*.test.tsx' \
+            --exclude='vitest.config.ts' \
+            --exclude='eslint.config.js' \
+            --exclude='frontend/src/test' \
+            Dockerfile \
+            docker-compose.yml \
+            .dockerignore \
+            .env.example \
+            backend/package.json \
+            backend/package-lock.json \
+            backend/tsconfig.json \
+            backend/src/ \
+            frontend/package.json \
+            frontend/package-lock.json \
+            frontend/.npmrc \
+            frontend/tsconfig.json \
+            frontend/tsconfig.node.json \
+            frontend/vite.config.ts \
+            frontend/index.html \
+            frontend/public/ \
+            frontend/src/ \
+            TOS.md \
+            LICENSE \
+            README.md \
+            docs/ \
+            scripts/
+
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -167,6 +207,8 @@ jobs:
           generate_release_notes: true
           # Append Docker image reference to the generated notes.
           append_body: true
+          # Attach the source tarball (only files needed to build & run)
+          files: ${{ env.ARCHIVE_NAME }}
           body: |
             ${{ steps.tag-msg.outputs.message }}
 
@@ -183,6 +225,10 @@ jobs:
             | `:main` | Always the latest stable production release |
 
             > **Digest (immutable):** `${{ needs.build-push.outputs.digest }}`
+
+            ## Source tarball
+
+            The attached `archivum-null-${{ github.ref_name }}.tar.gz` contains only the files needed to build and run the project (no tests, coverage, or CI config).
 
   # ── Job 3: Trivy scan on pushed image ────────────────────────────────────────
   # Pulls the freshly pushed image by immutable digest and scans for HIGH/CRITICAL
