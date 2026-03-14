@@ -59,7 +59,54 @@ export default function Home() {
   const [vaultUrl, setVaultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const captchaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Start 10s CAPTCHA timeout when file is selected and Turnstile is enabled
+  useEffect(() => {
+    if (captchaTimerRef.current) {
+      clearTimeout(captchaTimerRef.current);
+      captchaTimerRef.current = null;
+    }
+
+    if (file && runtimeConfig.turnstileEnabled && !captchaVerified) {
+      captchaTimerRef.current = setTimeout(() => {
+        if (!captchaVerified) {
+          setCaptchaError('CAPTCHA verification timed out — please reload and try again');
+        }
+      }, 10_000);
+    }
+
+    return () => {
+      if (captchaTimerRef.current) {
+        clearTimeout(captchaTimerRef.current);
+        captchaTimerRef.current = null;
+      }
+    };
+  }, [file, runtimeConfig.turnstileEnabled, captchaVerified]);
+
+  const handleCaptchaVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+    setCaptchaVerified(true);
+    setCaptchaError(null);
+    if (captchaTimerRef.current) {
+      clearTimeout(captchaTimerRef.current);
+      captchaTimerRef.current = null;
+    }
+  }, []);
+
+  const handleCaptchaError = useCallback(() => {
+    setCaptchaError('CAPTCHA verification failed — please reload and try again');
+    setCaptchaVerified(false);
+  }, []);
+
+  const handleCaptchaExpire = useCallback(() => {
+    setCaptchaError('CAPTCHA expired — please reload and try again');
+    setCaptchaVerified(false);
+    setTurnstileToken(undefined);
+  }, []);
 
   const handleUpload = useCallback(async () => {
     if (!file) return;
@@ -137,6 +184,9 @@ export default function Home() {
     setProgress(0);
     setVaultUrl(null);
     setError(null);
+    setCaptchaVerified(false);
+    setCaptchaError(null);
+    setTurnstileToken(undefined);
   };
 
   const handleCancel = () => {
@@ -227,8 +277,16 @@ export default function Home() {
               {runtimeConfig.turnstileEnabled && (
                 <Turnstile
                   siteKey={runtimeConfig.turnstileSiteKey}
-                  onVerify={setTurnstileToken}
+                  onVerify={handleCaptchaVerify}
+                  onError={handleCaptchaError}
+                  onExpire={handleCaptchaExpire}
                 />
+              )}
+
+              {captchaError && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+                  {captchaError}
+                </div>
               )}
 
               {stage === 'uploading' && (
@@ -262,13 +320,15 @@ export default function Home() {
               ) : (
                 <button
                   onClick={handleUpload}
-                  disabled={stage !== 'idle' || !file}
+                  disabled={stage !== 'idle' || !file || (runtimeConfig.turnstileEnabled && !captchaVerified)}
                   className="w-full py-3 bg-vault-accent text-vault-bg rounded-lg font-medium
                              hover:bg-vault-accent/90 transition-colors
                              disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {stage === 'idle'
-                    ? 'Encrypt & Upload'
+                    ? (runtimeConfig.turnstileEnabled && !captchaVerified
+                        ? 'Waiting for CAPTCHA...'
+                        : 'Encrypt & Upload')
                     : 'Processing...'}
                 </button>
               )}

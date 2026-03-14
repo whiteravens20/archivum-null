@@ -4,6 +4,7 @@ interface TurnstileProps {
   siteKey: string;
   onVerify: (token: string) => void;
   onError?: () => void;
+  onExpire?: () => void;
 }
 
 declare global {
@@ -15,6 +16,7 @@ declare global {
           sitekey: string;
           callback: (token: string) => void;
           'error-callback'?: () => void;
+          'expired-callback'?: () => void;
           theme?: 'dark' | 'light' | 'auto';
           size?: 'normal' | 'compact';
         }
@@ -25,7 +27,7 @@ declare global {
   }
 }
 
-export default function Turnstile({ siteKey, onVerify, onError }: TurnstileProps) {
+export default function Turnstile({ siteKey, onVerify, onError, onExpire }: TurnstileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -58,6 +60,7 @@ export default function Turnstile({ siteKey, onVerify, onError }: TurnstileProps
       sitekey: siteKey,
       callback: handleVerify,
       'error-callback': onError,
+      'expired-callback': onExpire,
       theme: 'dark',
       size: 'normal',
     });
@@ -68,7 +71,7 @@ export default function Turnstile({ siteKey, onVerify, onError }: TurnstileProps
         widgetIdRef.current = null;
       }
     };
-  }, [ready, siteKey, handleVerify, onError]);
+  }, [ready, siteKey, handleVerify, onError, onExpire]);
 
   if (!siteKey || siteKey === '0x0000000000000000000000') {
     return null; // Turnstile disabled
