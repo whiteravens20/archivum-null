@@ -64,6 +64,8 @@ function makeMockVaultManager() {
       ciphertextSize: 200,
     })),
     abortChunkedUpload: vi.fn(async () => {}),
+    signUploadSession: vi.fn((_uploadId: string) => 'mock-session-token-abc'),
+    verifyUploadSession: vi.fn((_uploadId: string, token: string) => token === 'mock-session-token-abc'),
   };
 }
 
@@ -307,6 +309,7 @@ describe('Vault routes', () => {
     expect(json).toHaveProperty('uploadId', 'upload-abc');
     expect(json).toHaveProperty('chunkSize');
     expect(json).toHaveProperty('expiresAt');
+    expect(json).toHaveProperty('sessionToken', 'mock-session-token-abc');
     expect(mockManager.initChunkedUpload).toHaveBeenCalledOnce();
   });
 
@@ -347,7 +350,10 @@ describe('Vault routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/vault/upload/upload-abc/chunk',
-      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': 'mock-session-token-abc',
+      },
       payload,
     });
 
@@ -367,7 +373,10 @@ describe('Vault routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/vault/upload/upload-abc/chunk',
-      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': 'mock-session-token-abc',
+      },
       payload,
     });
 
@@ -379,6 +388,7 @@ describe('Vault routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/vault/upload/upload-abc/complete',
+      headers: { 'x-session-token': 'mock-session-token-abc' },
     });
 
     expect(res.statusCode).toBe(201);
@@ -397,6 +407,7 @@ describe('Vault routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/vault/upload/nonexistent/complete',
+      headers: { 'x-session-token': 'mock-session-token-abc' },
     });
 
     expect(res.statusCode).toBe(404);
@@ -407,9 +418,48 @@ describe('Vault routes', () => {
     const res = await app.inject({
       method: 'DELETE',
       url: '/api/vault/upload/upload-abc',
+      headers: { 'x-session-token': 'mock-session-token-abc' },
     });
 
     expect(res.statusCode).toBe(204);
     expect(mockManager.abortChunkedUpload).toHaveBeenCalledWith('upload-abc');
+  });
+
+  // Session token verification
+  it('POST /api/vault/upload/:uploadId/chunk returns 403 without session token', async () => {
+    const payload = buildMultipart(boundary,
+      { chunkIndex: '0' },
+      { name: 'chunk.bin', content: Buffer.from('data') }
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('session token');
+  });
+
+  it('POST /api/vault/upload/:uploadId/complete returns 403 without session token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/complete',
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('session token');
+  });
+
+  it('DELETE /api/vault/upload/:uploadId returns 403 without session token', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/vault/upload/upload-abc',
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('session token');
   });
 });
