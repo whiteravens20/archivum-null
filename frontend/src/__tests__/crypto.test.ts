@@ -16,6 +16,7 @@ import {
   parseMetadataHeader,
   calculateTotalEncryptedSize,
   formatBytes,
+  sanitizeFilename,
   IV_LENGTH,
   PER_CHUNK_OVERHEAD,
 } from '../crypto/encrypt.js';
@@ -304,6 +305,87 @@ describe('crypto/encrypt', () => {
 
     it('should format gigabytes', () => {
       expect(formatBytes(1073741824)).toBe('1.0 GB');
+    });
+  });
+
+  describe('sanitizeFilename', () => {
+    it('should return a normal filename unchanged', () => {
+      expect(sanitizeFilename('document.pdf')).toBe('document.pdf');
+    });
+
+    it('should replace path separators with underscores', () => {
+      expect(sanitizeFilename('../../../etc/passwd')).not.toContain('/');
+      expect(sanitizeFilename('..\\windows\\system32')).not.toContain('\\');
+    });
+
+    it('should strip ASCII control characters', () => {
+      expect(sanitizeFilename('file\x00name\x1F.txt')).toBe('filename.txt');
+      expect(sanitizeFilename('test\x7Ffile')).toBe('testfile');
+    });
+
+    it('should strip Unicode bidi override characters', () => {
+      // U+202E (RLO) — can disguise .exe as .pdf
+      expect(sanitizeFilename('document\u202Efdp.exe')).not.toContain('\u202E');
+      // U+202A (LRE), U+202B (RLE), U+202C (PDF), U+202D (LRO)
+      expect(sanitizeFilename('a\u202Ab\u202Bc\u202Cd\u202De')).toBe('abcde');
+      // U+2066–U+2069 (LRI, RLI, FSI, PDI)
+      expect(sanitizeFilename('x\u2066y\u2067z\u2068w\u2069v')).toBe('xyzwv');
+    });
+
+    it('should strip zero-width characters', () => {
+      expect(sanitizeFilename('file\u200Bname.txt')).toBe('filename.txt'); // ZWSP
+      expect(sanitizeFilename('file\u200Cname')).toBe('filename');         // ZWNJ
+      expect(sanitizeFilename('file\u200Dname')).toBe('filename');         // ZWJ
+      expect(sanitizeFilename('\uFEFFtest')).toBe('test');                 // BOM
+    });
+
+    it('should strip LRM and RLM marks', () => {
+      expect(sanitizeFilename('file\u200Ename\u200F.txt')).toBe('filename.txt');
+    });
+
+    it('should strip leading dots', () => {
+      expect(sanitizeFilename('.hidden')).toBe('hidden');
+      expect(sanitizeFilename('...secret')).toBe('secret');
+      expect(sanitizeFilename('.bashrc')).toBe('bashrc');
+    });
+
+    it('should trim whitespace', () => {
+      expect(sanitizeFilename('  hello.txt  ')).toBe('hello.txt');
+    });
+
+    it('should truncate to 255 characters', () => {
+      const long = 'x'.repeat(300);
+      expect(sanitizeFilename(long)).toHaveLength(255);
+    });
+
+    it('should return "file" for empty string', () => {
+      expect(sanitizeFilename('')).toBe('file');
+    });
+
+    it('should return "file" for whitespace-only input', () => {
+      expect(sanitizeFilename('   ')).toBe('file');
+    });
+
+    it('should return "file" when all characters are stripped', () => {
+      expect(sanitizeFilename('\x00\x01\x02')).toBe('file');
+      expect(sanitizeFilename('...')).toBe('file');
+    });
+
+    it('should handle combined attack vectors', () => {
+      // Path traversal + bidi + zero-width
+      const malicious = '../\u202E\u200B.exe';
+      const result = sanitizeFilename(malicious);
+      expect(result).not.toContain('/');
+      expect(result).not.toContain('\u202E');
+      expect(result).not.toContain('\u200B');
+    });
+
+    it('should preserve unicode emoji and CJK characters', () => {
+      expect(sanitizeFilename('報告書📊.xlsx')).toBe('報告書📊.xlsx');
+    });
+
+    it('should handle filename with only dots and extension', () => {
+      expect(sanitizeFilename('...test.txt')).toBe('test.txt');
     });
   });
 });
