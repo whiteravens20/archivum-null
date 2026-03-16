@@ -52,6 +52,10 @@ export class VaultManager {
           } else {
             vaults.set(vaultId, meta);
           }
+        } else {
+          // Orphaned vault directory (missing or corrupted meta.json) —
+          // e.g. crash between writeFile and writeMetadata.  Clean it up.
+          await storage.deleteVault(vaultId);
         }
       }
     } catch {
