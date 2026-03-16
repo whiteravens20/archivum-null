@@ -35,7 +35,11 @@ export async function basicAuth(
     const [user, ...passParts] = decoded.split(':');
     const pass = passParts.join(':');
 
-    if (!safeCompare(user, config.ADMIN_USER) || !safeCompare(pass, config.ADMIN_PASSWORD)) {
+    // Execute both comparisons unconditionally to prevent timing side-channels
+    // that could reveal whether the username alone was correct.
+    const userOk = safeCompare(user, config.ADMIN_USER);
+    const passOk = safeCompare(pass, config.ADMIN_PASSWORD);
+    if (!userOk || !passOk) {
       reply.header('WWW-Authenticate', 'Basic realm="Archivum Null Admin"');
       reply.status(401).send({ error: 'Invalid credentials' });
       return;
