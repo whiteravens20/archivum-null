@@ -97,7 +97,7 @@ export class LocalStorage implements StorageBackend {
     try {
       const entries = await fsp.readdir(this.basePath, { withFileTypes: true });
       return entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith('_'))
+        .filter((e) => e.isDirectory() && e.name !== '_uploads')
         .map((e) => e.name);
     } catch {
       return [];
