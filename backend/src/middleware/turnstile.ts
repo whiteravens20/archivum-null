@@ -37,6 +37,7 @@ export async function verifyTurnstile(
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString(),
+      signal: AbortSignal.timeout(10_000), // 10s timeout to prevent hanging workers
     });
 
     // fetch().json() returns unknown; cast to the Turnstile API shape defined above.
@@ -59,7 +60,8 @@ export async function verifyTurnstile(
       return;
     }
   } catch (err) {
-    request.log.error(err, 'Turnstile API call failed');
-    reply.status(500).send({ error: 'Captcha service unavailable' });
+    const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
+    request.log.error(err, isTimeout ? 'Turnstile API call timed out' : 'Turnstile API call failed');
+    reply.status(isTimeout ? 504 : 500).send({ error: 'Captcha service unavailable' });
   }
 }
