@@ -38,8 +38,14 @@
   - Download tier: `GET /api/vault/:id/download` (default 30 req/window) — prevents bulk download exhaustion
 - [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
 - [x] Max file size enforcement (413 response)
+- [x] CAPTCHA timeout — frontend enforces a 10-second verification deadline; if the widget does not respond, upload is blocked and the user must reload
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
+
+## Client-Side Defenses
+
+- [x] Filename sanitization — `sanitizeFilename()` strips path separators (`/`, `\`), ASCII control characters (0x00–0x1F, 0x7F), bidirectional text overrides (U+202A–202E, U+2066–2069), zero-width characters (ZWSP, ZWNJ, ZWJ, BOM, LRM, RLM), leading dots, and trailing whitespace; truncates to 255 characters; falls back to `"file"` when the result is empty
+- [x] Filename mismatch detection — on download, the decrypted filename from the encrypted payload is compared to the one encoded in the URL fragment; a visible warning is shown if they differ, indicating possible link tampering
 
 ## Container Security
 
