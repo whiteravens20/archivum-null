@@ -188,15 +188,29 @@ export function calculateTotalEncryptedSize(
  * Sanitize a filename extracted from an encrypted payload to prevent
  * path-traversal or dangerous names when the browser triggers a download.
  * (The filename never leaves the client, but we sanitize defensively.)
+ *
+ * Also strips Unicode bidi overrides (e.g. U+202E RLO) that can visually
+ * reverse filenames to disguise extensions, and zero-width characters that
+ * can make two different names appear identical.
  */
-function sanitizeFilename(raw: string): string {
+export function sanitizeFilename(raw: string): string {
   return (
     raw
       // Strip path separators
       .replace(/[/\\]/g, '_')
-      // Strip control characters (0x00–0x1F, 0x7F) without control char regex literals
+      // Strip control characters (0x00–0x1F, 0x7F) and Unicode bidi overrides
+      // (U+200E–U+200F, U+202A–U+202E, U+2066–U+2069) plus zero-width
+      // characters (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+FEFF BOM)
       .split('')
-      .filter((c) => { const code = c.charCodeAt(0); return code > 31 && code !== 127; })
+      .filter((c) => {
+        const code = c.charCodeAt(0);
+        if (code <= 31 || code === 127) return false;            // ASCII control
+        if (code >= 0x200B && code <= 0x200F) return false;      // ZWSP, ZWNJ, ZWJ, LRM, RLM
+        if (code >= 0x202A && code <= 0x202E) return false;      // LRE, RLE, PDF, LRO, RLO
+        if (code >= 0x2066 && code <= 0x2069) return false;      // LRI, RLI, FSI, PDI
+        if (code === 0xFEFF) return false;                       // BOM / ZWNBSP
+        return true;
+      })
       .join('')
       // Strip leading dots (hidden files on Unix)
       .replace(/^\.+/, '')

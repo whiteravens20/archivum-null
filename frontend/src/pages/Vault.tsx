@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
-import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes } from '../crypto/encrypt.ts';
+import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes, sanitizeFilename } from '../crypto/encrypt.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
 
 type Stage = 'loading' | 'ready' | 'downloading' | 'decrypting' | 'done' | 'error';
@@ -12,6 +12,7 @@ export default function Vault() {
   const [stage, setStage] = useState<Stage>(() => (vaultId ? 'loading' : 'error'));
   const [error, setError] = useState<string | null>(() => (vaultId ? null : 'No vault ID'));
   const [progress, setProgress] = useState(0);
+  const [decryptedFilename, setDecryptedFilename] = useState<string | null>(null);
 
   // Extract key + optional display filename from URL fragment (never sent to server).
   // Fragment format: #<key43chars>.<base64url(filename)>  — '.' is not a base64url char.
@@ -27,7 +28,7 @@ export default function Vault() {
       const bin = atob(padded);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return new TextDecoder().decode(bytes);
+      return sanitizeFilename(new TextDecoder().decode(bytes));
     } catch {
       return '';
     }
@@ -77,6 +78,7 @@ export default function Vault() {
       // Parse metadata header from first decrypted chunk
       const firstChunk = decryptedParts[0];
       const { filename, mimeType, contentOffset } = parseMetadataHeader(firstChunk);
+      setDecryptedFilename(filename);
 
       // Assemble file: first chunk minus header, then remaining chunks
       const contentParts: BlobPart[] = [firstChunk.slice(contentOffset) as BlobPart];
@@ -179,6 +181,28 @@ export default function Vault() {
               <span className="text-sm text-gray-300">{formatDuration(timeRemaining)}</span>
             </div>
           </div>
+
+          {/* Sender trust warning */}
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs text-yellow-400/90 space-y-1">
+            <p className="font-medium">⚠ Security notice</p>
+            <ul className="list-disc list-inside space-y-0.5 text-yellow-400/70">
+              <li>The file name and type are set by the sender and cannot be verified by the server.</li>
+              <li>Do not open files from untrusted senders. Scan downloaded files with antivirus software before opening.</li>
+              <li>Be cautious of misleading file extensions (e.g. <span className="font-mono">.pdf.exe</span>).</li>
+            </ul>
+          </div>
+
+          {/* Filename mismatch warning */}
+          {decryptedFilename && fragmentFilename && decryptedFilename !== fragmentFilename && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-xs text-red-400 space-y-1">
+              <p className="font-medium">⚠ Filename mismatch detected</p>
+              <p>
+                The link indicated <span className="font-mono">&quot;{fragmentFilename}&quot;</span> but
+                the decrypted file is actually <span className="font-mono">&quot;{decryptedFilename}&quot;</span>.
+                The link may have been tampered with.
+              </p>
+            </div>
+          )}
 
           {/* Key warning */}
           {!keyFragment && (
