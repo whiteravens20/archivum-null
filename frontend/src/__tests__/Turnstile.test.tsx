@@ -84,4 +84,64 @@ describe('Turnstile', () => {
 
     vi.useRealTimers();
   });
+
+  it('should pass onError callback to turnstile.render', async () => {
+    vi.useFakeTimers();
+
+    const renderFn = vi.fn().mockReturnValue('widget-2');
+    const onError = vi.fn();
+
+    render(
+      <Turnstile siteKey="0xABC123" onVerify={vi.fn()} onError={onError} />
+    );
+
+    window.turnstile = {
+      render: renderFn,
+      remove: vi.fn(),
+      reset: vi.fn(),
+    };
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(renderFn).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        'error-callback': onError,
+      })
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('should pass onExpire callback to turnstile.render', async () => {
+    vi.useFakeTimers();
+
+    const renderFn = vi.fn().mockReturnValue('widget-3');
+    const onExpire = vi.fn();
+
+    render(
+      <Turnstile siteKey="0xABC123" onVerify={vi.fn()} onExpire={onExpire} />
+    );
+
+    window.turnstile = {
+      render: renderFn,
+      remove: vi.fn(),
+      reset: vi.fn(),
+    };
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(renderFn).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        'expired-callback': onExpire,
+      })
+    );
+
+    vi.useRealTimers();
+  });
 });
