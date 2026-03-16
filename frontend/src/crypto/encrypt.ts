@@ -70,8 +70,9 @@ export async function importKey(base64url: string): Promise<CryptoKey> {
 export function buildMetadataHeader(filename: string, mimeType: string): Uint8Array {
   const encoder = new TextEncoder();
   const rawName = filename || 'file';
-  const nameBytes = encoder.encode(rawName.slice(0, MAX_NAME_BYTES));
-  const mimeBytes = encoder.encode((mimeType || 'application/octet-stream').slice(0, MAX_MIME_BYTES));
+  // Encode first, then truncate by bytes (not characters) to respect MAX_*_BYTES limits
+  const nameBytes = encoder.encode(rawName).slice(0, MAX_NAME_BYTES);
+  const mimeBytes = encoder.encode(mimeType || 'application/octet-stream').slice(0, MAX_MIME_BYTES);
 
   const header = new Uint8Array(2 + nameBytes.length + 2 + mimeBytes.length);
   const view = new DataView(header.buffer);
