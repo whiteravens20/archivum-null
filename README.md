@@ -367,6 +367,8 @@ To enable:
 
 When secrets are default/missing, Turnstile verification is skipped.
 
+When Turnstile is enabled, the frontend enforces a **10-second CAPTCHA timeout** — if the widget does not verify within 10 seconds of file selection, the user is shown an error and must reload.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for the full security checklist.
@@ -378,6 +380,8 @@ See [SECURITY.md](SECURITY.md) for the full security checklist.
 - **Ephemeral:** Vaults auto-delete after TTL or download limit
 - **No persistent IP logs:** Rate limiter uses in-memory only
 - **Authenticated encryption:** AES-256-GCM provides confidentiality + integrity
+- **Filename sanitization:** Client strips path traversal sequences, control characters, bidirectional overrides, and zero-width Unicode trickery from filenames before use
+- **Filename mismatch detection:** On download, the decrypted filename is compared to the one encoded in the URL fragment — a mismatch triggers a tamper warning
 
 ### What the Server Knows vs. Cannot Know
 
@@ -400,6 +404,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 | Legal demand / server seizure | Only ciphertext + metadata available; operator cannot decrypt |
 | Enumeration / brute-force | Vault IDs are 21-character nanoid (128+ bits of entropy) |
 | Abuse / spam | Turnstile CAPTCHA + 3-tier rate limiting per IP |
+| Filename spoofing / path traversal | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link |
 | Large file DoS | Streaming size enforcement — no full file held in memory |
 | Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
 | Compromised container initiating outbound LAN/WAN connections | Docker `internal` network or host FORWARD egress rules block container-to-LAN and container-to-internet traffic; see [Egress Containment](docs/HARDENING.md#egress-containment) |
