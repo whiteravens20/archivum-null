@@ -237,4 +237,30 @@ describe('VaultManager — download counter atomicity', () => {
       manager.appendChunk('nonexistent-session-id', 0, makeStream('data'))
     ).rejects.toThrow(/not found/);
   });
+
+  // ------------------------------------------------------------------
+  // Orphan cleanup on startup
+  // ------------------------------------------------------------------
+
+  it('deletes orphaned vault directories with missing meta.json on init', async () => {
+    // Create a vault directory with data.enc but NO meta.json
+    // (simulates a crash between writeFile and writeMetadata)
+    const orphanId = 'orphan-no-meta-1234';
+    const orphanDir = path.join(tempDir, orphanId);
+    await fsp.mkdir(orphanDir, { recursive: true });
+    await fsp.writeFile(path.join(orphanDir, 'data.enc'), 'leftover-data');
+
+    // Re-init the manager — restoreMetadata should clean the orphan
+    await manager.shutdown();
+    vi.resetModules();
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    manager = new mod.VaultManager();
+    await manager.init();
+
+    // The orphan directory should have been removed
+    await expect(fsp.access(orphanDir)).rejects.toThrow();
+  });
 });
