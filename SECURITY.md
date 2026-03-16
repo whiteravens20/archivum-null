@@ -32,15 +32,19 @@
 
 - [x] Cloudflare Turnstile integration (optional)
 - [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
+- [x] Turnstile API call has a 10-second timeout (`AbortSignal.timeout`) — prevents hung workers on Cloudflare degradation; returns HTTP 504 on timeout
 - [x] Three-tier in-memory per-IP rate limiting:
   - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
   - Upload tier: `POST /api/vault` (default 10 req/window) — stricter
   - Download tier: `GET /api/vault/:id/download` (default 30 req/window) — prevents bulk download exhaustion
 - [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
+- [x] `TRUST_PROXY` validated at startup: must be 0–10 (prevents misconfiguration that would allow unlimited-hop IP spoofing)
 - [x] Max file size enforcement (413 response)
 - [x] CAPTCHA timeout — frontend enforces a 10-second verification deadline; if the widget does not respond, upload is blocked and the user must reload
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
+- [x] Chunked upload sessions protected by HMAC-SHA256 session token — returned at `POST /api/vault/upload/init`, required on all subsequent `/chunk`, `/complete`, and abort requests (`x-session-token` header); token is signed server-side with a per-process random key and verified in constant time
+- [x] Storage quota enforced atomically — `reservedBytes` counter tracks in-progress chunked upload sessions; quota check uses `totalStorageBytes + reservedBytes` to prevent TOCTOU races where concurrent uploads could collectively exceed `MAX_TOTAL_STORAGE`
 
 ## Client-Side Defenses
 
@@ -75,7 +79,7 @@
 ## Admin Panel
 
 - [x] HTTP Basic Auth (env-based, no DB)
-- [x] Timing-safe credential comparison
+- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct
 - [x] No encryption key exposure
 - [x] No plaintext exposure
 - [x] No uploader identity exposure
