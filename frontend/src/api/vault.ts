@@ -27,6 +27,7 @@ interface ChunkInitResponse {
   uploadId: string;
   chunkSize: number;
   expiresAt: number;
+  sessionToken: string;
 }
 
 // ── Virtual plaintext stream ────────────────────────────────────────────────
@@ -164,10 +165,10 @@ export async function downloadVault(vaultId: string): Promise<Blob> {
 // complete protocol.
 
 /** Ask the server to abort a chunked upload session and delete partial data. */
-async function abortUploadSession(uploadId: string): Promise<void> {
+async function abortUploadSession(uploadId: string, sessionToken: string): Promise<void> {
   await fetch(
     `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', headers: { 'x-session-token': sessionToken } },
   );
 }
 
@@ -206,7 +207,7 @@ export async function uploadVaultChunked(
     throw new Error(err.error || `Upload init failed (${initRes.status})`);
   }
 
-  const { uploadId, chunkSize: httpChunkSize } = (await initRes.json()) as ChunkInitResponse;
+  const { uploadId, chunkSize: httpChunkSize, sessionToken } = (await initRes.json()) as ChunkInitResponse;
 
   // 2. Encrypt + upload crypto chunks grouped into HTTP chunks
   const encryptedChunkSize = chunkPlaintextSize + PER_CHUNK_OVERHEAD;
@@ -234,7 +235,7 @@ export async function uploadVaultChunked(
 
       const chunkRes = await fetch(
         `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`,
-        { method: 'POST', body: form, signal },
+        { method: 'POST', body: form, signal, headers: { 'x-session-token': sessionToken } },
       );
 
       if (!chunkRes.ok) {
@@ -248,14 +249,14 @@ export async function uploadVaultChunked(
     }
   } catch (err) {
     // On any failure (including abort), tell the server to clean up partial data
-    await abortUploadSession(uploadId).catch(() => {});
+    await abortUploadSession(uploadId, sessionToken).catch(() => {});
     throw err;
   }
 
   // 3. Complete
   const completeRes = await fetch(
     `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/complete`,
-    { method: 'POST', signal },
+    { method: 'POST', signal, headers: { 'x-session-token': sessionToken } },
   );
 
   if (!completeRes.ok) {

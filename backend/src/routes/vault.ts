@@ -130,10 +130,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize);
+      const sessionToken = vaultManager.signUploadSession(session.uploadId);
       return reply.status(201).send({
         uploadId: session.uploadId,
         chunkSize: config.CHUNK_SIZE,
         expiresAt: session.expiresAt,
+        sessionToken,
       });
     } catch (err: unknown) {
       const error = err as Error & { statusCode?: number };
@@ -151,6 +153,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     bodyLimit: config.CHUNK_SIZE + 1024 * 64, // chunk + multipart overhead
   }, async (request, reply) => {
     const { uploadId } = request.params;
+
+    // Verify session HMAC token
+    const sessionToken = request.headers['x-session-token'] as string;
+    if (!sessionToken || !vaultManager.verifyUploadSession(uploadId, sessionToken)) {
+      return reply.status(403).send({ error: 'Invalid or missing session token' });
+    }
 
     const data = await request.file();
     if (!data) {
@@ -181,6 +189,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/complete', async (request, reply) => {
     const { uploadId } = request.params;
 
+    // Verify session HMAC token
+    const sessionToken = request.headers['x-session-token'] as string;
+    if (!sessionToken || !vaultManager.verifyUploadSession(uploadId, sessionToken)) {
+      return reply.status(403).send({ error: 'Invalid or missing session token' });
+    }
+
     try {
       const meta = await vaultManager.completeChunkedUpload(uploadId);
       return reply.status(201).send({
@@ -198,6 +212,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   // 4. Abort — cancel a chunked upload and delete partial data
   app.delete<{ Params: UploadParams }>('/api/vault/upload/:uploadId', async (request, reply) => {
     const { uploadId } = request.params;
+
+    // Verify session HMAC token
+    const sessionToken = request.headers['x-session-token'] as string;
+    if (!sessionToken || !vaultManager.verifyUploadSession(uploadId, sessionToken)) {
+      return reply.status(403).send({ error: 'Invalid or missing session token' });
+    }
 
     await vaultManager.abortChunkedUpload(uploadId);
     return reply.status(204).send();
