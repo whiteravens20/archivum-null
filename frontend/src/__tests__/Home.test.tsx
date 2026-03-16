@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // Mock heavy dependencies so Home renders without them
@@ -13,6 +13,10 @@ vi.mock('../crypto/encrypt.js', () => ({
 vi.mock('../api/vault.js', () => ({
   uploadVault: vi.fn(),
   uploadVaultChunked: vi.fn(),
+}));
+
+vi.mock('../components/Turnstile.js', () => ({
+  default: () => null,
 }));
 
 const mockConfig = {
@@ -85,5 +89,67 @@ describe('Home', () => {
     );
     expect(screen.getByText('How it works')).toBeInTheDocument();
     expect(screen.getByText(/AES-256-GCM/)).toBeInTheDocument();
+  });
+
+  describe('CAPTCHA timeout', () => {
+    const enabledConfig = { ...mockConfig, turnstileEnabled: true, turnstileSiteKey: '0xABC123' };
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        json: () => Promise.resolve(enabledConfig),
+      }));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should show timeout error after 10s when CAPTCHA is not verified', async () => {
+      const { default: Home } = await import('../pages/Home.js');
+      const { container } = render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/drop file or click to select/i)).toBeInTheDocument();
+      });
+
+      const fileInput = container.querySelector('input[type="file"]')!;
+      await act(async () => {
+        fireEvent.change(fileInput, { target: { files: [new File(['x'], 'test.txt')] } });
+      });
+
+      expect(screen.getByText('Waiting for CAPTCHA...')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(screen.getByText(/CAPTCHA verification timed out/)).toBeInTheDocument();
+    });
+
+    it('should disable upload button while waiting for CAPTCHA', async () => {
+      const { default: Home } = await import('../pages/Home.js');
+      const { container } = render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/drop file or click to select/i)).toBeInTheDocument();
+      });
+
+      const fileInput = container.querySelector('input[type="file"]')!;
+      await act(async () => {
+        fireEvent.change(fileInput, { target: { files: [new File(['x'], 'test.txt')] } });
+      });
+
+      const button = screen.getByRole('button', { name: /Waiting for CAPTCHA/i });
+      expect(button).toBeDisabled();
+    });
   });
 });
