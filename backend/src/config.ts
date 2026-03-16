@@ -101,6 +101,9 @@ export function validateConfig(): void {
   if (config.CHUNK_SIZE > config.MAX_FILE_SIZE) {
     throw new Error('CHUNK_SIZE must not exceed MAX_FILE_SIZE');
   }
+  if (!isFinite(config.TRUST_PROXY) || config.TRUST_PROXY < 0 || config.TRUST_PROXY > 10) {
+    throw new Error('TRUST_PROXY must be between 0 and 10');
+  }
   // Soft warnings for rate limit tiers that will never trigger independently
   // because the general API limit (applied to ALL /api/ routes) is lower.
   if (config.RATE_LIMIT_MAX > config.RATE_LIMIT_API_MAX) {
