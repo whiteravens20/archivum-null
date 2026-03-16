@@ -157,6 +157,16 @@ describe('LocalStorage', () => {
       const list = await storage.listVaults();
       expect(list).toEqual([]);
     });
+
+    it('should include vaults whose ID starts with underscore', async () => {
+      await storage.writeFile('_abc123', createTestStream('data'));
+      await storage.writeFile('normal-id', createTestStream('data'));
+
+      const list = await storage.listVaults();
+      expect(list).toContain('_abc123');
+      expect(list).toContain('normal-id');
+      expect(list).not.toContain('_uploads');
+    });
   });
 
   describe('path traversal protection', () => {
