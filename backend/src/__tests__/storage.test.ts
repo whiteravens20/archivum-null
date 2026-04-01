@@ -99,10 +99,9 @@ describe('LocalStorage', () => {
       expect(stream).toBeNull();
     });
 
-    it('should return false for already-deleted vault', async () => {
-      // Force: true means it won't throw, returns true even if non-existent
+    it('should return true for non-existent vault (rm force: true)', async () => {
       const deleted = await storage.deleteVault('already-gone');
-      // rm with force: true doesn't throw, so it returns true
+      // rm with force: true doesn't throw, so deleteVault always returns true
       expect(deleted).toBe(true);
     });
   });
