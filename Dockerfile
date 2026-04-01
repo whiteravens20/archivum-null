@@ -4,7 +4,7 @@
 # Stage 1: Build backend
 FROM node:24-alpine AS backend-build
 WORKDIR /app/backend
-COPY backend/package.json backend/package-lock.json* ./
+COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
 RUN npm ci --ignore-scripts
 COPY backend/ ./
 RUN npm run build
@@ -34,7 +34,7 @@ RUN addgroup -g 1001 -S archivum && \
 WORKDIR /app
 
 # Install production dependencies only
-COPY backend/package.json backend/package-lock.json* ./backend/
+COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./backend/
 RUN cd backend && npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Copy built backend

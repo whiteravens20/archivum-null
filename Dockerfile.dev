@@ -11,8 +11,8 @@ RUN npm install -g npm@11.11.1
 WORKDIR /app
 
 # Install backend dependencies
-COPY backend/package.json backend/package-lock.json* ./backend/
-RUN cd backend && npm install
+COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./backend/
+RUN cd backend && npm install --ignore-scripts
 
 # Copy backend source (will be overridden by volume mount in dev)
 COPY backend/ ./backend/
