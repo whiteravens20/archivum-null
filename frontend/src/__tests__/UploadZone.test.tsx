@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import UploadZone from '../components/UploadZone.js';
 
@@ -26,7 +26,6 @@ describe('UploadZone', () => {
   });
 
   it('should show error for empty file', () => {
-    render(<UploadZone {...defaultProps} />);
     const { container } = render(<UploadZone {...defaultProps} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 
