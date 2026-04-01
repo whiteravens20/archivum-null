@@ -40,9 +40,6 @@ updates:
       - backend
     commit-message:
       prefix: "chore(backend)"
-    # Prevent Dependabot from executing lifecycle scripts (postinstall etc.)
-    # during dependency resolution — mirrors ignore-scripts=true in .npmrc.
-    insecure-external-code-execution: deny
     # Group all non-breaking updates into a single PR to reduce noise.
     # Security updates are always opened as separate PRs regardless.
     groups:
@@ -65,9 +62,6 @@ updates:
       - frontend
     commit-message:
       prefix: "chore(frontend)"
-    # Prevent Dependabot from executing lifecycle scripts (postinstall etc.)
-    # during dependency resolution — mirrors ignore-scripts=true in .npmrc.
-    insecure-external-code-execution: deny
     groups:
       frontend-non-breaking:
         update-types:
