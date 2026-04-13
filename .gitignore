@@ -10,3 +10,4 @@ data/
 *.swo
 coverage/
 .turbo/
+.github/CICD.md
