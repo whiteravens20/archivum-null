@@ -24,8 +24,8 @@ FROM node:24-alpine AS production
 RUN apk upgrade --no-cache
 
 # Update npm to get patched minimatch + tar (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-# npm@11.11.1 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
-RUN npm install -g npm@11.11.1
+# npm@11.12.1 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
+RUN npm install -g npm@11.12.1
 
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
