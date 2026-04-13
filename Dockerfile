@@ -20,7 +20,9 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:24-alpine AS production
 
-# Upgrade all Alpine packages to latest patched versions (catches zlib CVE-2026-22184 and any future OS-level CVEs)
+# Bust Docker layer cache for apk upgrade so CI always pulls the latest security patches.
+# In CI, CACHE_BUST_APK is set to github.run_id so the layer is never stale.
+ARG CACHE_BUST_APK=""
 RUN apk upgrade --no-cache
 
 # Update npm to get patched minimatch + tar (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)

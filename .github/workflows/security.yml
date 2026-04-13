@@ -66,6 +66,7 @@ jobs:
           format: sarif
           output: trivy-fs.sarif
           trivyignores: .trivyignore
+          limit-severities-for-sarif: true
           exit-code: '1'  # Fail the build on HIGH/CRITICAL vulnerabilities
 
       - name: Upload Trivy SARIF
@@ -97,6 +98,7 @@ jobs:
           format: sarif
           output: trivy-docker.sarif
           trivyignores: .trivyignore
+          limit-severities-for-sarif: true
           exit-code: '1'  # Fail the build on HIGH/CRITICAL vulnerabilities
 
       - name: Upload Trivy SARIF

@@ -89,6 +89,7 @@ jobs:
           # VITE_ vars are public build-time constants. Fallback defaults are used
           # when repository variables are not configured.
           build-args: |
+            CACHE_BUST_APK=${{ github.run_id }}
             VITE_MAX_FILE_SIZE=${{ vars.VITE_MAX_FILE_SIZE || '104857600' }}
             VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
             VITE_DEFAULT_TTL=${{ vars.VITE_DEFAULT_TTL || '86400' }}
@@ -166,6 +167,7 @@ jobs:
           image-ref: ${{ needs.build-push.outputs.image-ref }}
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore
+          limit-severities-for-sarif: true
           # dev push → 0 (warn only, do not block dev iteration)
           # main push → 1 (blocking — last bastion before a production release tag)
           exit-code: ${{ github.ref_name == 'main' && '1' || '0' }}
@@ -180,6 +182,7 @@ jobs:
           input: /tmp/image.tar
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore
+          limit-severities-for-sarif: true
           # PRs always block — contributor must fix or suppress before merge
           exit-code: '1'
           format: sarif
