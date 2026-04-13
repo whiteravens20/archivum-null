@@ -200,7 +200,7 @@ jobs:
           echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # Auto-generate body from GitHub's release notes API:
           # groups PRs by label, lists commits, credits contributors.
