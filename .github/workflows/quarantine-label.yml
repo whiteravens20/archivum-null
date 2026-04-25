@@ -98,11 +98,9 @@ jobs:
           EXISTING=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[].body' | grep -c "min-release-age quarantine" || true)
           if [ "$EXISTING" -eq 0 ]; then
             gh pr comment "$PR_NUMBER" --body "🔒 **min-release-age quarantine**
-
-The following packages do not yet meet the 7-day release-age policy:
-${DETAILS}
-
-This label will be automatically removed once all packages pass quarantine. Re-checked daily at 06:00 UTC."
+            The following packages do not yet meet the 7-day release-age policy:
+            ${DETAILS}
+            This label will be automatically removed once all packages pass quarantine. Re-checked daily at 06:00 UTC."
           fi
 
       - name: Remove quarantine label
