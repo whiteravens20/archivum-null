@@ -108,6 +108,17 @@ export default function Home() {
     setTurnstileToken(undefined);
   }, []);
 
+  const handleReset = () => {
+    setFile(null);
+    setStage('idle');
+    setProgress(0);
+    setVaultUrl(null);
+    setError(null);
+    setCaptchaVerified(false);
+    setCaptchaError(null);
+    setTurnstileToken(undefined);
+  };
+
   const handleUpload = useCallback(async () => {
     if (!file) return;
     if (file.size > runtimeConfig.maxFileSize) {
@@ -177,17 +188,6 @@ export default function Home() {
       abortRef.current = null;
     }
   }, [file, ttl, maxDownloads, turnstileToken, runtimeConfig]);
-
-  const handleReset = () => {
-    setFile(null);
-    setStage('idle');
-    setProgress(0);
-    setVaultUrl(null);
-    setError(null);
-    setCaptchaVerified(false);
-    setCaptchaError(null);
-    setTurnstileToken(undefined);
-  };
 
   const handleCancel = () => {
     abortRef.current?.abort(new DOMException('Upload cancelled', 'AbortError'));
