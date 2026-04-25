@@ -26,8 +26,8 @@ ARG CACHE_BUST_APK=""
 RUN apk upgrade --no-cache
 
 # Update npm to get patched minimatch + tar (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-# npm@11.12.1 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
-RUN npm install -g npm@11.12.1
+# npm@11.13.0 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
+RUN npm install -g npm@11.13.0
 
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
