@@ -36,7 +36,7 @@ export default function Admin() {
     [auth]
   );
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (): Promise<boolean> => {
     try {
       const [statsRes, vaultsRes] = await Promise.all([
         fetch('/api/admin/stats', { headers: authHeader() }),
@@ -44,20 +44,19 @@ export default function Admin() {
       ]);
 
       if (statsRes.status === 401 || vaultsRes.status === 401) {
-        setAuthenticated(false);
         setError('Authentication failed');
-        return;
+        return false;
       }
 
       if (statsRes.status === 403) {
         setError('Admin panel is disabled. Set ADMIN_PASSWORD in environment.');
-        return;
+        return true;
       }
 
       if (!statsRes.ok || !vaultsRes.ok) {
         const status = !statsRes.ok ? statsRes.status : vaultsRes.status;
         setError(`Backend unavailable (${status}). Is the backend container running?`);
-        return;
+        return true;
       }
 
       setStats(await statsRes.json());
@@ -68,6 +67,7 @@ export default function Admin() {
     } finally {
       setLoading(false);
     }
+    return true;
   }, [authHeader]);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -79,8 +79,12 @@ export default function Admin() {
 
   useEffect(() => {
     if (!authenticated) return;
-    fetchData();
-    const interval = setInterval(fetchData, 10_000);
+    const poll = async () => {
+      const ok = await fetchData();
+      if (!ok) setAuthenticated(false);
+    };
+    void poll();
+    const interval = setInterval(() => { void poll(); }, 10_000);
     return () => clearInterval(interval);
   }, [authenticated, fetchData]);
 
