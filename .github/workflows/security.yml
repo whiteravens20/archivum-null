@@ -23,13 +23,42 @@ jobs:
         with:
           node-version: 24
 
-      - name: Audit backend
+      # Production deps get a tighter bar (moderate) — these ship to users.
+      # Dev deps stay at high to keep noise manageable.
+      - name: Audit backend (production, moderate)
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Audit backend (dev, high)
         working-directory: backend
         run: npm audit --audit-level=high
 
-      - name: Audit frontend
+      - name: Audit frontend (production, moderate)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Audit frontend (dev, high)
         working-directory: frontend
         run: npm audit --audit-level=high
+
+      # Verify every installed tarball has a valid registry signature.
+      # Catches forged tarballs / tampered registry metadata at install time.
+      # Requires a fresh install since `audit signatures` reads node_modules.
+      - name: Install backend (for signature audit)
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: Verify backend signatures
+        working-directory: backend
+        run: npm audit signatures
+
+      - name: Install frontend (for signature audit)
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Verify frontend signatures
+        working-directory: frontend
+        run: npm audit signatures
 
   dependency-review:
     name: Dependency review

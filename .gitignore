@@ -11,3 +11,5 @@ data/
 coverage/
 .turbo/
 .github/CICD.md
+.claude/settings.local.json
+.claude/*.local.*
