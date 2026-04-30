@@ -256,7 +256,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Scan for HIGH/CRITICAL CVEs
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           # Use the immutable digest — never a mutable tag — for reproducibility
