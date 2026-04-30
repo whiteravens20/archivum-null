@@ -39,9 +39,18 @@ jobs:
 
           BLOCKED_PKGS=""
 
-          # Extract changed packages from backend and frontend package.json files
-          PACKAGES=$(gh pr diff "$PR_NUMBER" -- backend/package.json frontend/package.json 2>/dev/null \
-            | grep '^+' | grep -oP '"[^@][^"]+": "\d[^"]*"' \
+          # Extract changed packages from backend and frontend package.json files.
+          # gh pr diff doesn't support -- file filtering, so use awk to isolate
+          # only added lines from the relevant sections of the diff.
+          # The @? in the regex handles scoped packages like @tailwindcss/vite.
+          PACKAGES=$(gh pr diff "$PR_NUMBER" 2>/dev/null \
+            | awk '
+                /^\+\+\+ b\/(backend|frontend)\/package\.json/ { in_file=1; next }
+                /^\+\+\+/ { in_file=0 }
+                in_file && /^\+/ && !/^\+\+\+/ { print }
+              ' \
+            | grep -oP '"@?[^"]+": "\d[^"]*"' \
+            | grep -vP '"(version|name|description|main|module|license|author|repository)":' \
             | sed 's/": "/|/; s/"//g' || true)
 
           if [ -z "$PACKAGES" ]; then
@@ -155,8 +164,14 @@ jobs:
             echo "--- Checking PR #${PR_NUMBER} ---"
             STILL_BLOCKED=false
 
-            PACKAGES=$(gh pr diff "$PR_NUMBER" -- backend/package.json frontend/package.json 2>/dev/null \
-              | grep '^+' | grep -oP '"[^@][^"]+": "\d[^"]*"' \
+            PACKAGES=$(gh pr diff "$PR_NUMBER" 2>/dev/null \
+              | awk '
+                  /^\+\+\+ b\/(backend|frontend)\/package\.json/ { in_file=1; next }
+                  /^\+\+\+/ { in_file=0 }
+                  in_file && /^\+/ && !/^\+\+\+/ { print }
+                ' \
+              | grep -oP '"@?[^"]+": "\d[^"]*"' \
+              | grep -vP '"(version|name|description|main|module|license|author|repository)":' \
               | sed 's/": "/|/; s/"//g' || true)
 
             if [ -z "$PACKAGES" ]; then
