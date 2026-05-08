@@ -31,10 +31,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          PROT=$(gh api "repos/${REPO}/branches/main/protection" 2>/dev/null || echo '{}')
+          PROT=$(gh api "repos/${REPO}/branches/main/protection" 2>/dev/null) || PROT='{}'
 
-          if [ "$PROT" = "{}" ]; then
-            echo "::error::Could not fetch branch protection. Ensure BRANCH_PROTECTION_READ_TOKEN is set with 'Administration: read'."
+          if [ "$PROT" = "{}" ] || [ -z "$PROT" ] || ! echo "$PROT" | jq -e 'has("enforce_admins")' >/dev/null 2>&1; then
+            echo "::error::Could not fetch branch protection. Ensure the workflow has 'administration: read' permission or set BRANCH_PROTECTION_READ_TOKEN with 'Administration: read'."
             exit 1
           fi
 
@@ -59,7 +59,7 @@ jobs:
           # Required: stale review dismissal on new push
           assert "dismiss stale reviews"                '.required_pull_request_reviews.dismiss_stale_reviews // false'
           # Required: at least one approving review
-          REVIEWERS=$(echo "$PROT" | jq -r '.required_pull_request_reviews.required_approving_review_count // 0')
+          REVIEWERS=$(echo "$PROT" | jq -r '.required_pull_request_reviews.required_approving_review_count // 0' | head -n 1)
           if [ "$REVIEWERS" -lt 1 ]; then
             echo "::error::required_approving_review_count is ${REVIEWERS}, expected >= 1"
             fail=1

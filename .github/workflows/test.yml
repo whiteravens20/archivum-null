@@ -40,14 +40,6 @@ jobs:
             gh pr edit ${{ github.event.pull_request.number }} --add-label "min-release-age"
           fi
 
-      - name: Remove quarantine label
-        if: success() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          gh pr edit ${{ github.event.pull_request.number }} --remove-label "min-release-age" 2>/dev/null || true
-
       - name: Lint
         run: npm run lint
 
@@ -92,14 +84,6 @@ jobs:
           if npm ci --ignore-scripts --dry-run 2>&1 | grep -qiE "min-release-age|ERESOLVE|could not resolve"; then
             gh pr edit ${{ github.event.pull_request.number }} --add-label "min-release-age"
           fi
-
-      - name: Remove quarantine label
-        if: success() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          gh pr edit ${{ github.event.pull_request.number }} --remove-label "min-release-age" 2>/dev/null || true
 
       - name: Lint
         run: npm run lint
