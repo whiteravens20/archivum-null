@@ -4,11 +4,7 @@
 
 # Archivum Null
 
-**Zero trust file relay**
-
-Anonymous, zero-knowledge encrypted file sharing with expiring vaults.
-
-No accounts. No cookies. No tracking.
+> Anonymous encrypted file sharing for privacy-first users — zero-knowledge, no accounts, self-hostable.
 
 <br />
 
@@ -29,6 +25,8 @@ No accounts. No cookies. No tracking.
 
 </div>
 
+![Archivum Null — anonymous encrypted file sharing with zero-knowledge vaults](docs/img/hero-screenshot.png)
+
 ---
 
 > [!NOTE]
@@ -43,6 +41,22 @@ No accounts. No cookies. No tracking.
 > - **AI does not write the threat model.** See the *Threat Model Limitations* section below — those are our honest assessments, not AI boilerplate.
 >
 > If you find a slop pattern, a logical bug, or a security issue, please open an issue or see [SECURITY.md](SECURITY.md).
+
+---
+
+## Quick Start
+
+Try Archivum Null locally in one command (requires Docker):
+
+```bash
+git clone https://github.com/whiteravens20/archivum-null.git
+cd archivum-null
+docker compose -f docker-compose.quickstart.yml up -d
+```
+
+Then open **http://127.0.0.1:3000** in your browser.
+
+> ⚠️  This uses a default admin password (`quickstart-change-me`). Change it before any real use — see [Production](#production) for the full hardening checklist.
 
 ---
 
