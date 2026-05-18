@@ -1,16 +1,2 @@
 # Trivy vulnerability suppressions
 # Each entry must include a justification.
-
-# ── npm bundled dependencies (not fixable until npm upstream releases a patch) ──
-# These CVEs affect picomatch and brace-expansion bundled inside npm itself
-# (usr/local/lib/node_modules/npm/node_modules/...), NOT our project dependencies.
-# Our project deps were already patched via Dependabot PRs #32-#34.
-# No version of npm (up to 11.13.0) ships fixed versions of these transitive deps.
-# Re-evaluate when npm >11.12.1 is released.
-
-# picomatch <4.0.4 — ReDoS via crafted glob patterns
-CVE-2026-33671
-CVE-2026-33672
-
-# brace-expansion <5.0.5 — ReDoS via crafted brace patterns
-CVE-2026-33750
