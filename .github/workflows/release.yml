@@ -266,6 +266,10 @@ jobs:
           exit-code: '1'
           format: sarif
           output: trivy-release.sarif
+          # Without this, trivy-action expands severity to ALL when format=sarif
+          # (so the SARIF upload covers every finding) — which then makes
+          # exit-code:1 trip on MEDIUM/LOW too. Mirrors security.yml.
+          limit-severities-for-sarif: true
 
       - name: Upload SARIF to Security tab
         uses: github/codeql-action/upload-sarif@v4
