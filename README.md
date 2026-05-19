@@ -4,7 +4,7 @@
 
 # Archivum Null
 
-> Anonymous encrypted file sharing for privacy-first users — zero-knowledge, no accounts, self-hostable.
+Anonymous encrypted file sharing for privacy-first users — zero-knowledge, no accounts, self-hostable.
 
 <br />
 
