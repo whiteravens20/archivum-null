@@ -1,0 +1,48 @@
+# ── Archivum Null — Quick Start Docker Compose ──
+# Zero-config, single-command spin-up for trying Archivum Null locally.
+# NOT for production — no tunnel, no reverse proxy, no TLS.
+# For production hardening see README → Production and docs/HARDENING.md.
+#
+# Usage:
+#   docker compose -f docker-compose.quickstart.yml up -d
+#
+# Then open http://127.0.0.1:3000 in your browser.
+
+services:
+  archivum-null:
+    image: ghcr.io/whiteravens20/archivum-null:${IMAGE_TAG:-main}
+    container_name: archivum-null-quickstart
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    volumes:
+      - vault-data-quickstart:/data/vaults
+
+    environment:
+      - NODE_ENV=production
+      - BIND_ADDRESS=0.0.0.0
+      - PORT=3000
+      - ADMIN_PASSWORD=quickstart-change-me
+      - HOST_BIND_ADDRESS=127.0.0.1
+      - MAX_FILE_SIZE=104857600
+      - CHUNK_SIZE=10485760
+      - DEFAULT_TTL=86400
+      - MAX_TTL=604800
+      - DEFAULT_MAX_DOWNLOADS=10
+      - RATE_LIMIT_WINDOW=60
+      - RATE_LIMIT_MAX=10
+      - RATE_LIMIT_API_MAX=120
+      - RATE_LIMIT_DOWNLOAD_MAX=30
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  vault-data-quickstart:
+    driver: local
