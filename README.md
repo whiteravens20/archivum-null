@@ -27,26 +27,15 @@
 
 ![Archivum Null — anonymous encrypted file sharing with zero-knowledge vaults](docs/img/hero-screenshot.png)
 
----
-
-> [!NOTE]
-> **This project was developed with AI assistance.**
->
-> AI-generated code can contain subtle bugs, insecure patterns, or plausible-looking nonsense ("AI slop"). Here is what we do to keep the bar high — and what you should check when auditing:
->
-> - **Tests are mandatory.** Every module has unit tests. `npm test` must pass with 0 failures across backend and frontend before any commit lands.
-> - **ESLint enforces standards.** Both projects run `eslint --max-warnings 0`. No warnings are silently ignored.
-> - **Architecture decisions are human-driven.** Crypto primitives (AES-256-GCM, key in URL fragment, no plaintext on server) were specified explicitly — not delegated to AI defaults.
-> - **Security-critical code is read line by line.** `crypto/encrypt.ts`, `basicAuth.ts`, `storage/local.ts` (path traversal guard), and vault expiry logic were reviewed manually after generation.
-> - **AI does not write the threat model.** See the *Threat Model Limitations* section below — those are our honest assessments, not AI boilerplate.
->
-> If you find a slop pattern, a logical bug, or a security issue, please open an issue or see [SECURITY.md](SECURITY.md).
+**Why this exists:** Firefox Send is gone, croc and Magic Wormhole need a CLI on both ends, and most "secure" web uploaders ask you to sign in. Archivum Null is browser-only, account-free, end-to-end encrypted in the page, and self-hostable on a $5 VPS or a homelab box.
 
 ---
 
-## Quick Start
+## Try It Now
 
-Try Archivum Null locally in one command (requires Docker):
+**Working demo:** [archivum.wrservices.link](https://archivum.wrservices.link) — share a file in seconds, no install, no signup. The demo runs the same image you'd self-host; uploads expire automatically.
+
+Or spin it up locally in one command — requires only Docker:
 
 ```bash
 git clone https://github.com/whiteravens20/archivum-null.git
@@ -62,7 +51,11 @@ Then open **http://127.0.0.1:3000** in your browser.
 
 ## Prerequisites
 
-**You can run this project with Node.js only — no Docker, no VPS, no tunnel required.**
+There are two supported paths:
+
+1. **Docker demo** above — fastest way to see it run.
+2. **Local Node.js dev** — clone the repo and run backend + frontend with `npm run dev`. No Docker required.
+
 The table below lists the only hard requirement and optional conveniences.
 
 ### Required (always)
@@ -127,9 +120,7 @@ The table below lists the only hard requirement and optional conveniences.
 └──────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
-
-### Development
+## Development Setup
 
 ```bash
 # Clone
@@ -160,7 +151,9 @@ docker compose -f docker-compose.dev.yml up --build
 Frontend: `https://localhost:5173` (self-signed cert — accept the browser warning once)
 Backend API: `http://localhost:3000`
 
-### Production
+The frontend uses HTTPS because WebCrypto refuses to run on insecure origins; the backend stays on HTTP because Vite's dev proxy handles the bridge. In production both sit behind your reverse proxy on TLS.
+
+## Production
 
 > **First-time deploy checklist** — complete in order.
 
@@ -210,32 +203,17 @@ All checks should pass before exposing the service publicly.
 
 All variables live in a single `.env` file at the project root. Copy `.env.example` to get started.
 
-### Backend
+Most deployments only touch the variables below. For the full reference (chunk sizes, rate limit tuning, Turnstile hostname pinning, etc.), see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 | Variable | Default | Description |
 |---|---|---|
-| `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) — enforced by the backend |
-| `TURNSTILE_SITE_KEY` | `0x0000000000000000000000` | Cloudflare Turnstile **public** site key — served to the browser at runtime via `GET /api/config`; never exposed as a secret |
-| `TURNSTILE_SECRET` | — | Cloudflare Turnstile secret key |
-| `TURNSTILE_HOSTNAME` | — | Expected hostname in Turnstile response (e.g. `example.com`); leave empty to skip |
-| `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
-| `RATE_LIMIT_MAX` | `10` | Max new-upload requests per window per IP — counts `POST /api/vault` and `POST /api/vault/upload/init` (chunked upload start); individual chunk/complete requests are not counted |
-| `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
-| `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
-| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
-| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
-| `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
-| `ADMIN_USER` | `admin` | Admin panel username |
-| `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
-| `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
-| `CHUNK_SIZE` | `10485760` | Chunk size in bytes for the chunked upload protocol (default 10 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. Smaller chunks work better for homelab/Tailscale/VPS setups with limited bandwidth. |
-| `CRYPTO_CHUNK_SIZE` | `5242880` | Crypto chunk size in bytes (default 5 MB) — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV and chunk index as AAD. Smaller values reduce peak memory; larger values reduce per-chunk overhead (28 bytes per chunk). |
-| `UPLOAD_SESSION_TTL` | `3600` | How long an incomplete chunked upload session stays alive in seconds (default 60 min) — increased from 30 min to support 1 GB uploads on slow links (5 Mbps ≈ 26 min) |
-| `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod |
-| `BIND_ADDRESS` | `0.0.0.0` | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace) |
-| `PORT` | `3000` | Server port |
-| `TRUST_PROXY` | `1` | Number of trusted reverse-proxy hops for `X-Forwarded-For` (1 = nearest proxy only). Valid range: 0–10. Setting this higher than the actual number of trusted hops allows clients to spoof their IP and bypass rate limiting. |
+| `ADMIN_PASSWORD` | — | Admin panel password (**required** — service refuses to start without it) |
+| `HOST_BIND_ADDRESS` | `127.0.0.1` | Docker host interface for the published port. Set to your tunnel/WireGuard IP in production — never `0.0.0.0` on a public host. |
+| `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) |
+| `DEFAULT_TTL` / `MAX_TTL` | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d) |
+| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
+| `TRUST_PROXY` | `1` | Trusted reverse-proxy hops for `X-Forwarded-For`. Setting this higher than the real hop count lets clients spoof their IP and bypass rate limiting. |
 
 ## Deployment Architecture
 
@@ -306,7 +284,7 @@ Images are published to `ghcr.io/whiteravens20/archivum-null`.
 | Tag | Source | Stable | Purpose |
 |---|---|---|---|
 | `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
-| `:main` | Tagged release from `main` | ✅ Yes | Production — always the most recent stable release |
+| `:main` | Rolling pointer to the latest tagged release on `main` | ✅ Yes | Production — auto-rolls forward; use this if you want unattended updates instead of a pinned version |
 | `:edge` | Every push to `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
 | `:dev` | Every push to `dev` | ❌ No | Snapshot — development builds, may be broken |
 | `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
@@ -458,9 +436,24 @@ Before exposing this service publicly:
 - [ ] Add your contact information to TOS.md (`Replace with your contact information`)
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
-- [ ] Apply egress containment rules — Option A (`internal: true`) if Turnstile is off, Option B (FORWARD rules) if Turnstile is on (see [Egress Containment](#egress-containment--blocking-outbound-from-a-compromised-container))
+- [ ] Apply egress containment rules — Option A (`internal: true`) if Turnstile is off, Option B (FORWARD rules) if Turnstile is on (see [Egress Containment](docs/HARDENING.md#egress-containment))
 - [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
+
+## Development with AI Assistance
+
+> [!NOTE]
+> **This project was developed with AI assistance.**
+>
+> AI-generated code can contain subtle bugs, insecure patterns, or plausible-looking nonsense ("AI slop"). Here is what we do to keep the bar high — and what you should check when auditing:
+>
+> - **Tests are mandatory.** Every module has unit tests. `npm test` must pass with 0 failures across backend and frontend before any commit lands.
+> - **ESLint enforces standards.** Both projects run `eslint --max-warnings 0`. No warnings are silently ignored.
+> - **Architecture decisions are human-driven.** Crypto primitives (AES-256-GCM, key in URL fragment, no plaintext on server) were specified explicitly — not delegated to AI defaults.
+> - **Security-critical code is read line by line.** `crypto/encrypt.ts`, `basicAuth.ts`, `storage/local.ts` (path traversal guard), and vault expiry logic were reviewed manually after generation.
+> - **AI does not write the threat model.** See the *Threat Model Limitations* section above — those are our honest assessments, not AI boilerplate.
+>
+> If you find a slop pattern, a logical bug, or a security issue, please open an issue or see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
