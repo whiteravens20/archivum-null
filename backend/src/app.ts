@@ -56,9 +56,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     return payload;
   });
 
-  // CORS — restrictive in production
+  // CORS — only the local dev setup (frontend on a separate Vite port) needs
+  // cross-origin access. Everything else — production (frontend served same-origin
+  // via fastifyStatic), staging, test, or an unrecognised NODE_ENV — fails safe to
+  // no cross-origin reflection. Keyed on `development` (not `!== 'production'`) so a
+  // misconfigured NODE_ENV can never silently open CORS on an internet-facing box.
   await app.register(cors, {
-    origin: config.NODE_ENV === 'production' ? false : true,
+    origin: config.NODE_ENV === 'development',
     methods: ['GET', 'POST', 'DELETE'],
     credentials: false,
   });
