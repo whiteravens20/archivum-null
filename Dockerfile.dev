@@ -8,18 +8,26 @@ RUN apk upgrade --no-cache
 # npm@11.13.0 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
 RUN npm install -g npm@11.13.0
 
-WORKDIR /app
-
 # Install backend dependencies
-COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./backend/
-RUN cd backend && npm install --ignore-scripts
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
+RUN npm install --ignore-scripts
 
 # Copy backend source (will be overridden by volume mount in dev)
-COPY backend/ ./backend/
+COPY backend/ ./
 
-WORKDIR /app/backend
+# Data dir owned by the non-root runtime user. A freshly-created named volume
+# mounted at /data/vaults inherits this ownership, so uploads work without root.
+RUN mkdir -p /data/vaults && chown -R node:node /data /app
+
+# Security: run as the built-in non-root user (uid 1000)
+USER node
 
 ARG PORT=3000
 EXPOSE ${PORT}
+
+# Health check (busybox wget ships in the base image)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health || exit 1
 
 CMD ["npx", "tsx", "watch", "src/index.ts"]
