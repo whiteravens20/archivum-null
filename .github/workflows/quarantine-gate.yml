@@ -1,0 +1,39 @@
+name: Quarantine gate
+
+# Blocking enforcement of the .npmrc `min-release-age` policy. The required test
+# jobs run `npm ci`, which installs the versions already pinned in the lockfile
+# WITHOUT re-checking their age — so a too-new version (e.g. a Dependabot bump
+# whose target only just published) can pass tests and merge, then break later
+# steps that re-resolve. This gate fails the PR instead, for any package
+# added/changed in the lockfiles that is younger than the policy window.
+#
+# Make this a required status check on `main` and `dev` so it blocks merges.
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  quarantine:
+    name: Quarantine check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enforce min-release-age on changed dependencies
+        env:
+          QUARANTINE_DAYS: 7
+          BASE: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE"
+          node .github/scripts/check-lockfile-quarantine.mjs "origin/$BASE"
