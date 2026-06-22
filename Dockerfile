@@ -25,9 +25,10 @@ FROM node:24-alpine AS production
 ARG CACHE_BUST_APK=""
 RUN apk upgrade --no-cache
 
-# Update npm to get patched minimatch + tar (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-# npm@11.13.0 bundles minimatch@^10.2.4 and tar@^7.5.11 which fix all known CVEs.
-RUN npm install -g npm@11.13.0
+# Update npm to patch CVEs in npm's bundled dependencies:
+#   - minimatch + tar  (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
+#   - undici WebSocket DoS (CVE-2026-12151) — npm@11.17.0 bundles undici@6.26.0 (patched; 11.13.0 shipped 6.25.0)
+RUN npm install -g npm@11.17.0
 
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
@@ -36,8 +37,10 @@ RUN addgroup -g 1001 -S archivum && \
 WORKDIR /app
 
 # Install production dependencies only
-COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./backend/
-RUN cd backend && npm ci --omit=dev --ignore-scripts && npm cache clean --force
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+WORKDIR /app
 
 # Copy built backend
 COPY --from=backend-build /app/backend/dist ./backend/dist

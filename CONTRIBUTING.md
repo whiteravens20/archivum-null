@@ -123,7 +123,8 @@ TURNSTILE_HOSTNAME=
 ```
 backend/src/
   config.ts          # env-var parsing and validation
-  index.ts           # Fastify app bootstrap
+  app.ts             # Fastify app wiring (buildApp) — plugins, hooks, routes
+  index.ts           # server entrypoint (buildApp + listen + graceful shutdown)
   middleware/        # auth, rate limiting, turnstile
   routes/            # HTTP route handlers
   storage/           # pluggable storage back-ends

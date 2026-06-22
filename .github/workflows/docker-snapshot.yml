@@ -1,33 +1,23 @@
 # ── Archivum Null — Snapshot Builds ───────────────────────────────────────────
 #
-# Publishes a Docker image on every push to dev or main.
-# Also runs on pull requests targeting main or dev to catch issues early.
+# Publishes a Docker snapshot image ON DEMAND only (manual workflow_dispatch).
+# Run it from the branch you want to snapshot — nothing is built automatically.
 # These are NOT production releases — use a semver tag for that.
 #
-# Scan behaviour by trigger:
-#   push → dev        build + push :dev tag;  scan REPORTS ONLY (exit-code 0, warns only)
-#   push → main       build + push :edge tag; scan FAILS on HIGH/CRITICAL (last bastion)
-#   pull_request      build locally (no push); scan FAILS, blocking the PR
+# Scan behaviour (based on the branch the workflow is run from):
+#   dev   → build + push :dev tag;  scan REPORTS ONLY (exit-code 0, warns only)
+#   main  → build + push :edge tag; scan FAILS on HIGH/CRITICAL (last bastion)
 #
-# Tags produced on push:
-#   dev  branch  →  ghcr.io/<owner>/<repo>:dev
-#                   ghcr.io/<owner>/<repo>:dev-<7-char-sha>
-#   main branch  →  ghcr.io/<owner>/<repo>:edge
-#                   ghcr.io/<owner>/<repo>:edge-<7-char-sha>
+# Tags produced:
+#   dev  branch  →  ghcr.io/<owner>/<repo>:dev   + :dev-<7-char-sha>
+#   main branch  →  ghcr.io/<owner>/<repo>:edge  + :edge-<7-char-sha>
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Snapshot build
 
 on:
-  push:
-    branches:
-      - dev
-      - main
-  pull_request:
-    branches:
-      - main
-      - dev
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -35,15 +25,14 @@ env:
 
 jobs:
   build-push:
-    name: Build ${{ github.event_name == 'pull_request' && format('PR {0}', github.event.number) || format('{0} snapshot', github.ref_name) }}
+    name: Build ${{ github.ref_name }} snapshot
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # Required to push on branch pushes; harmless on PRs
+      packages: write
 
     outputs:
       image-ref: ${{ steps.img-ref.outputs.ref }}
-      is-pr: ${{ github.event_name == 'pull_request' }}
 
     steps:
       - name: Checkout
@@ -52,25 +41,19 @@ jobs:
       - name: Compute snapshot tags
         id: tag
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "value=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
-          else
-            PREFIX=$([ "${{ github.ref_name }}" == "dev" ] && echo "dev" || echo "edge")
-            SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-            {
-              echo "value<<EOF"
-              echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}"
-              echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}-${SHA}"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          fi
+          PREFIX=$([ "${{ github.ref_name }}" == "dev" ] && echo "dev" || echo "edge")
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          {
+            echo "value<<EOF"
+            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}"
+            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}-${SHA}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        # Skip for fork PRs — they cannot authenticate against ghcr.io
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -82,9 +65,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          # push only on branch pushes; PRs are built locally (not published)
-          push: ${{ github.event_name != 'pull_request' }}
-          load: ${{ github.event_name == 'pull_request' }}
+          push: true
           tags: ${{ steps.tag.outputs.value }}
           # VITE_ vars are public build-time constants. Fallback defaults are used
           # when repository variables are not configured.
@@ -96,38 +77,16 @@ jobs:
             VITE_DEFAULT_MAX_DOWNLOADS=${{ vars.VITE_DEFAULT_MAX_DOWNLOADS || '10' }}
             VITE_CHUNK_SIZE=${{ vars.VITE_CHUNK_SIZE || '52428800' }}
           cache-from: type=gha
-          # Do not write to the GHA cache on PRs — cache writes are scoped to the
-          # base branch and fork PRs may lack permission.
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
-
-      # For PRs the image lives only on this runner's Docker daemon.
-      # Save it to a tar and upload as an artifact so the scan job can access it.
-      - name: Save image for scan (PR only)
-        if: github.event_name == 'pull_request'
-        run: docker save "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}" -o /tmp/image.tar
-
-      - name: Upload image artifact (PR only)
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr-image
-          path: /tmp/image.tar
-          retention-days: 1
+          cache-to: type=gha,mode=max
 
       - name: Resolve image ref for scan
         id: img-ref
-        # push: scan by immutable digest from the registry
-        # PRs: handled via downloaded tar artifact in the scan job
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
-          fi
+        # Scan by immutable digest from the registry.
+        run: echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
   # ── Trivy scan ────────────────────────────────────────────────────────────────
-  # Scan behaviour by trigger (see header comment):
-  #   dev push   → exit-code 0  findings reported to Security tab; build stays green
-  #   main push  → exit-code 1  fails; last bastion before a production release tag
-  #   PR         → exit-code 1  fails; contributor must fix or suppress before merge
+  #   dev   → exit-code 0  findings reported to Security tab; build stays green
+  #   main  → exit-code 1  fails; last bastion before a production release tag
   # Add CVE IDs to .trivyignore (with justification) to acknowledge and unblock.
   scan:
     name: Trivy scan
@@ -143,24 +102,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Log in to GitHub Container Registry
-        # Only needed for push events — pull image by digest from the registry.
-        # PRs are scanned from a downloaded tar artifact (no registry access needed).
-        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download image artifact (PR only)
-        if: github.event_name == 'pull_request'
-        uses: actions/download-artifact@v8
-        with:
-          name: pr-image
-          path: /tmp
-
-      - name: Scan for CVEs (push)
-        if: github.event_name == 'push'
+      - name: Scan for CVEs
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
@@ -168,23 +116,9 @@ jobs:
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore
           limit-severities-for-sarif: true
-          # dev push → 0 (warn only, do not block dev iteration)
-          # main push → 1 (blocking — last bastion before a production release tag)
+          # dev → 0 (warn only, do not block dev iteration)
+          # main → 1 (blocking — last bastion before a production release tag)
           exit-code: ${{ github.ref_name == 'main' && '1' || '0' }}
-          format: sarif
-          output: trivy-snapshot.sarif
-
-      - name: Scan for CVEs (PR)
-        if: github.event_name == 'pull_request'
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: image
-          input: /tmp/image.tar
-          severity: HIGH,CRITICAL
-          trivyignores: .trivyignore
-          limit-severities-for-sarif: true
-          # PRs always block — contributor must fix or suppress before merge
-          exit-code: '1'
           format: sarif
           output: trivy-snapshot.sarif
 
