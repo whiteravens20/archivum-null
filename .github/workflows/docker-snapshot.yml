@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Compute snapshot tags
         id: tag
@@ -140,7 +140,7 @@ jobs:
 
     steps:
       - name: Checkout (for .trivyignore)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Log in to GitHub Container Registry
         # Only needed for push events — pull image by digest from the registry.
