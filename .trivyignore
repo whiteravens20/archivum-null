@@ -1,2 +1,11 @@
 # Trivy vulnerability suppressions
 # Each entry must include a justification.
+
+# CVE-2026-12151 — undici WebSocket DoS, in npm's *bundled* undici
+# (/usr/local/lib/node_modules/npm/node_modules/undici).
+# npm@11.17.0 (latest) bundles undici 6.26.0, which the upstream GitHub advisory
+# lists as a patched version; Trivy's DB lags and only accepts >= 6.27.0. undici
+# is used solely by npm at build time — the runtime entrypoint is `node`, so it
+# is not reachable in the running container.
+# Remove once npm bundles undici >= 6.27.0.
+CVE-2026-12151
