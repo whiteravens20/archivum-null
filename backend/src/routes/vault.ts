@@ -129,7 +129,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize);
+      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize, request.ip);
       const sessionToken = vaultManager.signUploadSession(session.uploadId);
       return reply.status(201).send({
         uploadId: session.uploadId,

@@ -38,4 +38,6 @@ export interface ChunkedUploadSession {
   chunkPlaintextSize: number;
   /** Absolute timestamp (ms) after which the session is garbage-collected. */
   expiresAt: number;
+  /** Client IP that opened the session — used to cap concurrent sessions per IP. */
+  clientIp?: string;
 }
