@@ -87,7 +87,7 @@ export async function uploadVault(
     const start = i * chunkPlaintextSize;
     const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
     const plaintext = await readVirtualRange(header, file, start, end);
-    encryptedParts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i));
+    encryptedParts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i, i === numCryptoChunks - 1));
     onProgress?.(((i + 1) / numCryptoChunks) * 0.3);
   }
 
@@ -226,7 +226,7 @@ export async function uploadVaultChunked(
         const start = i * chunkPlaintextSize;
         const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
         const plaintext = await readVirtualRange(header, file, start, end);
-        parts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i));
+        parts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i, i === numCryptoChunks - 1));
       }
 
       const form = new FormData();

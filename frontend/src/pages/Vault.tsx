@@ -71,7 +71,7 @@ export default function Vault() {
         const start = i * chunkCT;
         const end = Math.min(start + chunkCT, encryptedBlob.size);
         const chunkBytes = new Uint8Array(await encryptedBlob.slice(start, end).arrayBuffer());
-        decryptedParts.push(await decryptChunk(chunkBytes, key, i));
+        decryptedParts.push(await decryptChunk(chunkBytes, key, i, i === numChunks - 1));
         setProgress(0.4 + ((i + 1) / numChunks) * 0.55);
       }
 
