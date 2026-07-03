@@ -80,14 +80,17 @@ export async function uploadVault(
   const totalPlaintext = header.length + file.size;
   const numCryptoChunks = Math.max(1, Math.ceil(totalPlaintext / chunkPlaintextSize));
 
-  // Encrypt all crypto chunks
+  // Encrypt all crypto chunks. Each ciphertext chunk is wrapped in a Blob right
+  // away so the JS heap holds one chunk at a time rather than the whole encrypted
+  // file; the browser manages the accumulated Blob parts.
   const encryptedParts: BlobPart[] = [];
   for (let i = 0; i < numCryptoChunks; i++) {
     signal?.throwIfAborted();
     const start = i * chunkPlaintextSize;
     const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
     const plaintext = await readVirtualRange(header, file, start, end);
-    encryptedParts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i, i === numCryptoChunks - 1));
+    const encrypted = await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i, i === numCryptoChunks - 1);
+    encryptedParts.push(new Blob([encrypted]));
     onProgress?.(((i + 1) / numCryptoChunks) * 0.3);
   }
 

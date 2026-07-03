@@ -61,29 +61,34 @@ export default function Vault() {
       setStage('decrypting');
       const key = await importKey(keyFragment);
 
-      // Streaming per-chunk decryption
+      // Streaming per-chunk decryption. Each decrypted chunk is wrapped in a Blob
+      // immediately and its plaintext view dropped, so the JS heap holds at most one
+      // chunk at a time instead of the whole file — the accumulating Blob parts are
+      // managed by the browser (and may be spilled to disk).
       const chunkPT = info.chunkPlaintextSize;
       const chunkCT = chunkPT + PER_CHUNK_OVERHEAD;
       const numChunks = Math.ceil(encryptedBlob.size / chunkCT);
-      const decryptedParts: Uint8Array[] = [];
+      const contentParts: BlobPart[] = [];
+      let filename = 'file';
+      let mimeType = 'application/octet-stream';
 
       for (let i = 0; i < numChunks; i++) {
         const start = i * chunkCT;
         const end = Math.min(start + chunkCT, encryptedBlob.size);
         const chunkBytes = new Uint8Array(await encryptedBlob.slice(start, end).arrayBuffer());
-        decryptedParts.push(await decryptChunk(chunkBytes, key, i, i === numChunks - 1));
+        const plaintext = await decryptChunk(chunkBytes, key, i, i === numChunks - 1);
+
+        if (i === 0) {
+          // The metadata header (filename + MIME) prefixes the first chunk's plaintext.
+          const meta = parseMetadataHeader(plaintext);
+          filename = meta.filename;
+          mimeType = meta.mimeType;
+          setDecryptedFilename(filename);
+          contentParts.push(new Blob([plaintext.slice(meta.contentOffset)]));
+        } else {
+          contentParts.push(new Blob([plaintext]));
+        }
         setProgress(0.4 + ((i + 1) / numChunks) * 0.55);
-      }
-
-      // Parse metadata header from first decrypted chunk
-      const firstChunk = decryptedParts[0];
-      const { filename, mimeType, contentOffset } = parseMetadataHeader(firstChunk);
-      setDecryptedFilename(filename);
-
-      // Assemble file: first chunk minus header, then remaining chunks
-      const contentParts: BlobPart[] = [firstChunk.slice(contentOffset) as BlobPart];
-      for (let i = 1; i < decryptedParts.length; i++) {
-        contentParts.push(decryptedParts[i] as BlobPart);
       }
 
       const decryptedFile = new File(contentParts, filename, { type: mimeType });
