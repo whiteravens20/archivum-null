@@ -75,7 +75,12 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
   const windowMs = config.RATE_LIMIT_WINDOW * 1000;
 
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!request.url.startsWith('/api/')) return;
+    // Match on the pathname only — never the raw URL. `request.url` includes the
+    // query string, so matching it directly would let a client append `?x=1` to a
+    // sensitive path and slip past the stricter upload/download tiers, falling back
+    // to the looser general limit.
+    const pathname = request.url.split('?', 1)[0];
+    if (!pathname.startsWith('/api/')) return;
 
     // `request.ip` is already resolved via Fastify's trustProxy chain.
     const ip = request.ip;
@@ -84,7 +89,7 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;
 
     // Tier 2a — admin routes get a dedicated strict limit (brute-force protection)
-    if (request.url.startsWith('/api/admin')) {
+    if (pathname.startsWith('/api/admin')) {
       if (!checkLimit(adminBuckets, ip, config.RATE_LIMIT_ADMIN_MAX, windowMs, reply)) return;
     }
 
@@ -92,14 +97,14 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     // Individual chunk requests (/chunk, /complete) are NOT counted here — a single large
     // file upload generates N+2 POST requests and would exhaust the limit mid-upload.
     const isNewUpload =
-      (request.url === '/api/vault' && request.method === 'POST') ||
-      (request.url === '/api/vault/upload/init' && request.method === 'POST');
+      (pathname === '/api/vault' && request.method === 'POST') ||
+      (pathname === '/api/vault/upload/init' && request.method === 'POST');
     if (isNewUpload) {
       if (!checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply)) return;
     }
 
     // Tier 3 — download limit (prevents bulk enumeration / download exhaustion)
-    if (/^\/api\/vault\/[^/]+\/download$/.test(request.url) && request.method === 'GET') {
+    if (/^\/api\/vault\/[^/]+\/download$/.test(pathname) && request.method === 'GET') {
       checkLimit(downloadBuckets, ip, config.RATE_LIMIT_DOWNLOAD_MAX, windowMs, reply);
     }
   });
