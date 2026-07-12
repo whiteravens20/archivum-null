@@ -29,6 +29,10 @@ const envSchema = {
   // How long an incomplete chunked upload session stays alive (seconds, default 60 min).
   // Must be long enough for the largest allowed file on the slowest expected link.
   UPLOAD_SESSION_TTL: Number(process.env.UPLOAD_SESSION_TTL || 3600),
+  // Max concurrent open chunked-upload sessions a single client IP may hold.
+  // Bounds the storage-quota reservation an attacker can tie up by opening
+  // sessions and never completing them. 0 = unlimited (not recommended).
+  MAX_UPLOAD_SESSIONS_PER_IP: Number(process.env.MAX_UPLOAD_SESSIONS_PER_IP || 10),
   // Per-chunk plaintext size for client-side AES-GCM streaming encryption.
   // Each chunk is encrypted independently with a unique IV and chunkIndex in AAD.
   // Default: min(5 MB, CHUNK_SIZE) — auto-clamped so smaller CHUNK_SIZE values don't crash.
@@ -91,6 +95,9 @@ export function validateConfig(): void {
   }
   if (!isFinite(config.UPLOAD_SESSION_TTL) || config.UPLOAD_SESSION_TTL <= 0) {
     throw new Error('UPLOAD_SESSION_TTL must be a positive number');
+  }
+  if (!isFinite(config.MAX_UPLOAD_SESSIONS_PER_IP) || config.MAX_UPLOAD_SESSIONS_PER_IP < 0) {
+    throw new Error('MAX_UPLOAD_SESSIONS_PER_IP must be a non-negative number');
   }
   if (!isFinite(config.MAX_TOTAL_STORAGE) || config.MAX_TOTAL_STORAGE < 0) {
     throw new Error('MAX_TOTAL_STORAGE must be a non-negative number');

@@ -238,6 +238,50 @@ describe('VaultManager — download counter atomicity', () => {
     ).rejects.toThrow(/not found/);
   });
 
+  it('caps concurrent open upload sessions per IP', async () => {
+    vi.resetModules();
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    vi.stubEnv('MAX_UPLOAD_SESSIONS_PER_IP', '2');
+    const mod = await import('../vault/manager.js');
+    const capped = new mod.VaultManager();
+    await capped.init();
+
+    const ip = '203.0.113.7';
+    capped.initChunkedUpload(100, 3600, 1, undefined, ip);
+    capped.initChunkedUpload(100, 3600, 1, undefined, ip);
+
+    // Third concurrent session from the same IP must be rejected
+    expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(/Too many concurrent uploads/);
+
+    // A different IP is unaffected
+    expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, '198.51.100.9')).not.toThrow();
+
+    await capped.shutdown();
+  });
+
+  it('frees the per-IP session slot when an upload completes', async () => {
+    vi.resetModules();
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    vi.stubEnv('MAX_UPLOAD_SESSIONS_PER_IP', '1');
+    const mod = await import('../vault/manager.js');
+    const capped = new mod.VaultManager();
+    await capped.init();
+
+    const ip = '203.0.113.8';
+    const s1 = capped.initChunkedUpload(50, 3600, 1, undefined, ip);
+    await capped.appendChunk(s1.uploadId, 0, makeStream('x'.repeat(50)));
+    await capped.completeChunkedUpload(s1.uploadId);
+
+    // Slot must be released — a new session from the same IP now succeeds
+    expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).not.toThrow();
+
+    await capped.shutdown();
+  });
+
   // ------------------------------------------------------------------
   // Orphan cleanup on startup
   // ------------------------------------------------------------------

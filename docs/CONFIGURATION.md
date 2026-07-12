@@ -39,6 +39,7 @@ The README covers the variables you usually touch. This page is the complete ref
 | `CHUNK_SIZE` | `10485760` | Chunk size in bytes for the chunked upload protocol (default 10 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. Smaller chunks work better for homelab/Tailscale/VPS setups with limited bandwidth. |
 | `CRYPTO_CHUNK_SIZE` | `5242880` | Crypto chunk size in bytes (default 5 MB) — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV and chunk index as AAD. Smaller values reduce peak memory; larger values reduce per-chunk overhead (28 bytes per chunk). |
 | `UPLOAD_SESSION_TTL` | `3600` | How long an incomplete chunked upload session stays alive in seconds (default 60 min) — increased from 30 min to support 1 GB uploads on slow links (5 Mbps ≈ 26 min) |
+| `MAX_UPLOAD_SESSIONS_PER_IP` | `10` | Max concurrent open chunked-upload sessions a single client IP may hold (`0` = unlimited, not recommended). Each open session reserves its declared size against `MAX_TOTAL_STORAGE`; without this cap a single IP could open many sessions and never complete them, tying up the storage quota and blocking legitimate uploads until the sessions expire. |
 
 ### Rate limiting
 

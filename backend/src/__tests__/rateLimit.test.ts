@@ -133,6 +133,29 @@ describe('Rate-limit middleware', () => {
     expect(res.statusCode).toBe(429);
   });
 
+  it('should not let a query string bypass the download tier', async () => {
+    // Download limit is 2. Appending a query string must NOT drop the request to
+    // the looser general tier — the stricter download limit still applies.
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/vault/test-id/download?x=' + i });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const res = await app.inject({ method: 'GET', url: '/api/vault/test-id/download?x=3' });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('should not let a query string bypass the upload tier', async () => {
+    // Upload limit is 3. A trailing query string must not evade it.
+    for (let i = 0; i < 3; i++) {
+      const res = await app.inject({ method: 'POST', url: '/api/vault?x=' + i });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const res = await app.inject({ method: 'POST', url: '/api/vault?x=4' });
+    expect(res.statusCode).toBe(429);
+  });
+
   it('should include retryAfter in 429 response body', async () => {
     // Exhaust general limit
     for (let i = 0; i < 5; i++) {

@@ -13,8 +13,11 @@
  *   Chunks are concatenated sequentially on disk:
  *     [chunk_0][chunk_1]...[chunk_N]
  *
- *   Additional Authenticated Data (AAD) = chunk index (uint32 BE)
- *   This prevents chunk reordering attacks.
+ *   Additional Authenticated Data (AAD) = chunk index (uint32 BE) || isLast (uint8)
+ *   The chunk index prevents reordering. The isLast flag marks the final chunk,
+ *   so a server that drops trailing chunks (truncation) or appends extra ones
+ *   (extension) leaves a chunk whose stored isLast no longer matches the value
+ *   the client supplies during decryption — GCM authentication then fails.
  *
  * Plaintext layout (before per-chunk AES-GCM encryption):
  *   Chunk 0: [uint16 BE: nameLen][filename UTF-8][uint16 BE: mimeLen][MIME UTF-8][file bytes...]
@@ -114,21 +117,35 @@ export function parseMetadataHeader(plaintext: Uint8Array): {
 }
 
 /**
+ * Build the per-chunk AAD: [uint32 BE chunkIndex][uint8 isLast].
+ * Binds both ordering and the total chunk count (via the final-chunk marker)
+ * into every chunk's authentication tag.
+ */
+function buildChunkAad(chunkIndex: number, isLast: boolean): ArrayBuffer {
+  const aad = new ArrayBuffer(5);
+  const view = new DataView(aad);
+  view.setUint32(0, chunkIndex, false);
+  view.setUint8(4, isLast ? 1 : 0);
+  return aad;
+}
+
+/**
  * Encrypt a single plaintext chunk with AES-256-GCM.
  *
  * @param plaintext  Raw chunk bytes (≤ cryptoChunkSize)
  * @param key        AES-256-GCM CryptoKey
- * @param chunkIndex 0-based index, used as AAD to prevent reordering
+ * @param chunkIndex 0-based index, bound into AAD to prevent reordering
+ * @param isLast     Whether this is the final chunk, bound into AAD to prevent truncation
  * @returns [IV (12 bytes) || ciphertext || GCM tag (16 bytes)]
  */
 export async function encryptChunk(
   plaintext: BufferSource,
   key: CryptoKey,
-  chunkIndex: number
+  chunkIndex: number,
+  isLast: boolean
 ): Promise<Uint8Array<ArrayBuffer>> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-  const aad = new ArrayBuffer(4);
-  new DataView(aad).setUint32(0, chunkIndex, false);
+  const aad = buildChunkAad(chunkIndex, isLast);
 
   const ciphertext = await crypto.subtle.encrypt(
     { name: ALGORITHM, iv, additionalData: aad },
@@ -148,12 +165,14 @@ export async function encryptChunk(
  * @param chunk      [IV (12 bytes) || ciphertext || GCM tag (16 bytes)]
  * @param key        AES-256-GCM CryptoKey
  * @param chunkIndex Must match the index used during encryption (AAD)
+ * @param isLast     Must match the final-chunk flag used during encryption (AAD)
  * @returns Decrypted plaintext bytes
  */
 export async function decryptChunk(
   chunk: Uint8Array,
   key: CryptoKey,
-  chunkIndex: number
+  chunkIndex: number,
+  isLast: boolean
 ): Promise<Uint8Array<ArrayBuffer>> {
   if (chunk.length < IV_LENGTH + GCM_TAG_LENGTH) {
     throw new Error('Invalid encrypted chunk: too short');
@@ -161,8 +180,7 @@ export async function decryptChunk(
 
   const iv = chunk.slice(0, IV_LENGTH);
   const ciphertext = chunk.slice(IV_LENGTH);
-  const aad = new ArrayBuffer(4);
-  new DataView(aad).setUint32(0, chunkIndex, false);
+  const aad = buildChunkAad(chunkIndex, isLast);
 
   const plaintext = await crypto.subtle.decrypt(
     { name: ALGORITHM, iv, additionalData: aad },

@@ -16,6 +16,13 @@ const uploadSessions = new Map<string, ChunkedUploadSession>();
  */
 let reservedBytes = 0;
 
+/**
+ * Count of open (uncompleted) chunked-upload sessions per client IP.
+ * Caps how much storage quota a single IP can tie up via reservations
+ * without ever completing an upload (reservation-exhaustion DoS).
+ */
+const ipSessionCounts = new Map<string, number>();
+
 /** HMAC secret generated at startup — used to sign upload session tokens. */
 const sessionSecret = randomBytes(32);
 
@@ -79,12 +86,25 @@ export class VaultManager {
     const expiredSessions = Array.from(uploadSessions.entries())
       .filter(([, session]) => session.expiresAt <= now)
       .map(([id, session]) => {
-        reservedBytes = Math.max(0, reservedBytes - session.totalSize);
+        this.releaseSessionAccounting(session);
         uploadSessions.delete(id);
         return storage.deleteChunkedUpload(id).catch(() => {});
       });
 
     await Promise.allSettled([...expiredVaults, ...expiredSessions]);
+  }
+
+  /**
+   * Release the quota reservation and per-IP session slot held by a session.
+   * Must be called whenever a session is discarded (completed, aborted, or expired).
+   */
+  private releaseSessionAccounting(session: ChunkedUploadSession): void {
+    reservedBytes = Math.max(0, reservedBytes - session.totalSize);
+    if (session.clientIp) {
+      const remaining = (ipSessionCounts.get(session.clientIp) ?? 0) - 1;
+      if (remaining <= 0) ipSessionCounts.delete(session.clientIp);
+      else ipSessionCounts.set(session.clientIp, remaining);
+    }
   }
 
   async createVault(
@@ -143,11 +163,25 @@ export class VaultManager {
 
   // ── Chunked upload ────────────────────────────────────────────────────────
 
-  initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE): ChunkedUploadSession {
+  initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE, clientIp?: string): ChunkedUploadSession {
     const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
     const maxAllowed = plaintextMax + calcEncryptionOverhead(plaintextMax);
     if (totalSize <= 0 || totalSize > maxAllowed) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
+    }
+
+    // Cap concurrent open sessions per IP. Without this, a single client can open
+    // many sessions — each reserving quota via reservedBytes — and never complete
+    // them, tying up MAX_TOTAL_STORAGE and blocking legitimate uploads until the
+    // sessions expire (reservation-exhaustion DoS).
+    if (clientIp && config.MAX_UPLOAD_SESSIONS_PER_IP > 0) {
+      const open = ipSessionCounts.get(clientIp) ?? 0;
+      if (open >= config.MAX_UPLOAD_SESSIONS_PER_IP) {
+        throw Object.assign(
+          new Error('Too many concurrent uploads. Complete or cancel an upload before starting another.'),
+          { statusCode: 429 }
+        );
+      }
     }
 
     // Enforce global storage quota — include reservedBytes to prevent TOCTOU.
@@ -161,8 +195,9 @@ export class VaultManager {
       }
     }
 
-    // Reserve quota for the duration of the upload session
+    // Reserve quota and a per-IP session slot for the duration of the upload.
     reservedBytes += totalSize;
+    if (clientIp) ipSessionCounts.set(clientIp, (ipSessionCounts.get(clientIp) ?? 0) + 1);
 
     const uploadId = nanoid(24);
     const session: ChunkedUploadSession = {
@@ -174,6 +209,7 @@ export class VaultManager {
       maxDownloads: Math.min(Math.max(maxDownloads, 1), 1000),
       chunkPlaintextSize,
       expiresAt: Date.now() + config.UPLOAD_SESSION_TTL * 1000,
+      clientIp,
     };
     uploadSessions.set(uploadId, session);
     return session;
@@ -183,6 +219,7 @@ export class VaultManager {
     const session = uploadSessions.get(uploadId);
     if (!session || session.expiresAt <= Date.now()) {
       if (session) {
+        this.releaseSessionAccounting(session);
         uploadSessions.delete(uploadId);
         await storage.deleteChunkedUpload(uploadId).catch(() => {});
       }
@@ -223,7 +260,7 @@ export class VaultManager {
     const session = uploadSessions.get(uploadId);
     if (!session || session.expiresAt <= Date.now()) {
       if (session) {
-        reservedBytes = Math.max(0, reservedBytes - session.totalSize);
+        this.releaseSessionAccounting(session);
         uploadSessions.delete(uploadId);
         await storage.deleteChunkedUpload(uploadId).catch(() => {});
       }
@@ -231,7 +268,7 @@ export class VaultManager {
     }
 
     if (session.receivedBytes === 0) {
-      reservedBytes = Math.max(0, reservedBytes - session.totalSize);
+      this.releaseSessionAccounting(session);
       uploadSessions.delete(uploadId);
       await storage.deleteChunkedUpload(uploadId).catch(() => {});
       throw Object.assign(new Error('No chunks received'), { statusCode: 400 });
@@ -248,7 +285,7 @@ export class VaultManager {
     const now = Date.now();
 
     await storage.finalizeChunkedUpload(uploadId, vaultId);
-    reservedBytes = Math.max(0, reservedBytes - session.totalSize);
+    this.releaseSessionAccounting(session);
     uploadSessions.delete(uploadId);
 
     const meta: VaultMetadata = {
@@ -269,7 +306,7 @@ export class VaultManager {
   async abortChunkedUpload(uploadId: string): Promise<void> {
     const session = uploadSessions.get(uploadId);
     if (session) {
-      reservedBytes = Math.max(0, reservedBytes - session.totalSize);
+      this.releaseSessionAccounting(session);
     }
     uploadSessions.delete(uploadId);
     await storage.deleteChunkedUpload(uploadId).catch(() => {});
