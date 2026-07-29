@@ -25,21 +25,22 @@ jobs:
 
       # Production deps get a tighter bar (moderate) — these ship to users.
       # Dev deps stay at high to keep noise manageable.
+      #
+      # audit-check.mjs wraps `npm audit` so that advisories with no installable
+      # fix and no reachable code path can be allowlisted individually, with a
+      # justification and an expiry, instead of lowering the threshold for every
+      # package. See .github/scripts/audit-allowlist.json.
       - name: Audit backend (production, moderate)
-        working-directory: backend
-        run: npm audit --omit=dev --audit-level=moderate
+        run: node .github/scripts/audit-check.mjs --dir backend --omit=dev --audit-level moderate
 
       - name: Audit backend (dev, high)
-        working-directory: backend
-        run: npm audit --audit-level=high
+        run: node .github/scripts/audit-check.mjs --dir backend --audit-level high
 
       - name: Audit frontend (production, moderate)
-        working-directory: frontend
-        run: npm audit --omit=dev --audit-level=moderate
+        run: node .github/scripts/audit-check.mjs --dir frontend --omit=dev --audit-level moderate
 
       - name: Audit frontend (dev, high)
-        working-directory: frontend
-        run: npm audit --audit-level=high
+        run: node .github/scripts/audit-check.mjs --dir frontend --audit-level high
 
       # Verify every installed tarball has a valid registry signature.
       # Catches forged tarballs / tampered registry metadata at install time.
@@ -75,6 +76,9 @@ jobs:
       - uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high
+          # Keep in sync with .github/scripts/audit-allowlist.json — the
+          # justification for each ID lives there.
+          allow-ghsas: GHSA-qwww-vcr4-c8h2
 
   trivy-fs:
     name: Trivy filesystem scan

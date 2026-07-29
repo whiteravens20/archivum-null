@@ -27,8 +27,10 @@ RUN apk upgrade --no-cache
 
 # Update npm to patch CVEs in npm's bundled dependencies:
 #   - minimatch + tar  (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-#   - undici WebSocket DoS (CVE-2026-12151) — npm@11.17.0 bundles undici@6.26.0 (patched; 11.13.0 shipped 6.25.0)
-RUN npm install -g npm@11.17.0
+#   - undici WebSocket DoS (CVE-2026-12151) — 11.17.0+ bundles undici@6.26.0 (patched; 11.13.0 shipped 6.25.0)
+#   - tar gzip-bomb + malformed-header DoS (CVE-2026-59873, CVE-2026-59874) —
+#     11.17.0 bundled tar@7.5.16; 11.18.0 is the first release to bundle tar@7.5.19.
+RUN npm install -g npm@11.18.0
 
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
