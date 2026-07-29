@@ -1,11 +1,14 @@
 # Trivy vulnerability suppressions
 # Each entry must include a justification.
 
-# CVE-2026-12151 — undici WebSocket DoS, in npm's *bundled* undici
-# (/usr/local/lib/node_modules/npm/node_modules/undici).
-# npm@11.17.0 (latest) bundles undici 6.26.0, which the upstream GitHub advisory
-# lists as a patched version; Trivy's DB lags and only accepts >= 6.27.0. undici
-# is used solely by npm at build time — the runtime entrypoint is `node`, so it
-# is not reachable in the running container.
-# Remove once npm bundles undici >= 6.27.0.
-CVE-2026-12151
+# GHSA-qwww-vcr4-c8h2 — React Router RSC Mode CSRF Bypass.
+# Applies only to React Router's RSC (React Server Components) mode. This
+# frontend is a purely client-side SPA — src/main.tsx mounts <BrowserRouter>,
+# and there is no SSR, hydrateRoot, StaticRouter or RSC entrypoint anywhere in
+# frontend/src — so the vulnerable path is unreachable.
+# No fix is installable: the advisory covers react-router 7.12.0-8.2.0 and is
+# patched only in react-router 8.3.0, and react-router-dom has no 8.x release
+# (it was merged into react-router in v8).
+# Remove when migrating to react-router 8.x.
+# Justification mirrored in .github/scripts/audit-allowlist.json.
+GHSA-qwww-vcr4-c8h2
