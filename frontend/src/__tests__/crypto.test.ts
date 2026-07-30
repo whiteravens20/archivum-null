@@ -114,10 +114,10 @@ describe('crypto/encrypt', () => {
       const key = await generateKey();
       const plaintext = new TextEncoder().encode('Hello, streaming encryption! 🔐');
 
-      const encrypted = await encryptChunk(plaintext, key, 0);
+      const encrypted = await encryptChunk(plaintext, key, 0, true);
       expect(encrypted.length).toBe(plaintext.length + PER_CHUNK_OVERHEAD);
 
-      const decrypted = await decryptChunk(encrypted, key, 0);
+      const decrypted = await decryptChunk(encrypted, key, 0, true);
       expect(decrypted).toEqual(plaintext);
     });
 
@@ -125,8 +125,8 @@ describe('crypto/encrypt', () => {
       const key = await generateKey();
       const plaintext = new Uint8Array([1, 2, 3]);
 
-      const enc1 = await encryptChunk(plaintext, key, 0);
-      const enc2 = await encryptChunk(plaintext, key, 1);
+      const enc1 = await encryptChunk(plaintext, key, 0, false);
+      const enc2 = await encryptChunk(plaintext, key, 1, true);
 
       const iv1 = enc1.slice(0, IV_LENGTH);
       const iv2 = enc2.slice(0, IV_LENGTH);
@@ -138,36 +138,50 @@ describe('crypto/encrypt', () => {
       const key2 = await generateKey();
       const plaintext = new Uint8Array([1, 2, 3]);
 
-      const encrypted = await encryptChunk(plaintext, key1, 0);
+      const encrypted = await encryptChunk(plaintext, key1, 0, true);
 
-      await expect(decryptChunk(encrypted, key2, 0)).rejects.toThrow();
+      await expect(decryptChunk(encrypted, key2, 0, true)).rejects.toThrow();
     });
 
     it('should fail decryption with wrong chunkIndex (reorder protection)', async () => {
       const key = await generateKey();
       const plaintext = new Uint8Array([1, 2, 3]);
 
-      const encrypted = await encryptChunk(plaintext, key, 0);
+      const encrypted = await encryptChunk(plaintext, key, 0, true);
 
       // Decrypt with chunkIndex=1 instead of 0 — AAD mismatch → GCM auth failure
-      await expect(decryptChunk(encrypted, key, 1)).rejects.toThrow();
+      await expect(decryptChunk(encrypted, key, 1, true)).rejects.toThrow();
+    });
+
+    it('should fail decryption with wrong isLast flag (truncation protection)', async () => {
+      const key = await generateKey();
+      const plaintext = new Uint8Array([1, 2, 3]);
+
+      // Encrypted as a NON-final chunk; decrypting it as the final chunk (as a
+      // truncating server would force) must fail authentication.
+      const middle = await encryptChunk(plaintext, key, 0, false);
+      await expect(decryptChunk(middle, key, 0, true)).rejects.toThrow();
+
+      // And the inverse: a final chunk decrypted as non-final also fails.
+      const last = await encryptChunk(plaintext, key, 0, true);
+      await expect(decryptChunk(last, key, 0, false)).rejects.toThrow();
     });
 
     it('should reject too-short data', async () => {
       const key = await generateKey();
       const tooShort = new Uint8Array(20); // Less than IV + tag
 
-      await expect(decryptChunk(tooShort, key, 0)).rejects.toThrow('too short');
+      await expect(decryptChunk(tooShort, key, 0, true)).rejects.toThrow('too short');
     });
 
     it('should handle empty chunk', async () => {
       const key = await generateKey();
       const empty = new Uint8Array(0);
 
-      const encrypted = await encryptChunk(empty, key, 0);
+      const encrypted = await encryptChunk(empty, key, 0, true);
       expect(encrypted.length).toBe(PER_CHUNK_OVERHEAD); // just IV + tag
 
-      const decrypted = await decryptChunk(encrypted, key, 0);
+      const decrypted = await decryptChunk(encrypted, key, 0, true);
       expect(decrypted.length).toBe(0);
     });
 
@@ -175,8 +189,8 @@ describe('crypto/encrypt', () => {
       const key = await generateKey();
       const single = new Uint8Array([42]);
 
-      const encrypted = await encryptChunk(single, key, 0);
-      const decrypted = await decryptChunk(encrypted, key, 0);
+      const encrypted = await encryptChunk(single, key, 0, true);
+      const decrypted = await decryptChunk(encrypted, key, 0, true);
       expect(decrypted).toEqual(single);
     });
 
@@ -187,8 +201,8 @@ describe('crypto/encrypt', () => {
         crypto.getRandomValues(data.subarray(i, Math.min(i + 65536, data.length)));
       }
 
-      const encrypted = await encryptChunk(data, key, 0);
-      const decrypted = await decryptChunk(encrypted, key, 0);
+      const encrypted = await encryptChunk(data, key, 0, true);
+      const decrypted = await decryptChunk(encrypted, key, 0, true);
       expect(decrypted).toEqual(data);
     });
   });
@@ -214,7 +228,7 @@ describe('crypto/encrypt', () => {
       while (offset < fullPlaintext.length) {
         const end = Math.min(offset + chunkSize, fullPlaintext.length);
         const chunk = fullPlaintext.slice(offset, end);
-        encryptedChunks.push(await encryptChunk(chunk, key, chunkIndex));
+        encryptedChunks.push(await encryptChunk(chunk, key, chunkIndex, end === fullPlaintext.length));
         offset = end;
         chunkIndex++;
       }
@@ -222,7 +236,7 @@ describe('crypto/encrypt', () => {
       // Decrypt all chunks
       const decryptedParts: Uint8Array[] = [];
       for (let i = 0; i < encryptedChunks.length; i++) {
-        decryptedParts.push(await decryptChunk(encryptedChunks[i], key, i));
+        decryptedParts.push(await decryptChunk(encryptedChunks[i], key, i, i === encryptedChunks.length - 1));
       }
 
       // Reassemble
@@ -245,16 +259,16 @@ describe('crypto/encrypt', () => {
 
     it('should detect chunk reordering in multi-chunk flow', async () => {
       const key = await generateKey();
-      const chunk0 = await encryptChunk(new Uint8Array([1, 2, 3]), key, 0);
-      const chunk1 = await encryptChunk(new Uint8Array([4, 5, 6]), key, 1);
+      const chunk0 = await encryptChunk(new Uint8Array([1, 2, 3]), key, 0, false);
+      const chunk1 = await encryptChunk(new Uint8Array([4, 5, 6]), key, 1, true);
 
       // Swapped: try to decrypt chunk1 as index 0 and vice versa
-      await expect(decryptChunk(chunk1, key, 0)).rejects.toThrow();
-      await expect(decryptChunk(chunk0, key, 1)).rejects.toThrow();
+      await expect(decryptChunk(chunk1, key, 0, false)).rejects.toThrow();
+      await expect(decryptChunk(chunk0, key, 1, true)).rejects.toThrow();
 
       // Correct order works
-      await expect(decryptChunk(chunk0, key, 0)).resolves.toEqual(new Uint8Array([1, 2, 3]));
-      await expect(decryptChunk(chunk1, key, 1)).resolves.toEqual(new Uint8Array([4, 5, 6]));
+      await expect(decryptChunk(chunk0, key, 0, false)).resolves.toEqual(new Uint8Array([1, 2, 3]));
+      await expect(decryptChunk(chunk1, key, 1, true)).resolves.toEqual(new Uint8Array([4, 5, 6]));
     });
   });
 

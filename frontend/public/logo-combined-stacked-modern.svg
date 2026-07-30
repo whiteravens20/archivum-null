@@ -4,10 +4,6 @@
     Symbol centred on top, title + tagline centred below
     Gradient: cyan → blue → violet
   -->
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
-  </style>
-
   <defs>
     <!-- Symbol gradient in 512×512 local space -->
     <linearGradient id="symGrad" x1="256" y1="80" x2="256" y2="460" gradientUnits="userSpaceOnUse">

@@ -3,10 +3,6 @@
     Archivum Null — Modern Text Logo
     Horizontal cyan → blue → violet gradient on title, subtle neon glow
   -->
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
-  </style>
-
   <defs>
     <!-- Horizontal gradient across the title width -->
     <linearGradient id="textGrad" x1="60" y1="52" x2="560" y2="52" gradientUnits="userSpaceOnUse">

@@ -25,21 +25,35 @@ FROM node:24-alpine AS production
 ARG CACHE_BUST_APK=""
 RUN apk upgrade --no-cache
 
-# Update npm to patch CVEs in npm's bundled dependencies:
-#   - minimatch + tar  (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-#   - undici WebSocket DoS (CVE-2026-12151) — npm@11.17.0 bundles undici@6.26.0 (patched; 11.13.0 shipped 6.25.0)
-RUN npm install -g npm@11.17.0
-
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
     adduser -u 1001 -S archivum -G archivum
 
 WORKDIR /app
 
-# Install production dependencies only
+# Install production dependencies only, then strip every package manager.
+#
+# The runtime entrypoint is plain `node`, and the base docker-entrypoint.sh
+# only needs node on PATH — so npm, corepack and yarn are all build-time
+# tooling that has no business in the shipped image. Each one carries its own
+# vendored dependency tree, and those trees, not our dependencies, have been
+# the recurring source of image-scan findings: CVE-2026-14257
+# (brace-expansion <= 5.0.7) lives in npm's bundle and cannot be fixed by
+# upgrading, because every npm release through 12.0.2 still ships 5.0.7.
+# Deleting them removes that whole class of finding at the source.
+#
+# corepack and yarn are clean today; they are removed for the same reason, so
+# the next advisory in either never reaches a running container.
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts \
+ && npm cache clean --force \
+ && rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+           /opt/yarn-v* \
+           /root/.npm
 WORKDIR /app
 
 # Copy built backend
