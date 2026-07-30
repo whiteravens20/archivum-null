@@ -25,23 +25,25 @@ FROM node:24-alpine AS production
 ARG CACHE_BUST_APK=""
 RUN apk upgrade --no-cache
 
-# Update npm to patch CVEs in npm's bundled dependencies:
-#   - minimatch + tar  (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-#   - undici WebSocket DoS (CVE-2026-12151) — 11.17.0+ bundles undici@6.26.0 (patched; 11.13.0 shipped 6.25.0)
-#   - tar gzip-bomb + malformed-header DoS (CVE-2026-59873, CVE-2026-59874) —
-#     11.17.0 bundled tar@7.5.16; 11.18.0 is the first release to bundle tar@7.5.19.
-RUN npm install -g npm@11.18.0
-
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
     adduser -u 1001 -S archivum -G archivum
 
 WORKDIR /app
 
-# Install production dependencies only
+# Install production dependencies only.
+#
+# npm is build-time tooling: the runtime entrypoint is plain `node`, so npm and
+# npx are deleted once the install finishes. This drops npm's own bundled
+# dependency tree (~18 MB) out of the shipped image, which is the only place
+# CVE-2026-14257 (brace-expansion <= 5.0.7) appears — no npm release up to
+# 12.0.2 bundles the 5.0.8 fix, so upgrading npm cannot clear it. Not shipping
+# a package manager in a production container is the right default anyway.
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts \
+ && npm cache clean --force \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /root/.npm
 WORKDIR /app
 
 # Copy built backend
