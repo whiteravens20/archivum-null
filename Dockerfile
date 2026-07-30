@@ -31,19 +31,29 @@ RUN addgroup -g 1001 -S archivum && \
 
 WORKDIR /app
 
-# Install production dependencies only.
+# Install production dependencies only, then strip every package manager.
 #
-# npm is build-time tooling: the runtime entrypoint is plain `node`, so npm and
-# npx are deleted once the install finishes. This drops npm's own bundled
-# dependency tree (~18 MB) out of the shipped image, which is the only place
-# CVE-2026-14257 (brace-expansion <= 5.0.7) appears — no npm release up to
-# 12.0.2 bundles the 5.0.8 fix, so upgrading npm cannot clear it. Not shipping
-# a package manager in a production container is the right default anyway.
+# The runtime entrypoint is plain `node`, and the base docker-entrypoint.sh
+# only needs node on PATH — so npm, corepack and yarn are all build-time
+# tooling that has no business in the shipped image. Each one carries its own
+# vendored dependency tree, and those trees, not our dependencies, have been
+# the recurring source of image-scan findings: CVE-2026-14257
+# (brace-expansion <= 5.0.7) lives in npm's bundle and cannot be fixed by
+# upgrading, because every npm release through 12.0.2 still ships 5.0.7.
+# Deleting them removes that whole class of finding at the source.
+#
+# corepack and yarn are clean today; they are removed for the same reason, so
+# the next advisory in either never reaches a running container.
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
 RUN npm ci --omit=dev --ignore-scripts \
  && npm cache clean --force \
- && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /root/.npm
+ && rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+           /opt/yarn-v* \
+           /root/.npm
 WORKDIR /app
 
 # Copy built backend
