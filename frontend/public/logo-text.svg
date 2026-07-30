@@ -4,10 +4,6 @@
     Caps, tracking +5%, sans-serif geometric
     Uses system-safe fallback; embed Inter via CSS where used
   -->
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
-  </style>
-
   <text
     x="310" y="52"
     text-anchor="middle"

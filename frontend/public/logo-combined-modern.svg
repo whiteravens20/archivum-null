@@ -3,10 +3,6 @@
     Archivum Null — Modern Combined Logo (Symbol + Text)
     Cyan → Blue → Violet gradient, unified sigil glow, gradient text
   -->
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&amp;display=swap');
-  </style>
-
   <defs>
     <!-- Symbol gradient: top-to-bottom in 512×512 local space -->
     <linearGradient id="symGrad" x1="256" y1="80" x2="256" y2="460" gradientUnits="userSpaceOnUse">
