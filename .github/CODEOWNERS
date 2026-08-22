@@ -1,7 +1,11 @@
 # ── Code Owners ───────────────────────────────────────────────────────────────
-# GitHub enforces that at least one owner approves any PR touching these paths.
-# Configure branch protection (Settings → Branches → main → Require review from
-# Code Owners) to make this mandatory.
+# Auto-requests review from the listed owner on any PR touching these paths, and
+# documents where the blast radius is largest.
+#
+# Do NOT turn on "Require review from Code Owners" in branch protection here.
+# This is a solo repo and nobody can approve their own PR, so that setting
+# combined with enforce_admins (on since v1) makes every PR permanently
+# unmergeable. The merge gate is CI — the required status checks on main.
 #
 # Paths are checked most-specific to least-specific; last matching rule wins.
 
