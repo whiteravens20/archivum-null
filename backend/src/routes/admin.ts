@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { vaultManager } from '../vault/manager.js';
 import { basicAuth } from '../middleware/basicAuth.js';
 import { config } from '../config.js';
+import { getUpdateStatus } from '../updateCheck.js';
 
 interface VaultParams {
   vaultId: string;
@@ -21,6 +22,18 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       totalStorageMB: Math.round(stats.totalStorageBytes / 1024 / 1024 * 100) / 100,
       // 0 means unlimited
       storageQuotaBytes: config.MAX_TOTAL_STORAGE,
+    });
+  });
+
+  // Running version, plus the latest published release when the update check is
+  // enabled. Admin-only by design — the version is withheld from unauthenticated
+  // callers (see static/assetCloak.ts), so it must not leak back out through here.
+  app.get('/api/admin/version', async (_request: FastifyRequest, reply: FastifyReply) => {
+    reply.header('Cache-Control', 'no-store');
+    return reply.send({
+      ...(await getUpdateStatus()),
+      // Operational detail that used to sit on the public /api/health.
+      uptime: Math.round(process.uptime()),
     });
   });
 
