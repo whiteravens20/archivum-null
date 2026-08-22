@@ -13,30 +13,5 @@
     "`workspaces` scopes an entry to the workspaces it was justified for, so a",
     "suppression reasoned about the frontend can never silently cover the backend."
   ],
-  "allow": [
-    {
-      "ghsa": "GHSA-qwww-vcr4-c8h2",
-      "package": "react-router",
-      "workspaces": ["frontend"],
-      "severity": "high",
-      "title": "React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response",
-      "reason": [
-        "Applies only to React Router's RSC (React Server Components) mode, where a",
-        "server action can run before the framework returns a 400 for a rejected",
-        "request. Archivum Null's frontend is a purely client-side SPA: src/main.tsx",
-        "mounts <BrowserRouter>, and there is no SSR, no hydrateRoot, no StaticRouter",
-        "and no RSC entrypoint anywhere in frontend/src. react-router is used only for",
-        "Link, Routes, Route, useParams and useLocation. There is no server-side",
-        "rendering surface for this bypass to act on.",
-        "",
-        "No fix is installable: the advisory covers react-router 7.12.0 - 8.2.0 and is",
-        "patched only in react-router 8.3.0. react-router-dom has no 8.x release - the",
-        "package was merged into react-router in v8 - so resolving this requires a",
-        "framework migration rather than a version bump.",
-        "",
-        "Revisit when migrating to react-router 8.x, at which point this entry must go."
-      ],
-      "expires": "2026-10-27"
-    }
-  ]
+  "allow": []
 }
