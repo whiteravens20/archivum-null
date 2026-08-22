@@ -88,6 +88,9 @@
 ## Supply Chain
 
 - [x] Minimal dependencies
+- [x] 7-day dependency quarantine — Dependabot `cooldown: default-days: 7` on every ecosystem, so a freshly published version is never proposed, never auto-merged. Security advisories are exempt and land immediately.
+- [x] `min-release-age=7` in every `.npmrc` as the client-side backstop for manual installs
+- [x] Registry signatures verified in CI (`npm audit signatures`, both workspaces)
 - [x] `npm ci --ignore-scripts` in Docker build
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images
