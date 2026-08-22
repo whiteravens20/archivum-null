@@ -214,6 +214,8 @@ Most deployments only touch the variables below. For the full reference (chunk s
 | `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
 | `TRUST_PROXY` | `1` | Trusted reverse-proxy hops for `X-Forwarded-For`. Setting this higher than the real hop count lets clients spoof their IP and bypass rate limiting. |
+| `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
+| `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images; **required for bare-metal installs** |
 
 ## Deployment Architecture
 
@@ -345,10 +347,40 @@ Capabilities:
 - List vault metadata (ID, size, timestamps, download counts)
 - Force delete any vault
 - Health check on API
+- Report the running version and uptime, and — when enabled — flag a newer release with a link to the changes
 
 **Does NOT expose:** encryption keys, plaintext, or uploader identity.
 
 Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect behind a tunnel or a reverse proxy with IP allowlisting.
+
+### Update notifications
+
+The panel always shows which version the instance runs. Comparing it against the
+newest GitHub release is **opt-in**, because it is the only outbound connection the
+app ever makes on its own and [docs/HARDENING.md](docs/HARDENING.md#egress-containment)
+tells you to block exactly that:
+
+```bash
+UPDATE_CHECK_ENABLED=true
+```
+
+When a newer release exists the panel shows a notice with links to the GitHub compare
+view and the release notes. The check runs at most every 6 hours, sends nothing that
+identifies the deployment, and fails quietly if egress is blocked. Full details in
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md#version--update-check).
+
+> Docker images carry their version automatically. **Bare-metal installs must set
+> `APP_VERSION`** or the panel reports `unknown`.
+
+Applying an update is still up to your deployment. `docker compose up -d` on its own
+reuses the local image — run `docker compose pull` first. If you use Watchtower with
+`WATCHTOWER_LABEL_ENABLE=true`, the container needs the opt-in label or it is silently
+never updated; see
+[HARDENING.md → Keeping the deployment current](docs/HARDENING.md#keeping-the-deployment-current).
+
+The version is deliberately **not** exposed to unauthenticated callers — see
+[HARDENING.md → Version Disclosure](docs/HARDENING.md#version-disclosure) for what
+that means for your reverse proxy config.
 
 ## Cloudflare Turnstile
 
