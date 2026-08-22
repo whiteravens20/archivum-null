@@ -83,4 +83,15 @@ EXPOSE ${PORT}
 ENV NODE_ENV=production
 ENV STORAGE_PATH=/data/vaults
 
+# Version stamp — the only source the admin panel reads for "what am I running".
+# Passed by the release workflow from the git tag; an image built without it
+# honestly reports "unknown" rather than guessing from a package.json that the
+# tag-triggered release never bumps.
+#
+# Declared last on purpose: it changes on every release, and any layer after it
+# would be rebuilt each time. Nothing here reaches an unauthenticated caller —
+# the version is served only from GET /api/admin/version.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 CMD ["node", "backend/dist/index.js"]

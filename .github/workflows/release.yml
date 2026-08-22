@@ -125,6 +125,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Stamps the release tag into the image so the admin panel can report
+          # which version is running and compare it against the latest release.
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
           # GitHub Actions cache — dramatically speeds up repeated builds
           cache-from: type=gha
           cache-to: type=gha,mode=max

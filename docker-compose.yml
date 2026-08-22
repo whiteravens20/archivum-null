@@ -24,6 +24,10 @@ services:
       context: .
       args:
         - PORT=${PORT:-3000}
+        # Registry images are stamped by the release workflow. A local --build is
+        # not, so the admin panel would report "unknown" unless you pass one:
+        #   APP_VERSION=$(git describe --tags --abbrev=0) docker compose up -d --build
+        - APP_VERSION=${APP_VERSION:-}
     container_name: archivum-null
     restart: unless-stopped
 
