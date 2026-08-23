@@ -55,7 +55,7 @@ The [Proxmox Community Scripts](https://community-scripts.github.io/ProxmoxVE/) 
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
 ```
 
-> The `install-lxc.sh` script follows the Community Scripts conventions: it finds the next free VMID, downloads the Debian 12 template if needed, creates an unprivileged LXC, installs Node.js 24, clones the repo, builds the project, creates a systemd service, and writes the Proxmox Firewall egress config. **Review the script before running it.**
+> The `install-lxc.sh` script follows the Community Scripts conventions: it finds the next free VMID, downloads the Debian 13 template if needed, creates an unprivileged LXC (`keyctl=1,nesting=1` — nesting is required by Debian 13's systemd), installs Node.js 24, clones the repo, builds the project, creates a systemd service, and writes the Proxmox Firewall egress config. **Review the script before running it.**
 
 To update an existing LXC installed this way:
 
