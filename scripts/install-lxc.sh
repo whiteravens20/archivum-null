@@ -227,6 +227,12 @@ if [[ "$_vpn_ans" == "Yes" ]]; then
   pick VPN_FW_TYPE "VPN firewall preset:" "none" "none" "wireguard" "openvpn"
 fi
 
+# ── Proxmox firewall choice ───────────────────────────────────────────────────
+info "Egress DROP blocks all container-initiated outbound traffic (recommended)."
+pick _fw_ans "Configure Proxmox firewall (egress DROP):" "Yes" "Yes" "No"
+CT_FIREWALL=false
+[[ "$_fw_ans" == "Yes" ]] && CT_FIREWALL=true
+
 # ── Build container feature flags ────────────────────────────────────────────
 # nesting=1 is required: Debian 13 ships systemd 257, which needs it in an
 # unprivileged CT to mount /tmp, /dev/mqueue and /run/lock.
@@ -348,7 +354,9 @@ green "Application installed."
 header "Configuring Proxmox Firewall (egress containment)"
 
 FW_FILE="/etc/pve/firewall/${VMID}.fw"
-if [[ -f "$FW_FILE" ]]; then
+if [[ "$CT_FIREWALL" != "true" ]]; then
+  info "Skipped on request — container egress is unrestricted."
+elif [[ -f "$FW_FILE" ]]; then
   yellow "Firewall config $FW_FILE already exists — skipping (edit manually if needed)."
 else
   # Build optional VPN firewall rules
@@ -400,7 +408,7 @@ FW
 fi
 
 # Guest firewall rules only take effect when the datacenter firewall is on.
-if pve-firewall status 2>/dev/null | grep -q "disabled"; then
+if [[ "$CT_FIREWALL" == "true" ]] && pve-firewall status 2>/dev/null | grep -q "disabled"; then
   yellow "The DATACENTER firewall is disabled — the egress rules above have NO effect."
   yellow "Enable it under Datacenter → Firewall → Options (review host rules first),"
   yellow "or set 'enable: 1' under [OPTIONS] in /etc/pve/firewall/cluster.fw."
@@ -506,7 +514,7 @@ cat << 'POSTINSTALL'
 │  Key points:                                                        │
 │  • Never expose port 3000 to the public internet.                   │
 │  • Use a VPS + WireGuard tunnel + reverse proxy (nginx/Caddy).      │
-│  • Proxmox Firewall (already configured): blocks all egress         │
+│  • Proxmox Firewall (if configured): blocks all egress              │
 │    from this container except return traffic.                        │
 │  • WireGuard AllowedIPs: use /32 only — never 0.0.0.0/0.           │
 │  • Persist iptables: apt install iptables-persistent                │
