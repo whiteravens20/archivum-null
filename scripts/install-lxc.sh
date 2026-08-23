@@ -219,13 +219,15 @@ NET0="name=eth0,bridge=${BRIDGE},ip=${NET_IP},firewall=1"
 [[ -n "$NET_GW" ]] && NET0+=",gw=${NET_GW}"
 
 # ── VPN / tunnel options ──────────────────────────────────────────────────────
+# The chosen VPN software is installed during bootstrap — before any egress
+# rules apply — and the firewall preset (if the firewall is enabled) opens the
+# matching outbound ports, so the tunnel works out of the box. 'none' = manual.
 pick _vpn_ans "TUN device (VPN / Tunneling):" "No" "No" "Yes"
 VPN_TUN=false
-VPN_FW_TYPE="none"
+VPN_SW="none"
 if [[ "$_vpn_ans" == "Yes" ]]; then
   VPN_TUN=true
-  info "wireguard = UDP 51820 + DNS │ openvpn = UDP/TCP 1194 + DNS │ none = manual"
-  pick VPN_FW_TYPE "VPN firewall preset:" "none" "none" "wireguard" "openvpn"
+  pick VPN_SW "VPN software to preinstall:" "none" "none" "wireguard" "openvpn" "tailscale"
 fi
 
 # ── Proxmox firewall choice ───────────────────────────────────────────────────
@@ -273,10 +275,11 @@ green "Container started."
 bootstrap_container() {
   pct exec "$VMID" -- env \
     INSTALL_DIR="$INSTALL_DIR" REPO_URL="$REPO_URL" NODE_MAJOR="$NODE_MAJOR" \
+    VPN_SW="$VPN_SW" \
     bash -s << 'INNER'
 set -euo pipefail
 
-: "${INSTALL_DIR:?}" "${REPO_URL:?}" "${NODE_MAJOR:?}"
+: "${INSTALL_DIR:?}" "${REPO_URL:?}" "${NODE_MAJOR:?}" "${VPN_SW:=none}"
 
 echo "==> Updating packages…"
 apt-get update -qq
@@ -286,6 +289,15 @@ echo "==> Installing Node.js ${NODE_MAJOR}…"
 curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - >/dev/null 2>&1
 apt-get install -y --no-install-recommends nodejs
 npm install -g npm@latest
+
+if [[ "$VPN_SW" != "none" ]]; then
+  echo "==> Installing VPN software (${VPN_SW})…"
+  case "$VPN_SW" in
+    wireguard) apt-get install -y --no-install-recommends wireguard-tools ;;
+    openvpn)   apt-get install -y --no-install-recommends openvpn ;;
+    tailscale) curl -fsSL https://tailscale.com/install.sh | sh ;;
+  esac
+fi
 
 echo "==> Clearing apt cache…"
 apt-get clean
@@ -361,11 +373,20 @@ elif [[ -f "$FW_FILE" ]]; then
   yellow "Firewall config $FW_FILE already exists — skipping (edit manually if needed)."
 else
   # Build optional VPN firewall rules
-  case "$VPN_FW_TYPE" in
+  case "$VPN_SW" in
     wireguard)
       VPN_FW_RULES="
-# WireGuard VPN outbound
+# WireGuard VPN outbound (standard peer port — adjust if your peer differs)
 OUT ACCEPT -proto udp -dport 51820
+OUT ACCEPT -proto udp -dport 53
+OUT ACCEPT -proto tcp -dport 53"
+      ;;
+    tailscale)
+      VPN_FW_RULES="
+# Tailscale outbound (control plane + DERP relays over 443, STUN, WireGuard)
+OUT ACCEPT -proto tcp -dport 443
+OUT ACCEPT -proto udp -dport 3478
+OUT ACCEPT -proto udp -dport 41641
 OUT ACCEPT -proto udp -dport 53
 OUT ACCEPT -proto tcp -dport 53"
       ;;
@@ -539,7 +560,17 @@ fi
 
 if [[ "$VPN_TUN" == "true" ]]; then
   echo
-  info "TUN device is enabled. Install WireGuard/OpenVPN inside the container:"
-  info "  pct enter $VMID"
-  info "  apt install -y --no-install-recommends wireguard-tools   # or openvpn"
+  case "$VPN_SW" in
+    tailscale)
+      info "Tailscale is preinstalled. Bring the tunnel up:  pct enter $VMID  →  tailscale up" ;;
+    wireguard)
+      info "WireGuard tools are preinstalled. Configure /etc/wireguard/wg0.conf inside the container." ;;
+    openvpn)
+      info "OpenVPN is preinstalled. Drop your client config in /etc/openvpn/client/ inside the container." ;;
+    *)
+      info "TUN device is enabled. Install your VPN software inside the container:"
+      info "  pct enter $VMID"
+      info "  apt-get install -y --no-install-recommends wireguard-tools   # or openvpn / tailscale"
+      ;;
+  esac
 fi
