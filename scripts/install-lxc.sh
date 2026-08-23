@@ -315,6 +315,9 @@ PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths=/opt/archivum-null/data/vaults
 ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
