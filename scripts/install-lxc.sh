@@ -251,12 +251,12 @@ green "Container started."
 
 # ── Bootstrap function (runs inside the container via pct exec) ───────────────
 bootstrap_container() {
-  pct exec "$VMID" -- bash -s << 'INNER'
+  pct exec "$VMID" -- env \
+    INSTALL_DIR="$INSTALL_DIR" REPO_URL="$REPO_URL" NODE_MAJOR="$NODE_MAJOR" \
+    bash -s << 'INNER'
 set -euo pipefail
 
-INSTALL_DIR="/opt/archivum-null"
-REPO_URL="https://github.com/whiteravens20/archivum-null.git"
-NODE_MAJOR=24
+: "${INSTALL_DIR:?}" "${REPO_URL:?}" "${NODE_MAJOR:?}"
 
 echo "==> Updating packages…"
 apt-get update -qq
