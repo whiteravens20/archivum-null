@@ -260,15 +260,15 @@ NODE_MAJOR=24
 
 echo "==> Updating packages…"
 apt-get update -qq
-apt install -y --no-install-recommends curl git ca-certificates gnupg
+apt-get install -y --no-install-recommends curl git ca-certificates gnupg
 
 echo "==> Installing Node.js ${NODE_MAJOR}…"
 curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - >/dev/null 2>&1
-apt install -y --no-install-recommends nodejs
+apt-get install -y --no-install-recommends nodejs
 npm install -g npm@latest
 
 echo "==> Clearing apt cache…"
-apt clean
+apt-get clean
 rm -rf /var/lib/apt/lists/*
 
 echo "==> Cloning repository…"
