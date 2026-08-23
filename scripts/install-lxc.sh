@@ -199,6 +199,7 @@ mapfile -t _bridges < <(ip -o link show type bridge 2>/dev/null \
 pick BRIDGE "Network bridge:" "$DEFAULT_BRIDGE" "${_bridges[@]}"
 
 # ── Container resources ───────────────────────────────────────────────────────
+info "Preselected values are the recommended sizing for Archivum Null."
 pick CT_MEMORY "RAM (MB):" "$DEFAULT_MEMORY" "512" "1024" "2048" "4096" "8192"
 pick CT_CORES  "CPU cores:" "$DEFAULT_CORES" "1" "2" "4" "6" "8"
 pick CT_DISK   "Disk (GiB):" "$DEFAULT_DISK" "4" "8" "10" "20" "40" "80"
