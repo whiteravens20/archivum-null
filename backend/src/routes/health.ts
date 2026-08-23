@@ -34,12 +34,14 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // Liveness only. `uptime` used to be reported here and was a version oracle: it
+  // dates the last deploy to the second, which pins the running build to whichever
+  // release was current at that moment. `timestamp` went with it — it told a caller
+  // nothing the Date header does not already, and served no probe.
+  // The container HEALTHCHECK only needs a 200. Operators get the detail, gated,
+  // from GET /api/admin/version.
   app.get('/api/health', async (_request, reply) => {
-    return reply.send({
-      status: 'ok',
-      timestamp: Date.now(),
-      uptime: process.uptime(),
-    });
+    return reply.send({ status: 'ok' });
   });
 
   app.get('/api/tos', async (_request, reply) => {

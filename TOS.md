@@ -1,6 +1,6 @@
 # Terms of Service — Archivum Null
 
-**Last Updated:** March 2, 2026
+**Last Updated:** August 22, 2026
 
 > ⚠️ **NOTICE:** This is a placeholder template. Replace with a legally generated Terms of Service document appropriate for your jurisdiction before deploying to production.
 
@@ -52,6 +52,26 @@ The operator is not liable for any damages resulting from the use of this Servic
 - No cookies are set
 - IP addresses are temporarily held in memory for rate limiting and are never persisted
 - The operator has no ability to decrypt uploaded files
+
+### 7.1 Outbound connections
+
+By default the Service initiates no outbound connections of its own. Two optional
+features, both configured by the operator, are the only exceptions:
+
+- **Bot protection (Cloudflare Turnstile).** When enabled, your browser loads a
+  challenge widget from Cloudflare and the server verifies the resulting token with
+  Cloudflare. Cloudflare therefore sees your IP address as part of that check. This
+  is visible to you — the widget is rendered on the upload page.
+- **Version check.** When enabled, the server periodically asks GitHub's public API
+  which release is the newest, so the operator can be told an update is available.
+  The request carries no information about you, about any upload, or about which
+  version the server runs — GitHub sees only the server's own IP address. It is not
+  triggered by anything you do, and the result is shown only in the operator's
+  administrative panel.
+
+Neither feature transmits file contents, filenames, encryption keys, or vault
+identifiers. Both can be turned off by the operator, and both are off unless
+explicitly enabled.
 
 ## 8. Content Responsibility
 

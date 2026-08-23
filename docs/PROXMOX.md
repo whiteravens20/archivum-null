@@ -100,6 +100,10 @@ cp .env.example .env
 #   STORAGE_PATH=/opt/archivum-null/data/vaults
 nano .env
 
+# Stamp the version. Docker images get this from the release tag; a source install
+# has to say so itself, or the admin panel can only report "unknown".
+echo "APP_VERSION=$(git describe --tags --abbrev=0)" >> .env
+
 # Build backend
 cd backend && npm ci --ignore-scripts && npm run build && npm prune --omit=dev && cd ..
 

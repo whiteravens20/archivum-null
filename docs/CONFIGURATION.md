@@ -64,3 +64,38 @@ The README covers the variables you usually touch. This page is the complete ref
 |---|---|---|
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**, see above) |
+
+### Version & update check
+
+| Variable | Default | Description |
+|---|---|---|
+| `APP_VERSION` | — | Version reported in the admin panel. Stamped automatically into Docker images from the release tag; **bare-metal installs must set it themselves** or the panel reports `unknown` |
+| `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release and show a notice in the admin panel. **Opt-in** — see below |
+| `UPDATE_CHECK_REPO` | `whiteravens20/archivum-null` | Repository to compare against; change it on a fork |
+| `UPDATE_CHECK_INTERVAL` | `21600` (6 h) | Seconds between checks. Minimum `300`; failed checks retry after 15 min |
+
+The running version is always shown in the admin panel and needs no network. Only
+the *comparison* against GitHub does, and that is off by default: it is the one
+outbound connection the app ever makes on its own, and
+[HARDENING.md](HARDENING.md#egress-containment) tells you to block exactly that.
+
+When enabled, the check:
+
+- issues at most one unauthenticated `GET https://api.github.com/repos/<repo>/releases/latest` per interval;
+- sends no token, no cookies, and no version in the `User-Agent` — GitHub sees the server's IP and nothing more;
+- is served only from the authenticated `GET /api/admin/version`, never to end users;
+- fails quietly if egress is blocked — the panel still reports the running version, with the reason beside it.
+
+If you have applied egress containment, either allow `api.github.com` or leave this `false`.
+
+**Bare-metal / systemd:** `APP_VERSION` is set by the Docker build, so a `node backend/dist/index.js`
+install has to provide it in the unit's `EnvironmentFile`:
+
+```ini
+# /etc/archivum-null/archivum.env
+APP_VERSION=v2.0.0
+```
+
+Everything else on this page — including the anti-fingerprinting behaviour described
+in [HARDENING.md](HARDENING.md#version-disclosure) — is enforced inside the Node
+process and applies identically to Docker and bare-metal.

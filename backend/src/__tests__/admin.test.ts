@@ -83,6 +83,14 @@ describe('Admin routes — HTTP Basic Auth gating', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  // The running version is deliberately withheld from unauthenticated callers —
+  // see static/assetCloak.ts. This route must not become the way back to it.
+  it('GET /api/admin/version returns 401 without credentials', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/version' });
+    expect(res.statusCode).toBe(401);
+    expect(res.body).not.toContain('APP_VERSION');
+  });
+
   it('returns 401 for wrong credentials', async () => {
     const res = await app.inject({
       method: 'GET',

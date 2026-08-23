@@ -19,8 +19,34 @@ interface Stats {
   storageQuotaBytes: number;
 }
 
+interface VersionInfo {
+  /** `unknown` when the build was not stamped with APP_VERSION. */
+  current: string;
+  latest: string | null;
+  /** null when no comparison could be made — check off, failed, or unstamped. */
+  updateAvailable: boolean | null;
+  releaseUrl: string | null;
+  compareUrl: string | null;
+  publishedAt: string | null;
+  checkedAt: number | null;
+  /** Whether the operator opted into the GitHub release check. */
+  enabled: boolean;
+  error: string | null;
+  uptime: number;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export default function Admin() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [version, setVersion] = useState<VersionInfo | null>(null);
   const [vaults, setVaults] = useState<VaultMeta[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +96,18 @@ export default function Admin() {
     return true;
   }, [authHeader]);
 
+  // Fetched on its own cadence rather than with the 10 s stats poll: the very first
+  // call can wait on GitHub for up to 5 s, and the backend caches the answer for
+  // hours afterwards. A failure here never disturbs the rest of the panel.
+  const fetchVersion = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/version', { headers: authHeader() });
+      if (res.ok) setVersion(await res.json());
+    } catch {
+      // Panel stays fully usable without it.
+    }
+  }, [authHeader]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const token = btoa(`${username}:${password}`);
@@ -87,6 +125,14 @@ export default function Admin() {
     const interval = setInterval(() => { void poll(); }, 10_000);
     return () => clearInterval(interval);
   }, [authenticated, fetchData]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const check = async () => { await fetchVersion(); };
+    void check();
+    const interval = setInterval(() => { void check(); }, 600_000);
+    return () => clearInterval(interval);
+  }, [authenticated, fetchVersion]);
 
   const handleDeleteConfirmed = async (vaultId: string) => {
     setPendingDelete(null);
@@ -152,6 +198,46 @@ export default function Admin() {
         </div>
       ) : (
         <>
+          {/* Update notice — only when a newer release actually exists */}
+          {version?.updateAvailable && version.latest && (
+            <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-yellow-300">
+                    Update available — {version.latest}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    This instance runs {version.current}
+                    {version.publishedAt &&
+                      ` · released ${new Date(version.publishedAt).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 whitespace-nowrap">
+                  {version.compareUrl && (
+                    <a
+                      href={version.compareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-yellow-300 hover:underline"
+                    >
+                      View changes →
+                    </a>
+                  )}
+                  {version.releaseUrl && (
+                    <a
+                      href={version.releaseUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-gray-400 hover:text-gray-200 hover:underline"
+                    >
+                      Release notes
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
@@ -193,8 +279,28 @@ export default function Admin() {
               </div>
 
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Status</p>
-                <p className="text-lg font-bold text-gray-200">● Online</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Version</p>
+                <p
+                  className={`text-lg font-bold ${
+                    version?.updateAvailable ? 'text-yellow-400' : 'text-gray-200'
+                  }`}
+                >
+                  {version?.current ?? '—'}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  {version ? `● Online · up ${formatUptime(version.uptime)}` : '● Online'}
+                </p>
+                {version && !version.enabled && (
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    Update check off — set <code>UPDATE_CHECK_ENABLED=true</code>
+                  </p>
+                )}
+                {version?.enabled && version.updateAvailable === false && (
+                  <p className="text-[10px] text-gray-500 mt-1">Up to date</p>
+                )}
+                {version?.enabled && version.error && (
+                  <p className="text-[10px] text-gray-500 mt-1">{version.error}</p>
+                )}
               </div>
             </div>
           )}

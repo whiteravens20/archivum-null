@@ -23,6 +23,11 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
   - [Reverse Proxy Configuration](#reverse-proxy-configuration)
     - [nginx](#nginx)
     - [Caddy (recommended — automatic TLS via Let's Encrypt)](#caddy-recommended--automatic-tls-via-lets-encrypt)
+  - [Version Disclosure](#version-disclosure)
+    - [What the app already does](#what-the-app-already-does)
+    - [What you must not undo](#what-you-must-not-undo)
+    - [What is still detectable](#what-is-still-detectable)
+    - [Keeping the deployment current](#keeping-the-deployment-current)
   - [VPS Hardening](#vps-hardening)
   - [WireGuard — Prevent Lateral LAN Movement](#wireguard--prevent-lateral-lan-movement)
   - [Cloudflare Tunnel (optional)](#cloudflare-tunnel-optional)
@@ -197,6 +202,104 @@ archivum.yourdomain.com {
         flush_interval -1
     }
 }
+```
+
+---
+
+## Version Disclosure
+
+**Threat:** knowing which release a host runs turns a published advisory into a
+target list. An attacker who can read the version off a deployment does not have to
+probe for a vulnerability — they look up whether that release has one. The check
+should cost them real effort, not one unauthenticated `GET /`.
+
+### What the app already does
+
+Enforced inside the Node process, so it applies identically to Docker and to a
+bare-metal `node backend/dist/index.js`:
+
+| Leak | Status |
+|---|---|
+| Vite content-hashed asset names (`/assets/index-Qld3srqp.js`) — reproducible by rebuilding any published tag | Randomised per boot; the real names 404 |
+| `Last-Modified` on static files — dates the build to the second | Suppressed |
+| `ETag` on static files — `"<size>-<mtime as hex>"`, the same timestamp | Suppressed |
+| `uptime` on `GET /api/health` — dates the deploy, which pins the release | Removed; moved behind auth to `GET /api/admin/version` |
+| Running version | Served only from the authenticated `GET /api/admin/version` |
+
+Asset names are randomised **at container start, not at build time**, deliberately:
+release images are public on `ghcr.io`, so anything baked into `archivum-null:2.0.0`
+is knowable by anyone who pulls it. Names are rewritten in memory only — the image
+stays compatible with `read_only: true`.
+
+### What you must not undo
+
+- **Do not serve `frontend/dist` directly from your reverse proxy.** Proxy `/` to the
+  app, as the nginx and Caddy examples above do. A proxy reading files off disk
+  bypasses both the randomised names and the header suppression, and re-adds its own
+  mtime-based `Last-Modified`/`ETag`.
+- **Do not add `add_header Last-Modified`/`etag on;`** for the app's routes.
+- **Turn off the proxy's own banner** — nginx advertises itself, and with
+  `server_tokens on` (the default on some distros) its version too:
+
+  ```nginx
+  http {
+      server_tokens off;
+  }
+  ```
+
+  Caddy sends no `Server` version by default.
+- **Do not let the proxy duplicate the app's security headers.** The app already sets
+  `Strict-Transport-Security`, `X-Content-Type-Options`, `Content-Security-Policy`
+  and the rest on every response. Adding them again in nginx produces two copies of
+  each header; strip yours or drop the `add_header` lines.
+
+### What is still detectable
+
+Be honest about the limit: **the bundle's *contents* are the version.** Client-side
+code is delivered to the browser by definition, so anyone who downloads the JavaScript
+and diffs it against a rebuilt tag can still identify the release, and the bundle
+carries dependency versions (`react-dom`, `react-router`) in cleartext regardless.
+
+That is unavoidable for a browser app, and it is not what the measures above are for.
+They remove the *cheap, passive, scannable* signal — the kind that gets a host swept
+up in a mass scan for "everything running < v1.2.3". They do not stop a targeted
+analyst, and nothing short of not shipping JavaScript would.
+
+**Obscurity is not the control. Being current is.** See below.
+
+### Keeping the deployment current
+
+Enable the admin panel's update check (`UPDATE_CHECK_ENABLED=true`) so you find out
+when a release ships. It is off by default because it needs egress — with the rules
+in [Egress Containment](#egress-containment) applied you must either allow
+`api.github.com` or leave it off and track releases another way (GitHub's *Watch →
+Releases only*, or an RSS reader on `https://github.com/whiteravens20/archivum-null/releases.atom`).
+
+If you use Watchtower to apply updates, note that a Watchtower running with
+`WATCHTOWER_LABEL_ENABLE=true` updates **only** containers that opt in. Without the
+label it silently skips the container — the deployment keeps running the image it
+first pulled, indefinitely:
+
+```yaml
+# docker-compose.yml
+services:
+  archivum-null:
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+```
+
+Verify which containers are actually managed:
+
+```bash
+docker inspect <container> \
+  --format '{{index .Config.Labels "com.centurylinklabs.watchtower.enable"}}'
+```
+
+Without an updater, `docker compose up -d` alone will **not** pick up a new release —
+it reuses the local image. Pull first:
+
+```bash
+docker compose pull && docker compose up -d
 ```
 
 ---
@@ -464,11 +567,25 @@ With Headscale, the control-plane metadata stays entirely on infrastructure you 
 
 The rules below cut off that escape path.
 
+**Before you pick an option, know what legitimately needs egress.** By default the
+app makes no outbound connection at all. Two optional features change that:
+
+| Feature | Needs | If blocked |
+|---|---|---|
+| Cloudflare Turnstile (`TURNSTILE_SECRET` set) | `https://challenges.cloudflare.com` | Uploads fail — the challenge cannot be verified |
+| Update check (`UPDATE_CHECK_ENABLED=true`) | `https://api.github.com` | Fails quietly; the admin panel still reports the running version, with the reason beside it |
+
+The update check is off by default precisely so that this section's rules and the
+application's behaviour do not contradict each other. If you want it, allow
+`api.github.com` alongside the Cloudflare ranges below; if you would rather keep
+egress shut, leave it off and track releases from outside the host — see
+[Keeping the deployment current](#keeping-the-deployment-current).
+
 ---
 
 ### Option A — Docker `internal` network
 
-**When to use:** Turnstile is **disabled**. The container requires zero outbound internet access.
+**When to use:** Turnstile is **disabled** and the update check is off. The container requires zero outbound internet access.
 
 Set the Docker network to `internal: true` in `docker-compose.yml`:
 

@@ -1,8 +1,13 @@
 name: Branch Protection Audit
 
 # Asserts that branch protection on `main` still matches expectations.
-# Drift here (someone disabling required reviews, signed commits, or required
-# checks) silently weakens the supply chain — this catches it within a day.
+# Drift here (re-enabling a review gate, disabling signed commits, dropping a
+# required check) silently weakens the supply chain — this catches it within
+# a day.
+#
+# The expectations encoded below are the v1 profile: on a solo-maintainer repo
+# the merge gate is CI, not a reviewer, and `enforce_admins` is what makes that
+# gate bind the maintainer too.
 
 on:
   schedule:
@@ -44,42 +49,44 @@ jobs:
           assert() {
             local label="$1"
             local expr="$2"
-            local actual
-            actual=$(echo "$PROT" | jq -r "$expr")
-            if [ "$actual" != "true" ]; then
-              echo "::error::Branch protection drift — ${label} is '${actual}', expected 'true'"
+            if [ "$(echo "$PROT" | jq -r "$expr")" != "true" ]; then
+              echo "::error::Branch protection drift — expected: ${label}"
               fail=1
             else
               echo "ok: ${label}"
             fi
           }
 
-          # Required: code-owner review on every PR
-          assert "require code-owner reviews"          '.required_pull_request_reviews.require_code_owner_reviews // false'
-          # Required: stale review dismissal on new push
-          assert "dismiss stale reviews"                '.required_pull_request_reviews.dismiss_stale_reviews // false'
+          # --- merge gate ---
+          # Admins are bound by these rules. Without this the maintainer walks
+          # past every check on every sync and the rest of this file is theatre.
+          assert "admins bound by branch protection"        '.enforce_admins.enabled // false'
+          # And precisely because admins are bound, no human approval may be
+          # required: GitHub never lets anyone approve their own PR, so a review
+          # requirement on a one-person repo makes `main` permanently unmergeable.
+          # (`dismiss_stale_reviews` is therefore inert and not asserted.)
+          assert "no approving review required"             '((.required_pull_request_reviews.required_approving_review_count // 0) == 0)'
+          assert "code-owner review not a merge gate"       '(.required_pull_request_reviews.require_code_owner_reviews // false) | not'
+          # A dev -> main release PR lands as a merge commit; linear history
+          # rejects merge commits outright, so it has to stay off.
+          assert "linear history not required"              '(.required_linear_history.enabled // false) | not'
 
-          # Note: required_approving_review_count is intentionally 0 and
-          # enforce_admins is off — this is a solo-maintainer repo. Forks that
-          # add reviewers should harden both in their own protection rules.
+          # --- integrity ---
+          assert "signed commits required"                  '.required_signatures.enabled // false'
+          assert "status checks strict (branch up to date)" '.required_status_checks.strict // false'
+          assert "force pushes blocked"                     '(.allow_force_pushes.enabled // false) | not'
+          assert "branch deletions blocked"                 '(.allow_deletions.enabled // false) | not'
 
-          # Required: signed commits
-          assert "required signatures"                  '.required_signatures.enabled // false'
-          # Required: linear history (no merge commits muddying audit trail)
-          assert "required linear history"              '.required_linear_history.enabled // false'
-          # Required: status checks must pass and branches up-to-date
-          assert "require strict status checks"         '.required_status_checks.strict // false'
-          # Required: block force pushes
-          assert "block force pushes"                   '(.allow_force_pushes.enabled // false) | not'
-          # Required: block deletions
-          assert "block branch deletions"               '(.allow_deletions.enabled // false) | not'
-
-          # Required CI contexts that must pass before merge
+          # Required CI contexts that must pass before merge. These are the
+          # check names GitHub actually reports, not the workflow job ids — a
+          # matrix job reports its name with the matrix value appended, so a
+          # name no job ever produces can never be satisfied and blocks every
+          # merge.
           REQUIRED_CHECKS=$(echo "$PROT" | jq -r '.required_status_checks.contexts[]? // empty' | sort)
           echo "Configured required checks:"
           echo "$REQUIRED_CHECKS" | sed 's/^/  - /'
 
-          for must in "Backend tests" "Frontend tests" "Analyze (javascript-typescript)" "npm audit" "Trivy filesystem scan" "Trivy Docker image scan"; do
+          for must in "Backend tests" "Frontend tests" "Validate Docker build" "Analyze (javascript-typescript)" "npm audit" "Trivy filesystem scan" "Trivy Docker image scan"; do
             if ! echo "$REQUIRED_CHECKS" | grep -Fxq "$must"; then
               echo "::error::Required status check missing: '${must}'"
               fail=1

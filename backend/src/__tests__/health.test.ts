@@ -49,10 +49,18 @@ describe('healthRoutes', () => {
     });
 
     expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: 'ok' });
+  });
+
+  // `uptime` dated the last deploy to the second, which pins the running build to
+  // whichever release was current then — a version oracle on an unauthenticated
+  // route. It now lives behind basic auth on /api/admin/version.
+  it('should not leak process uptime or a server clock to unauthenticated callers', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+
     const body = res.json();
-    expect(body.status).toBe('ok');
-    expect(body.timestamp).toBeTypeOf('number');
-    expect(body.uptime).toBeTypeOf('number');
+    expect(body).not.toHaveProperty('uptime');
+    expect(body).not.toHaveProperty('timestamp');
   });
 });
 

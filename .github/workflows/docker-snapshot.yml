@@ -71,6 +71,9 @@ jobs:
           # when repository variables are not configured.
           build-args: |
             CACHE_BUST_APK=${{ github.run_id }}
+            # Not a release tag — the panel shows it verbatim and skips the
+            # release comparison rather than pretending a snapshot is a version.
+            APP_VERSION=edge-${{ github.sha }}
             VITE_MAX_FILE_SIZE=${{ vars.VITE_MAX_FILE_SIZE || '104857600' }}
             VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
             VITE_DEFAULT_TTL=${{ vars.VITE_DEFAULT_TTL || '86400' }}
