@@ -50,6 +50,11 @@ interface CacheEntry {
 // has just opened egress should not wait out the full interval to see it work.
 const FAILURE_CACHE_MS = 15 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 5000;
+// A release payload from GitHub is a few kilobytes. The abort above bounds how long
+// the request may take, not how much it may send — without a byte cap, anything
+// sitting on the operator's egress path could stream an unbounded body straight into
+// memory and stay well inside the timeout doing it.
+const MAX_RESPONSE_BYTES = 256 * 1024;
 
 let cache: CacheEntry | null = null;
 let inFlight: Promise<UpdateStatus> | null = null;
@@ -72,6 +77,34 @@ function baseStatus(): UpdateStatus {
     enabled: config.UPDATE_CHECK_ENABLED,
     error: null,
   };
+}
+
+/** Reads a body, giving up the moment it goes past `limit` bytes. */
+async function readCapped(
+  body: ReadableStream<Uint8Array>,
+  limit: number
+): Promise<string | null> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      total += value.length;
+      if (total > limit) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks).toString('utf-8');
 }
 
 function repoUrl(path: string): string {
@@ -105,7 +138,24 @@ async function fetchLatestRelease(): Promise<UpdateStatus> {
       return status;
     }
 
-    release = (await response.json()) as GitHubRelease;
+    if (!response.body) {
+      status.error = 'GitHub API returned an empty response';
+      return status;
+    }
+
+    const body = await readCapped(response.body, MAX_RESPONSE_BYTES);
+    if (body === null) {
+      status.error = 'GitHub API response was larger than expected — discarded';
+      return status;
+    }
+
+    try {
+      release = JSON.parse(body) as GitHubRelease;
+    } catch {
+      // A captive portal or an intercepting proxy answers 200 with HTML.
+      status.error = 'GitHub API returned a response that is not JSON';
+      return status;
+    }
   } catch (err) {
     // Egress containment is the most likely cause, so name it: the operator sees
     // the reason without having to go read the container logs.

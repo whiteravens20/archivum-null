@@ -28,13 +28,17 @@ async function loadUpdateCheck() {
   return mod;
 }
 
-function mockGitHub(response: Partial<Response> & { json?: () => Promise<unknown> }) {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => LATEST_RELEASE,
-    ...response,
-  });
+/**
+ * A real `Response`, not a stand-in object: the check reads the body as a capped
+ * stream, so a hand-rolled `{ ok, json }` would pass tests the runtime would fail.
+ */
+function mockGitHub({ status = 200, body = JSON.stringify(LATEST_RELEASE) } = {}) {
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(
+      async () =>
+        new Response(body, { status, headers: { 'Content-Type': 'application/json' } })
+    );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -164,11 +168,36 @@ describe('getUpdateStatus', () => {
 
   it('distinguishes GitHub rate limiting from other API errors', async () => {
     vi.stubEnv('UPDATE_CHECK_ENABLED', 'true');
-    mockGitHub({ ok: false, status: 403 });
+    mockGitHub({ status: 403 });
 
     const { getUpdateStatus } = await loadUpdateCheck();
 
     expect((await getUpdateStatus()).error).toMatch(/rate limit/);
+  });
+
+  it('discards a response too large to be a release payload', async () => {
+    vi.stubEnv('UPDATE_CHECK_ENABLED', 'true');
+    // Valid JSON, 512 KB of it. The timeout would not catch this: a host on the
+    // egress path can deliver it in milliseconds.
+    mockGitHub({ body: JSON.stringify({ tag_name: 'v9.9.9', pad: 'x'.repeat(512 * 1024) }) });
+
+    const { getUpdateStatus } = await loadUpdateCheck();
+    const status = await getUpdateStatus();
+
+    expect(status.latest).toBeNull();
+    expect(status.updateAvailable).toBeNull();
+    expect(status.error).toMatch(/larger than expected/);
+  });
+
+  it('names an intercepted response for what it is', async () => {
+    vi.stubEnv('UPDATE_CHECK_ENABLED', 'true');
+    mockGitHub({ body: '<html>captive portal</html>' });
+
+    const { getUpdateStatus } = await loadUpdateCheck();
+    const status = await getUpdateStatus();
+
+    expect(status.latest).toBeNull();
+    expect(status.error).toMatch(/not JSON/);
   });
 
   it('says so when the build was never stamped', async () => {
