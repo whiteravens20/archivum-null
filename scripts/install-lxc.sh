@@ -354,7 +354,9 @@ OUT ACCEPT -proto tcp -dport 53"
   cat > "$FW_FILE" << FW
 # Archivum Null — container firewall
 # policy_out: DROP blocks all container-initiated outbound connections.
-# ESTABLISHED,RELATED allows return traffic for inbound client sessions.
+# Return traffic for inbound client sessions is allowed automatically:
+# pve-firewall inserts a RELATED,ESTABLISHED accept at the top of every guest
+# chain, and its ruleset format does not parse raw iptables options anyway.
 #
 # If Cloudflare Turnstile is enabled, uncomment the Cloudflare ACCEPT rules
 # and the DNS rules below; otherwise leave them commented out.
@@ -365,9 +367,6 @@ policy_in: ACCEPT
 policy_out: DROP
 
 [RULES]
-# Allow return traffic for accepted inbound connections (uploads, downloads)
-OUT ACCEPT -m conntrack --ctstate ESTABLISHED,RELATED
-
 # --- Uncomment if Turnstile IS enabled ---
 # OUT ACCEPT -dest 104.16.0.0/13 -proto tcp -dport 443
 # OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
