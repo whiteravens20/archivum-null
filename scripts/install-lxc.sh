@@ -372,7 +372,7 @@ INNER
 }
 
 header "Installing Archivum Null inside LXC $VMID"
-bootstrap_container
+bootstrap_container || die "Bootstrap failed inside LXC $VMID — see the output above."
 green "Application installed."
 
 # ── Apply Proxmox Firewall egress rules ───────────────────────────────────────
