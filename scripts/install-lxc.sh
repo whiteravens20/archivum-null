@@ -204,6 +204,19 @@ pick CT_CORES  "CPU cores:" "$DEFAULT_CORES" "1" "2" "4" "6" "8"
 pick CT_DISK   "Disk (GiB):" "$DEFAULT_DISK" "4" "8" "10" "20" "40" "80"
 pick CT_SWAP   "Swap (MB):"  "$DEFAULT_SWAP" "0" "256" "512" "1024"
 
+# ── Network addressing ────────────────────────────────────────────────────────
+pick IP_MODE "IPv4 address:" "dhcp" "dhcp" "static"
+NET_IP="dhcp"
+NET_GW=""
+if [[ "$IP_MODE" == "static" ]]; then
+  read -rp "IPv4 address (CIDR, e.g. 192.168.1.50/24): " NET_IP
+  [[ "$NET_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]] || die "Invalid CIDR address."
+  read -rp "Gateway: " NET_GW
+  [[ "$NET_GW" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || die "Invalid gateway address."
+fi
+NET0="name=eth0,bridge=${BRIDGE},ip=${NET_IP},firewall=1"
+[[ -n "$NET_GW" ]] && NET0+=",gw=${NET_GW}"
+
 # ── VPN / tunnel options ──────────────────────────────────────────────────────
 pick _vpn_ans "TUN device (VPN / Tunneling):" "No" "No" "Yes"
 VPN_TUN=false
@@ -227,7 +240,7 @@ pct create "$VMID" "$TEMPLATE_PATH" \
   --memory "$CT_MEMORY" \
   --swap "$CT_SWAP" \
   --cores "$CT_CORES" \
-  --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp,firewall=1" \
+  --net0 "$NET0" \
   --rootfs "${STORAGE}:${CT_DISK}" \
   --onboot 1 \
   --features "$CT_FEATURES"
