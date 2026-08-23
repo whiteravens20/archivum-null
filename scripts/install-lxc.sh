@@ -190,8 +190,9 @@ mapfile -t _storages < <(pvesm status --content rootdir 2>/dev/null \
 [[ ${#_storages[@]} -eq 0 ]] && _storages=("$DEFAULT_STORAGE")
 pick STORAGE "Storage pool:" "$DEFAULT_STORAGE" "${_storages[@]}"
 
+# Only offer vmbr* — 'type bridge' also lists Proxmox's per-NIC fwbr* bridges.
 mapfile -t _bridges < <(ip -o link show type bridge 2>/dev/null \
-  | awk -F': ' '{print $2}' | sort)
+  | awk -F': ' '{print $2}' | grep '^vmbr' | sort)
 [[ ${#_bridges[@]} -eq 0 ]] && _bridges=("$DEFAULT_BRIDGE")
 pick BRIDGE "Network bridge:" "$DEFAULT_BRIDGE" "${_bridges[@]}"
 
