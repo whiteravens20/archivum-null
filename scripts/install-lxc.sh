@@ -187,7 +187,9 @@ green "Template: $TEMPLATE_PATH"
 # ── Prompt for any overrides ──────────────────────────────────────────────────
 mapfile -t _storages < <(pvesm status --content rootdir 2>/dev/null \
   | awk 'NR>1 && $3=="active" {print $1}' | sort)
-[[ ${#_storages[@]} -eq 0 ]] && _storages=("$DEFAULT_STORAGE")
+[[ ${#_storages[@]} -gt 0 ]] || die "No active storage with 'rootdir' content found (pvesm status)."
+# DEFAULT_STORAGE is only a preference — pick() falls back to the first
+# detected pool when it does not exist on this host (e.g. ZFS-only setups).
 pick STORAGE "Storage pool:" "$DEFAULT_STORAGE" "${_storages[@]}"
 
 # Only offer vmbr* — 'type bridge' also lists Proxmox's per-NIC fwbr* bridges.
