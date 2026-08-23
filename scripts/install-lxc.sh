@@ -209,7 +209,9 @@ if [[ "$_vpn_ans" == "Yes" ]]; then
 fi
 
 # ── Build container feature flags ────────────────────────────────────────────
-CT_FEATURES="keyctl=1,nesting=0"
+# nesting=1 is required: Debian 13 ships systemd 257, which needs it in an
+# unprivileged CT to mount /tmp, /dev/mqueue and /run/lock.
+CT_FEATURES="keyctl=1,nesting=1"
 
 # ── Create the container ──────────────────────────────────────────────────────
 header "Creating LXC container (VMID: $VMID)"
