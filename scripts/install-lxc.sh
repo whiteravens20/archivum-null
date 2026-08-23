@@ -168,13 +168,16 @@ VMID="${VMID:-$NEXT_VMID}"
 info "Using VMID: $VMID"
 
 # ── Locate CT template ────────────────────────────────────────────────────────
-info "Searching for Debian 13 CT template…"
-TEMPLATE_PATH=$(pveam list local 2>/dev/null | awk '{print $1}' | grep "$TEMPLATE_PATTERN" | sort -V | tail -1 || true)
+# The template list mixes architectures (amd64 + arm64), so always filter by
+# the host architecture — 'sort -V | tail -1' alone would pick arm64.
+HOST_ARCH=$(dpkg --print-architecture)
+info "Searching for Debian 13 CT template (${HOST_ARCH})…"
+TEMPLATE_PATH=$(pveam list local 2>/dev/null | awk '{print $1}' | grep "$TEMPLATE_PATTERN" | grep "_${HOST_ARCH}" | sort -V | tail -1 || true)
 
 if [[ -z "$TEMPLATE_PATH" ]]; then
   info "Template not found locally — downloading…"
   pveam update
-  REMOTE_TMPL=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "$TEMPLATE_PATTERN" | sort -V | tail -1 || true)
+  REMOTE_TMPL=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "$TEMPLATE_PATTERN" | grep "_${HOST_ARCH}" | sort -V | tail -1 || true)
   [[ -n "$REMOTE_TMPL" ]] || die "Could not find a Debian 13 template in the Proxmox repository."
   pveam download local "$REMOTE_TMPL"
   TEMPLATE_PATH="local:vztmpl/$REMOTE_TMPL"
