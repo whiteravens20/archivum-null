@@ -377,6 +377,13 @@ FW
   green "Proxmox Firewall config written to $FW_FILE"
 fi
 
+# Guest firewall rules only take effect when the datacenter firewall is on.
+if pve-firewall status 2>/dev/null | grep -q "disabled"; then
+  yellow "The DATACENTER firewall is disabled — the egress rules above have NO effect."
+  yellow "Enable it under Datacenter → Firewall → Options (review host rules first),"
+  yellow "or set 'enable: 1' under [OPTIONS] in /etc/pve/firewall/cluster.fw."
+fi
+
 # ── Post-install summary ──────────────────────────────────────────────────────
 CT_IP=$(pct exec "$VMID" -- ip -4 addr show eth0 2>/dev/null \
   | awk '/inet / {sub(/\/.*/, "", $2); print $2}' || true)
