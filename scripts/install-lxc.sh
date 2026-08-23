@@ -555,7 +555,21 @@ cat << 'POSTINSTALL'
 │  • Keep system up to date: unattended-upgrades on the VPS.          │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
-│  9. UPDATE LATER                                                    │
+│  9. WHERE YOUR CONFIGURATION LIVES                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Inside the container (pct enter <VMID>):                           │
+│    /opt/archivum-null/.env     runtime settings (see section 1)     │
+│    /opt/archivum-null/TOS.md   terms of service shown at /tos       │
+│      → edit, then restart:  systemctl restart archivum-null         │
+│    /etc/systemd/system/archivum-null.service   service unit         │
+│                                                                     │
+│  On the Proxmox host:                                               │
+│    /etc/pve/firewall/<VMID>.fw   egress rules (if configured)       │
+│    /etc/pve/lxc/<VMID>.conf      container config (TUN, features)   │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│  10. UPDATE LATER                                                   │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  bash install-lxc.sh --update <VMID>                                │
