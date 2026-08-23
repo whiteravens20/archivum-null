@@ -206,8 +206,10 @@ policy_in: ACCEPT
 policy_out: DROP    # block all outbound by default
 
 [RULES]
-# Allow return traffic for existing inbound connections (download/upload responses)
-OUT ACCEPT -m conntrack --ctstate ESTABLISHED,RELATED
+# Return traffic for existing inbound connections (download/upload responses)
+# is allowed automatically — pve-firewall inserts a RELATED,ESTABLISHED accept
+# at the top of every guest chain. Do not add an explicit rule for it: the
+# ruleset format does not parse raw iptables options such as '-m conntrack'.
 
 # --- If Turnstile IS enabled: allow only Cloudflare challenge endpoints ---
 OUT ACCEPT -dest 104.16.0.0/13 -proto tcp -dport 443
@@ -221,6 +223,8 @@ OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
 > If Turnstile is **disabled**, omit the Cloudflare and DNS ACCEPT lines — `policy_out: DROP` alone is sufficient.
 
 Changes take effect immediately (no reload required). Verify in the Proxmox GUI under **CT → Firewall → Log**.
+
+> **Important:** per-container rules only apply while the **datacenter-level firewall** is enabled (`pve-firewall status` must not report `disabled`). Enable it under **Datacenter → Firewall → Options** — reviewing the host rules first so you don't lock yourself out — or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
 
 ---
 
