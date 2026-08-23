@@ -267,7 +267,19 @@ TUN
 fi
 
 pct start "$VMID"
-sleep 3   # wait for network
+
+# Wait for the network for real — a fixed sleep races DHCP and the bootstrap
+# then dies on its first apt-get call.
+info "Waiting for the container network…"
+_net_ok=false
+for _ in $(seq 1 30); do
+  if pct exec "$VMID" -- sh -c 'ip -4 addr show eth0 2>/dev/null | grep -q " inet " \
+      && getent hosts deb.debian.org >/dev/null 2>&1'; then
+    _net_ok=true; break
+  fi
+  sleep 2
+done
+[[ "$_net_ok" == "true" ]] || die "Container network did not come up within 60s."
 
 green "Container started."
 
