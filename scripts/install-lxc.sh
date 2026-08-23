@@ -231,7 +231,7 @@ if [[ "$VPN_TUN" == "true" ]]; then
   info "Enabling TUN device passthrough in LXC config…"
   LXC_CONF="/etc/pve/lxc/${VMID}.conf"
   cat >> "$LXC_CONF" << 'TUN'
-lxc.cdev.allow: c 10:200 rwm
+lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net dev/net none bind,create=dir
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 TUN
