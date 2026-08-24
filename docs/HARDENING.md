@@ -464,10 +464,26 @@ Admin device  →  Tailscale mesh  →  Archivum Null host (100.x.x.x)
 
 ### Setup
 
+Install from Tailscale's signed apt repository rather than `curl … | sh`. The
+convenience script is fetched over TLS and then executed as root with no
+signature check of its own; the repository route pins a keyring that apt
+verifies on every update, and upgrades arrive through the same channel as the
+rest of the system. This is what [`scripts/install-lxc.sh`](../scripts/install-lxc.sh)
+does when you pick Tailscale at its VPN prompt.
+
 ```bash
-# Install Tailscale (Debian/Ubuntu)
-curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up
+# Debian — on Ubuntu, swap 'debian' for 'ubuntu' in both URLs
+CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+
+curl -fsSL "https://pkgs.tailscale.com/stable/debian/${CODENAME}.noarmor.gpg" \
+  | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+curl -fsSL "https://pkgs.tailscale.com/stable/debian/${CODENAME}.tailscale-keyring.list" \
+  | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
+
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends tailscale
+
+sudo tailscale up
 ```
 
 Note the assigned `100.x.x.x` address:
