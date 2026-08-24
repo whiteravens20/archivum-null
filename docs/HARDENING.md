@@ -38,6 +38,7 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
   - [Tailscale (optional)](#tailscale-optional)
     - [Setup](#setup-1)
     - [Hardening](#hardening-1)
+    - [Egress containment with Tailscale](#egress-containment-with-tailscale)
     - [Self-hosted coordination — Headscale](#self-hosted-coordination--headscale)
     - [Privacy considerations](#privacy-considerations-1)
   - [Egress Containment](#egress-containment)
@@ -464,10 +465,26 @@ Admin device  →  Tailscale mesh  →  Archivum Null host (100.x.x.x)
 
 ### Setup
 
+Install from Tailscale's signed apt repository rather than `curl … | sh`. The
+convenience script is fetched over TLS and then executed as root with no
+signature check of its own; the repository route pins a keyring that apt
+verifies on every update, and upgrades arrive through the same channel as the
+rest of the system. This is what [`scripts/install-lxc.sh`](../scripts/install-lxc.sh)
+does when you pick Tailscale at its VPN prompt.
+
 ```bash
-# Install Tailscale (Debian/Ubuntu)
-curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up
+# Debian — on Ubuntu, swap 'debian' for 'ubuntu' in both URLs
+CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+
+curl -fsSL "https://pkgs.tailscale.com/stable/debian/${CODENAME}.noarmor.gpg" \
+  | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+curl -fsSL "https://pkgs.tailscale.com/stable/debian/${CODENAME}.tailscale-keyring.list" \
+  | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
+
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends tailscale
+
+sudo tailscale up
 ```
 
 Note the assigned `100.x.x.x` address:
@@ -515,6 +532,50 @@ The service is now reachable only from devices in the same tailnet.
 - **Enable MagicDNS** for stable hostnames: set `BIND_ADDRESS` to the MagicDNS name as well as the IP.
 - **Key expiry:** set short key expiry for the Archivum Null node (e.g. 90 days) and rotate regularly.
 - For Proxmox LXC: run `tailscale up` inside the container or on the host and use the Tailscale IP as `HOST_BIND_ADDRESS`.
+
+### Egress containment with Tailscale
+
+[Egress Containment](#egress-containment) below assumes the only process that ever dials out is the app. A mesh VPN breaks that assumption as soon as `tailscaled` runs **inside** the scope those rules cover — an LXC given `policy_out: DROP`, or a host given a blanket `OUTPUT` DROP policy. Such a rule does not merely cut the app off from the internet: it tears the tunnel down, and your remote access to the machine with it.
+
+| `tailscaled` runs on | What changes |
+|---|---|
+| The Docker / Proxmox **host**, app in a container | Nothing. The container keeps Option A or Option B unchanged; the tunnel's traffic is host traffic and never crosses the container's rules. Prefer this — the app's own egress stays at zero. |
+| **Inside** the contained container / LXC | Allow the ports below *before* the DROP, or the tunnel never comes up. |
+| Bare-metal alongside the app ([Option C](#option-c--bare-metal--systemd-uid-rules)) | Nothing. Those rules match `--uid-owner <app uid>` and `tailscaled` runs as root, so they never touch it — unless you widen them into a blanket `OUTPUT` DROP, which puts you in the row above. |
+
+**What Tailscale needs outbound:**
+
+| Port | Purpose | If blocked |
+|---|---|---|
+| `443/tcp` | Control plane and DERP relays | No tunnel at all |
+| `3478/udp` | STUN — NAT traversal | Falls back to DERP over 443: works, slower |
+| `41641/udp` | Direct WireGuard peer traffic | Falls back to DERP over 443: works, slower |
+| `53/udp`, `53/tcp` | DNS | No tunnel — the control plane is reached by name |
+
+The rules are **port-based, not address-based**. DERP is a large and changing relay fleet, so there is no stable IP range to allow the way there is for Cloudflare.
+
+**Proxmox LXC** — `/etc/pve/firewall/<VMID>.fw`. This is exactly what [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) writes when you pick Tailscale and let it configure the firewall:
+
+```ini
+[OPTIONS]
+enable: 1
+policy_in: ACCEPT
+policy_out: DROP
+
+[RULES]
+# Tailscale outbound (control plane + DERP over 443, STUN, WireGuard)
+OUT ACCEPT -proto tcp -dport 443
+OUT ACCEPT -proto udp -dport 3478
+OUT ACCEPT -proto udp -dport 41641
+OUT ACCEPT -proto udp -dport 53
+OUT ACCEPT -proto tcp -dport 53
+```
+
+> These rules stay inert until the **datacenter** firewall is enabled — see the note under [Summary — which option to apply](#summary--which-option-to-apply).
+>
+> Return traffic for inbound client sessions is accepted automatically — `pve-firewall` inserts a RELATED,ESTABLISHED accept at the top of every guest chain. Do not add one by hand; the ruleset format does not parse raw iptables options.
+
+Once the tunnel is up, requests to the app arrive on `tailscale0`, so the [inbound rules](#inbound-firewall-rules--app-port) treat it like any other tunnel interface — pass `--tunnel-iface tailscale0` to `setup-firewall.sh`.
 
 ### Self-hosted coordination — Headscale
 
@@ -721,6 +782,10 @@ nft add rule inet filter output meta skuid $APP_UID drop
 | Proxmox LXC (Proxmox Firewall) | `policy_out: DROP` in `.fw` | `policy_out: DROP` + Cloudflare ACCEPT rules |
 
 For Proxmox-specific Firewall and veth FORWARD rules, see [PROXMOX.md — Egress Containment](PROXMOX.md#egress-containment--proxmox-firewall).
+
+> **A per-container `.fw` file does nothing on its own.** Guest rules are compiled only while the **datacenter** firewall is enabled — `pve-firewall status` must not report `disabled`. Until it is, `policy_out: DROP` is inert and the container's egress is wide open, whatever the file says. Turn it on under **Datacenter → Firewall → Options**, reviewing the host rules first so you do not lock yourself out, or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
+>
+> [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) warns when it finishes against a disabled datacenter firewall — it will not flip the switch itself, because that is a host-wide change affecting every guest. It does keep `firewall=1` on the container's veth regardless of the firewall prompt, so enabling the datacenter firewall later activates the rules without touching the NIC.
 
 
 ---
