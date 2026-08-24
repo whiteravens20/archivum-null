@@ -288,8 +288,8 @@ Images are published to `ghcr.io/whiteravens20/archivum-null`.
 | `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
 | `:main` | Rolling pointer to the latest tagged release on `main` | ✅ Yes | Production — auto-rolls forward; use this if you want unattended updates instead of a pinned version |
 | `:latest` | Alias of `:main`, pushed by the same release job | ✅ Yes | Production — identical image and digest to `:main` |
-| `:edge` | Every push to `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
-| `:dev` | Every push to `dev` | ❌ No | Snapshot — development builds, may be broken |
+| `:edge` | Snapshot build, run by hand from `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
+| `:dev` | Snapshot build, run by hand from `dev` | ❌ No | Snapshot — development builds, may be broken |
 | `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
 
 > **Only `:main`, `:latest` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`.
