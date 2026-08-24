@@ -231,6 +231,10 @@ if [[ "$IP_MODE" == "static" ]]; then
   read -rp "Gateway: " NET_GW
   valid_ipv4 "$NET_GW" || die "Invalid gateway address."
 fi
+# firewall=1 stays on the veth even when the firewall prompt is answered "No":
+# without a ${VMID}.fw file the guest chain holds no rules, so egress is
+# unrestricted either way, and the flag lets rules be added later without
+# editing the NIC.
 NET0="name=eth0,bridge=${BRIDGE},ip=${NET_IP},firewall=1"
 [[ -n "$NET_GW" ]] && NET0+=",gw=${NET_GW}"
 
