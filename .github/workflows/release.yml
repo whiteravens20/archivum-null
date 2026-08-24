@@ -17,11 +17,15 @@
 #   ghcr.io/whiteravens20/archivum-null:1.2
 #   ghcr.io/whiteravens20/archivum-null:1
 #   ghcr.io/whiteravens20/archivum-null:main
+#   ghcr.io/whiteravens20/archivum-null:latest
 #
-# ℹ️  :main is ONLY updated by this workflow on a versioned semver release.
-#    It always points to the most recent stable production build.
-#    The :latest tag is intentionally NOT published — it is ambiguous by Docker
-#    convention (simply the last image built, not necessarily stable).
+# ℹ️  :main and :latest are ONLY updated by this workflow, on a versioned semver
+#    release, and always point at the most recent stable production build.
+#    :latest is an alias of :main. Docker convention warns that :latest is
+#    ambiguous because it usually means "the last image built" — here it cannot,
+#    because nothing but a released semver tag ever reaches this workflow.
+#    Snapshots are pushed by docker-snapshot.yml with hardcoded :dev / :edge tags,
+#    so an unreleased build can never claim :latest.
 #    For a pre-release snapshot of the main branch, use :edge (docker-snapshot.yml).
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -86,13 +90,17 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Produce 4 tags from a vX.Y.Z push:
+          # Produce 5 tags from a vX.Y.Z push:
           #   :X.Y.Z  (exact version)
           #   :X.Y    (minor)
           #   :X      (major)
           #   :main   (stable production — always the most recent versioned release)
-          # NOTE: :latest is intentionally omitted — it is ambiguous by Docker
-          # convention and could mislead users into pulling a snapshot.
+          #   :latest (not listed below — metadata-action adds it from its default
+          #            `flavor: latest=auto` whenever the ref is a semver tag, which
+          #            here is the only way the workflow runs at all; it therefore
+          #            resolves to the same image and digest as :main)
+          # To stop publishing it, add `flavor: latest=false` — dropping it from
+          # the list below does nothing, `latest=auto` is what puts it there.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -227,6 +235,7 @@ jobs:
             |---|---|
             | `${{ github.ref_name }}` | This exact release (immutable) |
             | `:main` | Always the latest stable production release |
+            | `:latest` | Alias of `:main` — same image, same digest |
 
             > **Digest (immutable):** `${{ needs.build-push.outputs.digest }}`
 
