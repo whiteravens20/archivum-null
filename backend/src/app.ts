@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
@@ -9,6 +9,7 @@ import { adminRoutes } from './routes/admin.js';
 import { healthRoutes } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { vaultManager } from './vault/manager.js';
+import { buildAssetCloak } from './static/assetCloak.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -91,20 +92,76 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(vaultRoutes);
   await app.register(adminRoutes, { prefix: '' });
 
-  // Serve frontend static files in production
+  // Serve frontend static files in production.
+  //
+  // Everything the browser can see is fingerprint surface, so this block is
+  // deliberately not the stock fastifyStatic setup:
+  //   - asset URLs are randomised per boot (see static/assetCloak.ts), because Vite's
+  //     content-hash filenames are reproducible from any published tag and identify
+  //     the running release to an unauthenticated caller;
+  //   - mtime-derived Last-Modified/ETag are suppressed, because they date the build
+  //     and pin it to a release just as precisely.
+  //
+  // Both live in the Node process, so they apply identically to a container and a
+  // bare-metal `node backend/dist/index.js`. They are bypassed only if a reverse
+  // proxy is configured to serve frontend/dist off disk instead of proxying here —
+  // docs/HARDENING.md says not to do that.
   const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
-  if (fs.existsSync(frontendDist)) {
+  const assetCloak = fs.existsSync(frontendDist) ? buildAssetCloak(frontendDist) : null;
+
+  if (assetCloak) {
+    const sendIndex = (reply: FastifyReply) =>
+      reply
+        .header('Cache-Control', 'no-store')
+        .type('text/html; charset=utf-8')
+        .send(assetCloak.indexHtml);
+
+    // Cloaked assets. The name changes on every restart, so the bytes behind a given
+    // URL never do — safe to cache immutably for as long as the client likes.
+    app.get<{ Params: { name: string } }>('/assets/:name', async (request, reply) => {
+      const asset = assetCloak.get(request.params.name);
+      if (!asset) {
+        return reply.status(404).send({ error: 'Not found' });
+      }
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      if (asset.body) {
+        return reply.type(asset.contentType ?? 'application/octet-stream').send(asset.body);
+      }
+      return reply.sendFile(asset.relativePath, frontendDist);
+    });
+
     await app.register(fastifyStatic, {
       root: frontendDist,
       prefix: '/',
+      // index.html is served from the cloak, never off disk — the on-disk copy still
+      // points at the real, reproducible asset names.
+      index: false,
+      // The weak ETag @fastify/static emits is `"<size>-<mtimeMs as hex>"`, so it
+      // carries the same build timestamp as Last-Modified. Both go.
+      etag: false,
+      lastModified: false,
+      cacheControl: false,
+      // Keep the real asset names unreachable; /assets/:name above is the only door.
+      allowedPath: (pathname) => !pathname.startsWith('/assets/'),
+      setHeaders: (reply) => {
+        // Default for unhashed public/ files (favicon, logos) — revalidate rather
+        // than pin. Skipped when a route already decided: sendFile() for a cloaked
+        // asset comes through here too, and would otherwise lose its immutable
+        // header on the way out.
+        if (!reply.hasHeader('Cache-Control')) {
+          reply.header('Cache-Control', 'public, max-age=0, must-revalidate');
+        }
+      },
     });
+
+    app.get('/', async (_request, reply) => sendIndex(reply));
 
     // SPA fallback — serve index.html for non-API routes
     app.setNotFoundHandler(async (request, reply) => {
       if (request.url.startsWith('/api/')) {
         return reply.status(404).send({ error: 'Not found' });
       }
-      return reply.sendFile('index.html', frontendDist);
+      return sendIndex(reply);
     });
   } else {
     app.setNotFoundHandler(async (_request, reply) => {

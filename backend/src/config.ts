@@ -39,6 +39,15 @@ const envSchema = {
   CRYPTO_CHUNK_SIZE: Number(process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE)),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
+  // Update check — compares the running version against the latest GitHub release.
+  // OFF by default and opt-in only: docs/HARDENING.md instructs operators to cut all
+  // container egress, and the TOS states the service does not phone home. Enabling
+  // it is the operator's call. Admin-authenticated, cached, and never user-facing.
+  UPDATE_CHECK_ENABLED: process.env.UPDATE_CHECK_ENABLED === 'true',
+  // Source repository for the release comparison — change it on a fork.
+  UPDATE_CHECK_REPO: process.env.UPDATE_CHECK_REPO || 'whiteravens20/archivum-null',
+  // Seconds between checks (default 6 h). Failures are retried sooner.
+  UPDATE_CHECK_INTERVAL: Number(process.env.UPDATE_CHECK_INTERVAL || 21600),
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
   BIND_ADDRESS: process.env.BIND_ADDRESS || '0.0.0.0',
   PORT: Number(process.env.PORT || 3000),
@@ -110,6 +119,19 @@ export function validateConfig(): void {
   }
   if (!isFinite(config.TRUST_PROXY) || config.TRUST_PROXY < 0 || config.TRUST_PROXY > 10) {
     throw new Error('TRUST_PROXY must be between 0 and 10');
+  }
+  if (config.UPDATE_CHECK_ENABLED) {
+    // UPDATE_CHECK_REPO is interpolated into the api.github.com URL. Constrain it to
+    // the characters GitHub actually allows in owner/repo so a stray value cannot
+    // steer the request at another host or path.
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(config.UPDATE_CHECK_REPO)) {
+      throw new Error('UPDATE_CHECK_REPO must be in "owner/repo" form');
+    }
+    // Below 5 minutes the check stops being a check and starts being a poll that
+    // burns the unauthenticated GitHub rate limit for no added freshness.
+    if (!isFinite(config.UPDATE_CHECK_INTERVAL) || config.UPDATE_CHECK_INTERVAL < 300) {
+      throw new Error('UPDATE_CHECK_INTERVAL must be at least 300 seconds');
+    }
   }
   // Soft warnings for rate limit tiers that will never trigger independently
   // because the general API limit (applied to ALL /api/ routes) is lower.

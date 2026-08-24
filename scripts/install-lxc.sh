@@ -34,6 +34,18 @@ info()   { printf '\033[0;36mℹ\033[0m %s\n' "$*"; }
 header() { printf '\n\033[1;37m━━━ %s ━━━\033[0m\n' "$*"; }
 die()    { red "$*"; exit 1; }
 
+# valid_ipv4 <address> — rejects out-of-range octets that a \d{1,3} regex accepts.
+valid_ipv4() {
+  local _octet
+  local -a _octets
+  local IFS=.
+  read -ra _octets <<< "$1"
+  [[ ${#_octets[@]} -eq 4 ]] || return 1
+  for _octet in "${_octets[@]}"; do
+    [[ "$_octet" =~ ^[0-9]{1,3}$ ]] && ((10#$_octet <= 255)) || return 1
+  done
+}
+
 # pick <var_name> <prompt> <default> <option ...>
 # Inline arrow-key selector (←/→ to move, Enter to confirm).
 pick() {
@@ -168,13 +180,16 @@ VMID="${VMID:-$NEXT_VMID}"
 info "Using VMID: $VMID"
 
 # ── Locate CT template ────────────────────────────────────────────────────────
-info "Searching for Debian 13 CT template…"
-TEMPLATE_PATH=$(pveam list local 2>/dev/null | awk '{print $1}' | grep "$TEMPLATE_PATTERN" | sort -V | tail -1 || true)
+# The template list mixes architectures (amd64 + arm64), so always filter by
+# the host architecture — 'sort -V | tail -1' alone would pick arm64.
+HOST_ARCH=$(dpkg --print-architecture)
+info "Searching for Debian 13 CT template (${HOST_ARCH})…"
+TEMPLATE_PATH=$(pveam list local 2>/dev/null | awk '{print $1}' | grep "$TEMPLATE_PATTERN" | grep "_${HOST_ARCH}" | sort -V | tail -1 || true)
 
 if [[ -z "$TEMPLATE_PATH" ]]; then
   info "Template not found locally — downloading…"
   pveam update
-  REMOTE_TMPL=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "$TEMPLATE_PATTERN" | sort -V | tail -1 || true)
+  REMOTE_TMPL=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "$TEMPLATE_PATTERN" | grep "_${HOST_ARCH}" | sort -V | tail -1 || true)
   [[ -n "$REMOTE_TMPL" ]] || die "Could not find a Debian 13 template in the Proxmox repository."
   pveam download local "$REMOTE_TMPL"
   TEMPLATE_PATH="local:vztmpl/$REMOTE_TMPL"
@@ -184,32 +199,67 @@ green "Template: $TEMPLATE_PATH"
 # ── Prompt for any overrides ──────────────────────────────────────────────────
 mapfile -t _storages < <(pvesm status --content rootdir 2>/dev/null \
   | awk 'NR>1 && $3=="active" {print $1}' | sort)
-[[ ${#_storages[@]} -eq 0 ]] && _storages=("$DEFAULT_STORAGE")
+[[ ${#_storages[@]} -gt 0 ]] || die "No active storage with 'rootdir' content found (pvesm status)."
+# DEFAULT_STORAGE is only a preference — pick() falls back to the first
+# detected pool when it does not exist on this host (e.g. ZFS-only setups).
 pick STORAGE "Storage pool:" "$DEFAULT_STORAGE" "${_storages[@]}"
 
+# Only offer vmbr* — 'type bridge' also lists Proxmox's per-NIC fwbr* bridges.
 mapfile -t _bridges < <(ip -o link show type bridge 2>/dev/null \
-  | awk -F': ' '{print $2}' | sort)
+  | awk -F': ' '{print $2}' | grep '^vmbr' | sort)
 [[ ${#_bridges[@]} -eq 0 ]] && _bridges=("$DEFAULT_BRIDGE")
 pick BRIDGE "Network bridge:" "$DEFAULT_BRIDGE" "${_bridges[@]}"
 
 # ── Container resources ───────────────────────────────────────────────────────
+info "Preselected values are the recommended sizing for Archivum Null."
 pick CT_MEMORY "RAM (MB):" "$DEFAULT_MEMORY" "512" "1024" "2048" "4096" "8192"
 pick CT_CORES  "CPU cores:" "$DEFAULT_CORES" "1" "2" "4" "6" "8"
 pick CT_DISK   "Disk (GiB):" "$DEFAULT_DISK" "4" "8" "10" "20" "40" "80"
 pick CT_SWAP   "Swap (MB):"  "$DEFAULT_SWAP" "0" "256" "512" "1024"
 
+# ── Network addressing ────────────────────────────────────────────────────────
+pick IP_MODE "IPv4 address:" "dhcp" "dhcp" "static"
+NET_IP="dhcp"
+NET_GW=""
+if [[ "$IP_MODE" == "static" ]]; then
+  read -rp "IPv4 address (CIDR, e.g. 192.168.1.50/24): " NET_IP
+  [[ "$NET_IP" == */* ]] || die "Invalid CIDR address — expected ADDRESS/PREFIX."
+  valid_ipv4 "${NET_IP%/*}" || die "Invalid CIDR address."
+  _prefix="${NET_IP##*/}"
+  [[ "$_prefix" =~ ^[0-9]{1,2}$ ]] && ((10#$_prefix <= 32)) \
+    || die "Invalid CIDR prefix — expected 0–32."
+  read -rp "Gateway: " NET_GW
+  valid_ipv4 "$NET_GW" || die "Invalid gateway address."
+fi
+# firewall=1 stays on the veth even when the firewall prompt is answered "No":
+# without a ${VMID}.fw file the guest chain holds no rules, so egress is
+# unrestricted either way, and the flag lets rules be added later without
+# editing the NIC.
+NET0="name=eth0,bridge=${BRIDGE},ip=${NET_IP},firewall=1"
+[[ -n "$NET_GW" ]] && NET0+=",gw=${NET_GW}"
+
 # ── VPN / tunnel options ──────────────────────────────────────────────────────
+# The chosen VPN software is installed during bootstrap — before any egress
+# rules apply — and the firewall preset (if the firewall is enabled) opens the
+# matching outbound ports, so the tunnel works out of the box. 'none' = manual.
 pick _vpn_ans "TUN device (VPN / Tunneling):" "No" "No" "Yes"
 VPN_TUN=false
-VPN_FW_TYPE="none"
+VPN_SW="none"
 if [[ "$_vpn_ans" == "Yes" ]]; then
   VPN_TUN=true
-  info "wireguard = UDP 51820 + DNS │ openvpn = UDP/TCP 1194 + DNS │ none = manual"
-  pick VPN_FW_TYPE "VPN firewall preset:" "none" "none" "wireguard" "openvpn"
+  pick VPN_SW "VPN software to preinstall:" "none" "none" "wireguard" "openvpn" "tailscale"
 fi
 
+# ── Proxmox firewall choice ───────────────────────────────────────────────────
+info "Egress DROP blocks all container-initiated outbound traffic (recommended)."
+pick _fw_ans "Configure Proxmox firewall (egress DROP):" "Yes" "Yes" "No"
+CT_FIREWALL=false
+[[ "$_fw_ans" == "Yes" ]] && CT_FIREWALL=true
+
 # ── Build container feature flags ────────────────────────────────────────────
-CT_FEATURES="keyctl=1,nesting=0"
+# nesting=1 is required: Debian 13 ships systemd 257, which needs it in an
+# unprivileged CT to mount /tmp, /dev/mqueue and /run/lock.
+CT_FEATURES="keyctl=1,nesting=1"
 
 # ── Create the container ──────────────────────────────────────────────────────
 header "Creating LXC container (VMID: $VMID)"
@@ -219,7 +269,7 @@ pct create "$VMID" "$TEMPLATE_PATH" \
   --memory "$CT_MEMORY" \
   --swap "$CT_SWAP" \
   --cores "$CT_CORES" \
-  --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp,firewall=1" \
+  --net0 "$NET0" \
   --rootfs "${STORAGE}:${CT_DISK}" \
   --onboot 1 \
   --features "$CT_FEATURES"
@@ -229,7 +279,7 @@ if [[ "$VPN_TUN" == "true" ]]; then
   info "Enabling TUN device passthrough in LXC config…"
   LXC_CONF="/etc/pve/lxc/${VMID}.conf"
   cat >> "$LXC_CONF" << 'TUN'
-lxc.cdev.allow: c 10:200 rwm
+lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net dev/net none bind,create=dir
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 TUN
@@ -237,30 +287,63 @@ TUN
 fi
 
 pct start "$VMID"
-sleep 3   # wait for network
+
+# Wait for the network for real — a fixed sleep races DHCP and the bootstrap
+# then dies on its first apt-get call.
+info "Waiting for the container network…"
+_net_ok=false
+for _ in $(seq 1 30); do
+  if pct exec "$VMID" -- sh -c 'ip -4 addr show eth0 2>/dev/null | grep -q " inet " \
+      && getent hosts deb.debian.org >/dev/null 2>&1'; then
+    _net_ok=true; break
+  fi
+  sleep 2
+done
+[[ "$_net_ok" == "true" ]] || die "Container network did not come up within 60s."
 
 green "Container started."
 
 # ── Bootstrap function (runs inside the container via pct exec) ───────────────
 bootstrap_container() {
-  pct exec "$VMID" -- bash -s << 'INNER'
+  pct exec "$VMID" -- env \
+    INSTALL_DIR="$INSTALL_DIR" REPO_URL="$REPO_URL" NODE_MAJOR="$NODE_MAJOR" \
+    VPN_SW="$VPN_SW" \
+    bash -s << 'INNER'
 set -euo pipefail
 
-INSTALL_DIR="/opt/archivum-null"
-REPO_URL="https://github.com/whiteravens20/archivum-null.git"
-NODE_MAJOR=24
+: "${INSTALL_DIR:?}" "${REPO_URL:?}" "${NODE_MAJOR:?}" "${VPN_SW:=none}"
 
 echo "==> Updating packages…"
 apt-get update -qq
-apt install -y --no-install-recommends curl git ca-certificates gnupg
+apt-get install -y --no-install-recommends curl git ca-certificates gnupg
 
 echo "==> Installing Node.js ${NODE_MAJOR}…"
 curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - >/dev/null 2>&1
-apt install -y --no-install-recommends nodejs
+apt-get install -y --no-install-recommends nodejs
 npm install -g npm@latest
 
+if [[ "$VPN_SW" != "none" ]]; then
+  echo "==> Installing VPN software (${VPN_SW})…"
+  case "$VPN_SW" in
+    wireguard) apt-get install -y --no-install-recommends wireguard-tools ;;
+    openvpn)   apt-get install -y --no-install-recommends openvpn ;;
+    tailscale)
+      # Signed apt repository rather than `curl … | sh`, so the package is
+      # GPG-verified by apt instead of executed as an unchecked root shell script.
+      _codename=$(. /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}")
+      [[ -n "$_codename" ]] || { echo "Cannot read VERSION_CODENAME from /etc/os-release." >&2; exit 1; }
+      curl -fsSL "https://pkgs.tailscale.com/stable/debian/${_codename}.noarmor.gpg" \
+        -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+      curl -fsSL "https://pkgs.tailscale.com/stable/debian/${_codename}.tailscale-keyring.list" \
+        -o /etc/apt/sources.list.d/tailscale.list
+      apt-get update -qq
+      apt-get install -y --no-install-recommends tailscale
+      ;;
+  esac
+fi
+
 echo "==> Clearing apt cache…"
-apt clean
+apt-get clean
 rm -rf /var/lib/apt/lists/*
 
 echo "==> Cloning repository…"
@@ -307,6 +390,9 @@ PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths=/opt/archivum-null/data/vaults
 ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
@@ -317,22 +403,33 @@ INNER
 }
 
 header "Installing Archivum Null inside LXC $VMID"
-bootstrap_container
+bootstrap_container || die "Bootstrap failed inside LXC $VMID — see the output above."
 green "Application installed."
 
 # ── Apply Proxmox Firewall egress rules ───────────────────────────────────────
 header "Configuring Proxmox Firewall (egress containment)"
 
 FW_FILE="/etc/pve/firewall/${VMID}.fw"
-if [[ -f "$FW_FILE" ]]; then
+if [[ "$CT_FIREWALL" != "true" ]]; then
+  info "Skipped on request — container egress is unrestricted."
+elif [[ -f "$FW_FILE" ]]; then
   yellow "Firewall config $FW_FILE already exists — skipping (edit manually if needed)."
 else
   # Build optional VPN firewall rules
-  case "$VPN_FW_TYPE" in
+  case "$VPN_SW" in
     wireguard)
       VPN_FW_RULES="
-# WireGuard VPN outbound
+# WireGuard VPN outbound (standard peer port — adjust if your peer differs)
 OUT ACCEPT -proto udp -dport 51820
+OUT ACCEPT -proto udp -dport 53
+OUT ACCEPT -proto tcp -dport 53"
+      ;;
+    tailscale)
+      VPN_FW_RULES="
+# Tailscale outbound (control plane + DERP relays over 443, STUN, WireGuard)
+OUT ACCEPT -proto tcp -dport 443
+OUT ACCEPT -proto udp -dport 3478
+OUT ACCEPT -proto udp -dport 41641
 OUT ACCEPT -proto udp -dport 53
 OUT ACCEPT -proto tcp -dport 53"
       ;;
@@ -352,7 +449,9 @@ OUT ACCEPT -proto tcp -dport 53"
   cat > "$FW_FILE" << FW
 # Archivum Null — container firewall
 # policy_out: DROP blocks all container-initiated outbound connections.
-# ESTABLISHED,RELATED allows return traffic for inbound client sessions.
+# Return traffic for inbound client sessions is allowed automatically:
+# pve-firewall inserts a RELATED,ESTABLISHED accept at the top of every guest
+# chain, and its ruleset format does not parse raw iptables options anyway.
 #
 # If Cloudflare Turnstile is enabled, uncomment the Cloudflare ACCEPT rules
 # and the DNS rules below; otherwise leave them commented out.
@@ -363,9 +462,6 @@ policy_in: ACCEPT
 policy_out: DROP
 
 [RULES]
-# Allow return traffic for accepted inbound connections (uploads, downloads)
-OUT ACCEPT -m conntrack --ctstate ESTABLISHED,RELATED
-
 # --- Uncomment if Turnstile IS enabled ---
 # OUT ACCEPT -dest 104.16.0.0/13 -proto tcp -dport 443
 # OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
@@ -374,6 +470,13 @@ OUT ACCEPT -m conntrack --ctstate ESTABLISHED,RELATED
 ${VPN_FW_RULES}
 FW
   green "Proxmox Firewall config written to $FW_FILE"
+fi
+
+# Guest firewall rules only take effect when the datacenter firewall is on.
+if [[ "$CT_FIREWALL" == "true" ]] && pve-firewall status 2>/dev/null | grep -q "disabled"; then
+  yellow "The DATACENTER firewall is disabled — the egress rules above have NO effect."
+  yellow "Enable it under Datacenter → Firewall → Options (review host rules first),"
+  yellow "or set 'enable: 1' under [OPTIONS] in /etc/pve/firewall/cluster.fw."
 fi
 
 # ── Post-install summary ──────────────────────────────────────────────────────
@@ -476,14 +579,28 @@ cat << 'POSTINSTALL'
 │  Key points:                                                        │
 │  • Never expose port 3000 to the public internet.                   │
 │  • Use a VPS + WireGuard tunnel + reverse proxy (nginx/Caddy).      │
-│  • Proxmox Firewall (already configured): blocks all egress         │
+│  • Proxmox Firewall (if configured): blocks all egress              │
 │    from this container except return traffic.                        │
 │  • WireGuard AllowedIPs: use /32 only — never 0.0.0.0/0.           │
 │  • Persist iptables: apt install iptables-persistent                │
 │  • Keep system up to date: unattended-upgrades on the VPS.          │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
-│  9. UPDATE LATER                                                    │
+│  9. WHERE YOUR CONFIGURATION LIVES                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Inside the container (pct enter <VMID>):                           │
+│    /opt/archivum-null/.env     runtime settings (see section 1)     │
+│    /opt/archivum-null/TOS.md   terms of service shown at /tos       │
+│      → edit, then restart:  systemctl restart archivum-null         │
+│    /etc/systemd/system/archivum-null.service   service unit         │
+│                                                                     │
+│  On the Proxmox host:                                               │
+│    /etc/pve/firewall/<VMID>.fw   egress rules (if configured)       │
+│    /etc/pve/lxc/<VMID>.conf      container config (TUN, features)   │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│  10. UPDATE LATER                                                   │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  bash install-lxc.sh --update <VMID>                                │
@@ -500,7 +617,17 @@ fi
 
 if [[ "$VPN_TUN" == "true" ]]; then
   echo
-  info "TUN device is enabled. Install WireGuard/OpenVPN inside the container:"
-  info "  pct enter $VMID"
-  info "  apt install -y --no-install-recommends wireguard-tools   # or openvpn"
+  case "$VPN_SW" in
+    tailscale)
+      info "Tailscale is preinstalled. Bring the tunnel up:  pct enter $VMID  →  tailscale up" ;;
+    wireguard)
+      info "WireGuard tools are preinstalled. Configure /etc/wireguard/wg0.conf inside the container." ;;
+    openvpn)
+      info "OpenVPN is preinstalled. Drop your client config in /etc/openvpn/client/ inside the container." ;;
+    *)
+      info "TUN device is enabled. Install your VPN software inside the container:"
+      info "  pct enter $VMID"
+      info "  apt-get install -y --no-install-recommends wireguard-tools   # or openvpn / tailscale"
+      ;;
+  esac
 fi

@@ -27,6 +27,29 @@
   - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
+- [x] No outbound connections by default — the only two are opt-in (Turnstile verification, and the admin update check)
+
+## Version Disclosure
+
+Knowing which release a host runs turns a published advisory into a target list, so
+the version is treated as something to withhold from unauthenticated callers.
+
+- [x] Asset filenames randomised per boot — Vite's content hashes (`/assets/index-Qld3srqp.js`) are reproducible from any published tag, so they identified the exact release to anyone who fetched `/`. The real names now 404
+- [x] Randomised **at container start, not at build time** — release images are public on ghcr.io, so a build-time salt would be knowable to anyone who pulled the image. Names are rewritten in memory only, so `read_only: true` still holds
+- [x] `Last-Modified` suppressed on static files — dated the build to the second
+- [x] `ETag` suppressed on static files — `"<size>-<mtime as hex>"` carried the same timestamp
+- [x] `uptime` removed from the public `GET /api/health` — it dated the deploy, which pins the release; it is now behind Basic Auth on `GET /api/admin/version`
+- [x] Version served only from the authenticated admin API, never bundled into the frontend
+- [x] Enforced in the Node process, so Docker and bare-metal behave identically
+
+**Limit, stated plainly:** the bundle's *contents* are the version. Client-side code
+is delivered to the browser by definition, so downloading the JavaScript and diffing
+it against a rebuilt tag still identifies the release, and the bundle names its
+dependency versions in cleartext regardless. The measures above remove the cheap,
+passive signal that mass scanners use; they do not stop a targeted analyst, and
+nothing short of not shipping JavaScript would. Obscurity is not the control here —
+running a current version is. See
+[HARDENING.md → Version Disclosure](docs/HARDENING.md#version-disclosure).
 
 ## Anti-Abuse
 
@@ -84,10 +107,17 @@
 - [x] No plaintext exposure
 - [x] No uploader identity exposure
 - [x] Intended for reverse proxy / tunnel protection
+- [x] Reports the running version and, when the operator opts in, whether a newer release exists — `GET /api/admin/version`, Basic Auth like every other admin route
+- [x] Update check is **off by default** (`UPDATE_CHECK_ENABLED`) — it is the app's only self-initiated outbound connection, and `docs/HARDENING.md` instructs operators to block exactly that
+- [x] When enabled it sends no token, no cookies, and no version in the `User-Agent`; the response is cached and never reaches end users
+- [x] `UPDATE_CHECK_REPO` validated as `owner/repo` at startup — the value is interpolated into the api.github.com URL and must not be able to steer the request elsewhere
 
 ## Supply Chain
 
 - [x] Minimal dependencies
+- [x] 7-day dependency quarantine — Dependabot `cooldown: default-days: 7` on every ecosystem, so a freshly published version is never proposed, never auto-merged. Security advisories are exempt and land immediately.
+- [x] `min-release-age=7` in every `.npmrc` as the client-side backstop for manual installs
+- [x] Registry signatures verified in CI (`npm audit signatures`, both workspaces)
 - [x] `npm ci --ignore-scripts` in Docker build
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images

@@ -5,6 +5,12 @@
 # Versioning strategy:
 #   - github-actions: bumps the version tag in `uses:` lines (e.g. @v3 → @v4)
 #   - npm: respects semver ranges in package.json; groups minor+patch into one PR
+#
+# Supply-chain quarantine: every ecosystem below sets `cooldown: 7`, so Dependabot
+# will not even propose a version until it has been public for a week. This is the
+# primary enforcement point for the 7-day release-age policy — a version that is
+# too fresh never becomes a PR, so it can never be merged early. `.npmrc`
+# `min-release-age=7` remains as the client-side backstop for manual installs.
 
 version: 2
 
@@ -25,6 +31,12 @@ updates:
       - github-actions
     commit-message:
       prefix: "ci"
+    # Let a newly published version settle for a week before proposing it. A tag
+    # can be repointed or a release yanked in the hours after it lands, and none
+    # of these bumps is urgent — a real security advisory is exempt and still
+    # opens immediately.
+    cooldown:
+      default-days: 7
 
   # ── Backend npm ──────────────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -40,6 +52,12 @@ updates:
       - backend
     commit-message:
       prefix: "chore(backend)"
+    # Same week-long settling window: a freshly published npm version is the one
+    # most likely to be a compromised or broken release. `cooldown` governs
+    # version updates only — Dependabot security updates are exempt by design and
+    # still open the moment an advisory lands, which is what we want.
+    cooldown:
+      default-days: 7
     # Group all non-breaking updates into a single PR to reduce noise.
     # Security updates are always opened as separate PRs regardless.
     groups:
@@ -62,6 +80,9 @@ updates:
       - frontend
     commit-message:
       prefix: "chore(frontend)"
+    # Same week-long settling window; security updates stay exempt.
+    cooldown:
+      default-days: 7
     groups:
       frontend-non-breaking:
         update-types:

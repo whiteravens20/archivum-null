@@ -76,9 +76,8 @@ jobs:
       - uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high
-          # Keep in sync with .github/scripts/audit-allowlist.json — the
-          # justification for each ID lives there.
-          allow-ghsas: GHSA-qwww-vcr4-c8h2
+          # Any allowlisted ID goes here as `allow-ghsas:`, and its justification
+          # in .github/scripts/audit-allowlist.json. Keep the two in sync.
 
   trivy-fs:
     name: Trivy filesystem scan

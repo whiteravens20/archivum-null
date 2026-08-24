@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     defaults:
       run:
         working-directory: backend
@@ -27,18 +26,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        id: install
         run: npm ci --ignore-scripts
-
-      - name: Label quarantined PR
-        if: failure() && steps.install.outcome == 'failure' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          if npm ci --ignore-scripts --dry-run 2>&1 | grep -qiE "min-release-age|ERESOLVE|could not resolve"; then
-            gh pr edit ${{ github.event.pull_request.number }} --add-label "min-release-age"
-          fi
 
       - name: Lint
         run: npm run lint
@@ -57,7 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     defaults:
       run:
         working-directory: frontend
@@ -72,18 +59,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        id: install
         run: npm ci --ignore-scripts
-
-      - name: Label quarantined PR
-        if: failure() && steps.install.outcome == 'failure' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          if npm ci --ignore-scripts --dry-run 2>&1 | grep -qiE "min-release-age|ERESOLVE|could not resolve"; then
-            gh pr edit ${{ github.event.pull_request.number }} --add-label "min-release-age"
-          fi
 
       - name: Lint
         run: npm run lint

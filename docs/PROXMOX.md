@@ -55,7 +55,7 @@ The [Proxmox Community Scripts](https://community-scripts.github.io/ProxmoxVE/) 
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
 ```
 
-> The `install-lxc.sh` script follows the Community Scripts conventions: it finds the next free VMID, downloads the Debian 12 template if needed, creates an unprivileged LXC, installs Node.js 24, clones the repo, builds the project, creates a systemd service, and writes the Proxmox Firewall egress config. **Review the script before running it.**
+> The `install-lxc.sh` script follows the Community Scripts conventions: it finds the next free VMID, downloads the Debian 13 template if needed, creates an unprivileged LXC (`keyctl=1,nesting=1` — nesting is required by Debian 13's systemd), installs Node.js 24, clones the repo, builds the project, creates a systemd service, and writes the Proxmox Firewall egress config. **Review the script before running it.**
 
 To update an existing LXC installed this way:
 
@@ -99,6 +99,10 @@ cp .env.example .env
 #   PORT=3000
 #   STORAGE_PATH=/opt/archivum-null/data/vaults
 nano .env
+
+# Stamp the version. Docker images get this from the release tag; a source install
+# has to say so itself, or the admin panel can only report "unknown".
+echo "APP_VERSION=$(git describe --tags --abbrev=0)" >> .env
 
 # Build backend
 cd backend && npm ci --ignore-scripts && npm run build && npm prune --omit=dev && cd ..
@@ -202,8 +206,10 @@ policy_in: ACCEPT
 policy_out: DROP    # block all outbound by default
 
 [RULES]
-# Allow return traffic for existing inbound connections (download/upload responses)
-OUT ACCEPT -m conntrack --ctstate ESTABLISHED,RELATED
+# Return traffic for existing inbound connections (download/upload responses)
+# is allowed automatically — pve-firewall inserts a RELATED,ESTABLISHED accept
+# at the top of every guest chain. Do not add an explicit rule for it: the
+# ruleset format does not parse raw iptables options such as '-m conntrack'.
 
 # --- If Turnstile IS enabled: allow only Cloudflare challenge endpoints ---
 OUT ACCEPT -dest 104.16.0.0/13 -proto tcp -dport 443
@@ -217,6 +223,8 @@ OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
 > If Turnstile is **disabled**, omit the Cloudflare and DNS ACCEPT lines — `policy_out: DROP` alone is sufficient.
 
 Changes take effect immediately (no reload required). Verify in the Proxmox GUI under **CT → Firewall → Log**.
+
+> **Important:** per-container rules only apply while the **datacenter-level firewall** is enabled (`pve-firewall status` must not report `disabled`). Enable it under **Datacenter → Firewall → Options** — reviewing the host rules first so you don't lock yourself out — or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
 
 ---
 
