@@ -34,6 +34,18 @@ info()   { printf '\033[0;36mℹ\033[0m %s\n' "$*"; }
 header() { printf '\n\033[1;37m━━━ %s ━━━\033[0m\n' "$*"; }
 die()    { red "$*"; exit 1; }
 
+# valid_ipv4 <address> — rejects out-of-range octets that a \d{1,3} regex accepts.
+valid_ipv4() {
+  local _octet
+  local -a _octets
+  local IFS=.
+  read -ra _octets <<< "$1"
+  [[ ${#_octets[@]} -eq 4 ]] || return 1
+  for _octet in "${_octets[@]}"; do
+    [[ "$_octet" =~ ^[0-9]{1,3}$ ]] && ((10#$_octet <= 255)) || return 1
+  done
+}
+
 # pick <var_name> <prompt> <default> <option ...>
 # Inline arrow-key selector (←/→ to move, Enter to confirm).
 pick() {
@@ -211,9 +223,13 @@ NET_IP="dhcp"
 NET_GW=""
 if [[ "$IP_MODE" == "static" ]]; then
   read -rp "IPv4 address (CIDR, e.g. 192.168.1.50/24): " NET_IP
-  [[ "$NET_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]] || die "Invalid CIDR address."
+  [[ "$NET_IP" == */* ]] || die "Invalid CIDR address — expected ADDRESS/PREFIX."
+  valid_ipv4 "${NET_IP%/*}" || die "Invalid CIDR address."
+  _prefix="${NET_IP##*/}"
+  [[ "$_prefix" =~ ^[0-9]{1,2}$ ]] && ((10#$_prefix <= 32)) \
+    || die "Invalid CIDR prefix — expected 0–32."
   read -rp "Gateway: " NET_GW
-  [[ "$NET_GW" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || die "Invalid gateway address."
+  valid_ipv4 "$NET_GW" || die "Invalid gateway address."
 fi
 NET0="name=eth0,bridge=${BRIDGE},ip=${NET_IP},firewall=1"
 [[ -n "$NET_GW" ]] && NET0+=",gw=${NET_GW}"
