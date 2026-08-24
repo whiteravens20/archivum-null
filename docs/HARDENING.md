@@ -571,6 +571,8 @@ OUT ACCEPT -proto udp -dport 53
 OUT ACCEPT -proto tcp -dport 53
 ```
 
+> These rules stay inert until the **datacenter** firewall is enabled — see the note under [Summary — which option to apply](#summary--which-option-to-apply).
+>
 > Return traffic for inbound client sessions is accepted automatically — `pve-firewall` inserts a RELATED,ESTABLISHED accept at the top of every guest chain. Do not add one by hand; the ruleset format does not parse raw iptables options.
 
 Once the tunnel is up, requests to the app arrive on `tailscale0`, so the [inbound rules](#inbound-firewall-rules--app-port) treat it like any other tunnel interface — pass `--tunnel-iface tailscale0` to `setup-firewall.sh`.
@@ -780,6 +782,10 @@ nft add rule inet filter output meta skuid $APP_UID drop
 | Proxmox LXC (Proxmox Firewall) | `policy_out: DROP` in `.fw` | `policy_out: DROP` + Cloudflare ACCEPT rules |
 
 For Proxmox-specific Firewall and veth FORWARD rules, see [PROXMOX.md — Egress Containment](PROXMOX.md#egress-containment--proxmox-firewall).
+
+> **A per-container `.fw` file does nothing on its own.** Guest rules are compiled only while the **datacenter** firewall is enabled — `pve-firewall status` must not report `disabled`. Until it is, `policy_out: DROP` is inert and the container's egress is wide open, whatever the file says. Turn it on under **Datacenter → Firewall → Options**, reviewing the host rules first so you do not lock yourself out, or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
+>
+> [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) warns when it finishes against a disabled datacenter firewall — it will not flip the switch itself, because that is a host-wide change affecting every guest. It does keep `firewall=1` on the container's veth regardless of the firewall prompt, so enabling the datacenter firewall later activates the rules without touching the NIC.
 
 
 ---
