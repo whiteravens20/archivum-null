@@ -327,7 +327,18 @@ if [[ "$VPN_SW" != "none" ]]; then
   case "$VPN_SW" in
     wireguard) apt-get install -y --no-install-recommends wireguard-tools ;;
     openvpn)   apt-get install -y --no-install-recommends openvpn ;;
-    tailscale) curl -fsSL https://tailscale.com/install.sh | sh ;;
+    tailscale)
+      # Signed apt repository rather than `curl … | sh`, so the package is
+      # GPG-verified by apt instead of executed as an unchecked root shell script.
+      _codename=$(. /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}")
+      [[ -n "$_codename" ]] || { echo "Cannot read VERSION_CODENAME from /etc/os-release." >&2; exit 1; }
+      curl -fsSL "https://pkgs.tailscale.com/stable/debian/${_codename}.noarmor.gpg" \
+        -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+      curl -fsSL "https://pkgs.tailscale.com/stable/debian/${_codename}.tailscale-keyring.list" \
+        -o /etc/apt/sources.list.d/tailscale.list
+      apt-get update -qq
+      apt-get install -y --no-install-recommends tailscale
+      ;;
   esac
 fi
 
