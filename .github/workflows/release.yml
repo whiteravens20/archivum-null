@@ -76,6 +76,8 @@ jobs:
     permissions:
       contents: read
       packages: write   # Required to push to ghcr.io
+      id-token: write   # Sign the provenance attestation
+      attestations: write
 
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -144,6 +146,14 @@ jobs:
           provenance: true
           sbom: true
 
+      # Sigstore-signed build provenance, pushed to ghcr.io next to the image.
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
   # ── Job 2: GitHub Release with auto-generated changelog ─────────────────────
   # Creates (or updates) the GitHub Release for this tag.
   # GitHub's built-in release notes generator groups merged PRs by label,
@@ -156,6 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # Required to create/update the release
+      id-token: write   # Sign the provenance attestation
+      attestations: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -216,6 +228,19 @@ jobs:
 
           echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
 
+      # Sigstore-signed build provenance for the tarball. The bundle is attached to
+      # the release so the attestation travels with the file.
+      - name: Attest tarball provenance
+        id: attest
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ env.ARCHIVE_NAME }}
+
+      - name: Keep the attestation bundle
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" "${ARCHIVE_NAME}.sigstore.json"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -224,8 +249,11 @@ jobs:
           generate_release_notes: true
           # Append Docker image reference to the generated notes.
           append_body: true
-          # Attach the source tarball (only files needed to build & run)
-          files: ${{ env.ARCHIVE_NAME }}
+          # Attach the source tarball (only files needed to build & run) and its
+          # attestation bundle
+          files: |
+            ${{ env.ARCHIVE_NAME }}
+            ${{ env.ARCHIVE_NAME }}.sigstore.json
           body: |
             ${{ steps.tag-msg.outputs.message }}
 
@@ -247,6 +275,15 @@ jobs:
             ## Source tarball
 
             The attached `archivum-null-${{ github.ref_name }}.tar.gz` contains only the files needed to build and run the project (no tests, coverage, or CI config).
+
+            ## Verifying
+
+            ```
+            gh attestation verify archivum-null-${{ github.ref_name }}.tar.gz --repo ${{ github.repository }}
+            gh attestation verify oci://ghcr.io/${{ github.repository }}@${{ needs.build-push.outputs.digest }} --repo ${{ github.repository }}
+            ```
+
+            `archivum-null-${{ github.ref_name }}.tar.gz.sigstore.json` is the same attestation as a file, for `gh attestation verify --bundle`.
 
   # ── Job 3: Trivy scan on pushed image ────────────────────────────────────────
   # Pulls the freshly pushed image by immutable digest and scans for HIGH/CRITICAL
