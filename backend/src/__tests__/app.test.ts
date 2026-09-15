@@ -79,3 +79,54 @@ describe('buildApp wiring — rate limiting is active end-to-end', () => {
     expect(limited.statusCode).toBe(429);
   });
 });
+
+/**
+ * Regression guard for GHSA-3m5p-2c4r-xxw2: `request.ip` — and with it every per-IP
+ * rate-limit bucket — may only come from X-Forwarded-For when the connecting peer is
+ * a configured proxy. Observed through rate limiting (limit 1): a distinct client IP
+ * gets a fresh bucket, the same IP does not.
+ */
+describe('buildApp wiring — client IP resolution behind TRUST_PROXY', () => {
+  const PROXY = '10.8.0.2';
+  let app: FastifyInstance;
+  let storageDir: string;
+
+  const get = (remoteAddress: string, forwardedFor: string) =>
+    app.inject({
+      method: 'GET',
+      url: '/api/health',
+      remoteAddress,
+      headers: { 'x-forwarded-for': forwardedFor },
+    });
+
+  beforeEach(async () => {
+    vi.resetModules();
+    storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'archivum-app-test-'));
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('STORAGE_PATH', storageDir);
+    vi.stubEnv('RATE_LIMIT_API_MAX', '1');
+    vi.stubEnv('TRUST_PROXY', PROXY);
+
+    const { buildApp } = await import('../app.js');
+    app = await buildApp();
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    vi.unstubAllEnvs();
+    fs.rmSync(storageDir, { recursive: true, force: true });
+  });
+
+  it('keys clients by X-Forwarded-For when the peer is a trusted proxy', async () => {
+    expect((await get(PROXY, '203.0.113.1')).statusCode).toBe(200);
+    expect((await get(PROXY, '203.0.113.2')).statusCode).toBe(200);
+    expect((await get(PROXY, '203.0.113.1')).statusCode).toBe(429);
+  });
+
+  it('ignores X-Forwarded-For from an untrusted peer', async () => {
+    expect((await get('198.51.100.7', '203.0.113.1')).statusCode).toBe(200);
+    // A spoofed header must not buy the direct client a fresh bucket.
+    expect((await get('198.51.100.7', '203.0.113.2')).statusCode).toBe(429);
+  });
+});

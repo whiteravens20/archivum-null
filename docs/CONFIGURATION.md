@@ -19,7 +19,7 @@ The README covers the variables you usually touch. This page is the complete ref
 | `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod |
 | `BIND_ADDRESS` | `0.0.0.0` | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace) |
 | `PORT` | `3000` | Server port |
-| `TRUST_PROXY` | `1` | Number of trusted reverse-proxy hops for `X-Forwarded-For` (1 = nearest proxy only). Valid range: 0–10. Setting this higher than the actual number of trusted hops allows clients to spoof their IP and bypass rate limiting. |
+| `TRUST_PROXY` | `loopback` | Reverse proxies allowed to set `X-Forwarded-For`, given as the address the app sees them connect from: comma-separated IPs, CIDR ranges, or the named ranges `loopback`, `linklocal`, `uniquelocal`. Empty trusts no proxy. If the proxy is not listed, every client shares the proxy's IP and one rate-limit bucket; listing anything beyond the proxy lets clients that reach the port directly spoof their IP and bypass rate limiting. Behind Docker, send one request through the proxy and use the `remoteAddress` from the container log. Hop counts (the old `TRUST_PROXY=1`) and `/0` ranges are rejected at startup — fastify 5.12.1 dropped hop-count trust ([GHSA-3m5p-2c4r-xxw2](https://github.com/advisories/GHSA-3m5p-2c4r-xxw2)). |
 
 ### Upload limits & vault policy
 

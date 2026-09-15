@@ -33,9 +33,10 @@ export async function buildApp(): Promise<FastifyInstance> {
           ? { target: 'pino-pretty', options: { colorize: true } }
           : undefined,
     },
-    // Trust only as many proxy hops as configured (default: 1 — nearest proxy).
-    // Do NOT use `true` (trust all) in production — clients can spoof X-Forwarded-For.
-    trustProxy: config.TRUST_PROXY,
+    // Honour X-Forwarded-For only when the connecting peer is a configured proxy address.
+    // Never `true` (trust all) and never a hop count — neither checks who is connecting,
+    // so a client reaching the port directly could spoof its IP past rate limiting.
+    trustProxy: [...config.TRUST_PROXY],
     bodyLimit: config.CHUNK_SIZE + 1024 * 64,
   });
 
