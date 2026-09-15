@@ -171,6 +171,11 @@ jobs:
             echo "GH_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # Image tags drop the leading v of the git tag.
+      - name: Image version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Build release tarball
         run: |
           VERSION="${{ github.ref_name }}"
@@ -228,12 +233,12 @@ jobs:
             ## Docker image
 
             ```
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
             ```
 
             | Tag | Description |
             |---|---|
-            | `${{ github.ref_name }}` | This exact release (immutable) |
+            | `:${{ steps.version.outputs.version }}` | This exact release (immutable) |
             | `:main` | Always the latest stable production release |
             | `:latest` | Alias of `:main` — same image, same digest |
 
