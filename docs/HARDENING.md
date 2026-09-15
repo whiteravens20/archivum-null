@@ -177,7 +177,7 @@ server {
 }
 ```
 
-**Security note:** set `TRUST_PROXY=1` in `.env` so Fastify trusts exactly one proxy hop for `X-Forwarded-For`. Do not set it higher than the number of trusted proxy layers — a higher value allows clients to spoof their IP.
+**Security note:** set `TRUST_PROXY` in `.env` to the address the proxy connects to the app from — its tunnel IP when it runs on another host, `loopback` when both run on the same bare-metal host. Behind Docker the address depends on how the port is reached, so check it: send one request through the proxy and read `remoteAddress` from `docker compose logs archivum-null`. List the proxy and nothing else — every listed address can set a client's IP, while `X-Forwarded-For` from any other peer is ignored.
 
 ### Caddy (recommended — automatic TLS via Let's Encrypt)
 
@@ -399,7 +399,7 @@ systemctl enable --now cloudflared
 
 ### Hardening
 
-- Set `TRUST_PROXY=1` in `.env` — `cloudflared` is one trusted proxy hop.
+- Set `TRUST_PROXY` in `.env` to the address `cloudflared` connects from — `loopback` on bare metal; behind Docker, read it from the container log as described in the reverse-proxy security note above.
 - In `.env`, set `HOST_BIND_ADDRESS=127.0.0.1` (or the container's LAN IP) — the tunnel daemon runs on the same host and connects locally; the port need not be reachable from outside.
 - Enable **Cloudflare Zero Trust Access** policies on the tunnel to require authentication before reaching the service (optional but recommended for the admin panel).
 - Disable `proxy_ssl_verify` only if you use a self-signed cert between cloudflared and the app — prefer plain HTTP on localhost.

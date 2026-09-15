@@ -507,7 +507,7 @@ cat << 'POSTINSTALL'
 │    MAX_TOTAL_STORAGE=0       # 0 = unlimited; set a quota in bytes  │
 │    DEFAULT_TTL=86400         # default vault TTL (24h)              │
 │    MAX_TTL=604800            # max vault TTL (7 days)               │
-│    TRUST_PROXY=1             # set to number of reverse-proxy hops  │
+│    TRUST_PROXY=<proxy-ip>    # address your reverse proxy uses      │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │  2. START THE SERVICE                                               │
@@ -558,7 +558,7 @@ cat << 'POSTINSTALL'
 │                                                                     │
 │  nginx:  set  client_max_body_size  > CHUNK_SIZE (e.g. 15m)         │
 │  Caddy:  request_body { max_size 105MB }                            │
-│  Set TRUST_PROXY=1 so X-Forwarded-For is read correctly.            │
+│  Set TRUST_PROXY to the proxy's IP (loopback if it runs in here).   │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │  7. CHUNKED UPLOAD — large file tuning                              │

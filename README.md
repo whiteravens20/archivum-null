@@ -213,7 +213,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 | `DEFAULT_TTL` / `MAX_TTL` | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d) |
 | `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
-| `TRUST_PROXY` | `1` | Trusted reverse-proxy hops for `X-Forwarded-For`. Setting this higher than the real hop count lets clients spoof their IP and bypass rate limiting. |
+| `TRUST_PROXY` | `loopback` | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
 | `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
 | `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images; **required for bare-metal installs** |
 
