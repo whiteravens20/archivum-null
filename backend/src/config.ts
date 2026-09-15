@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 // Pre-compute CHUNK_SIZE so CRYPTO_CHUNK_SIZE can reference it in the same schema.
 const _CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 10485760);
 
@@ -52,8 +54,11 @@ const envSchema = {
   BIND_ADDRESS: process.env.BIND_ADDRESS || '0.0.0.0',
   PORT: Number(process.env.PORT || 3000),
   NODE_ENV: process.env.NODE_ENV || 'development',
-  // How many reverse-proxy hops to trust for X-Forwarded-For. 1 = trust nearest proxy only.
-  TRUST_PROXY: Number(process.env.TRUST_PROXY ?? 1),
+  // Reverse proxies allowed to set X-Forwarded-For: comma-separated IPs, CIDR ranges,
+  // or the named ranges loopback / linklocal / uniquelocal. Empty = trust no proxy.
+  TRUST_PROXY: Object.freeze(
+    (process.env.TRUST_PROXY ?? 'loopback').split(',').map((entry) => entry.trim()).filter(Boolean)
+  ),
 };
 
 export const config = Object.freeze(envSchema);
@@ -69,6 +74,21 @@ export function calcEncryptionOverhead(plaintextSize: number): number {
   const chunkSize = config.CRYPTO_CHUNK_SIZE;
   const numChunks = Math.max(1, Math.ceil(plaintextSize / chunkSize));
   return numChunks * PER_CHUNK_OVERHEAD;
+}
+
+const TRUST_PROXY_NAMED_RANGES = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+/** An IP, an IP/prefix CIDR, or a named range that Fastify's proxy-addr understands. */
+function isValidTrustProxyEntry(entry: string): boolean {
+  if (TRUST_PROXY_NAMED_RANGES.has(entry)) return true;
+  const [address, prefix, ...rest] = entry.split('/');
+  const family = isIP(address);
+  if (family === 0 || rest.length > 0) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d+$/.test(prefix)) return false;
+  const bits = Number(prefix);
+  // A /0 trusts every address on the internet — the spoofing hole this setting closes.
+  return bits > 0 && bits <= (family === 4 ? 32 : 128);
 }
 
 export function validateConfig(): void {
@@ -117,8 +137,20 @@ export function validateConfig(): void {
   if (config.CHUNK_SIZE > config.MAX_FILE_SIZE) {
     throw new Error('CHUNK_SIZE must not exceed MAX_FILE_SIZE');
   }
-  if (!isFinite(config.TRUST_PROXY) || config.TRUST_PROXY < 0 || config.TRUST_PROXY > 10) {
-    throw new Error('TRUST_PROXY must be between 0 and 10');
+  // fastify 5.12.1 dropped hop counts (GHSA-3m5p-2c4r-xxw2): a count cannot check who is
+  // actually connecting, so a client reaching the port directly could spoof its IP.
+  // Fastify now treats a number as "trust nothing", which would silently put every
+  // client behind the proxy into one rate-limit bucket — refuse to start instead.
+  if (config.TRUST_PROXY.some((entry) => /^\d+$/.test(entry))) {
+    throw new Error(
+      'TRUST_PROXY is no longer a hop count — set it to the IP or CIDR your reverse proxy connects from (see docs/CONFIGURATION.md)'
+    );
+  }
+  const invalidProxy = config.TRUST_PROXY.find((entry) => !isValidTrustProxyEntry(entry));
+  if (invalidProxy !== undefined) {
+    throw new Error(
+      `TRUST_PROXY entry "${invalidProxy}" must be an IP address, a CIDR range with a non-zero prefix, or one of: loopback, linklocal, uniquelocal`
+    );
   }
   if (config.UPDATE_CHECK_ENABLED) {
     // UPDATE_CHECK_REPO is interpolated into the api.github.com URL. Constrain it to

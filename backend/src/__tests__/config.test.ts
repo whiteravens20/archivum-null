@@ -47,16 +47,24 @@ describe('config', () => {
     expect(Object.isFrozen(config)).toBe(true);
   });
 
-  it('should default TRUST_PROXY to 1', async () => {
-    const { config } = await import('../config.js');
-    expect(config.TRUST_PROXY).toBe(1);
-  });
-
-  it('should read TRUST_PROXY from env', async () => {
-    vi.stubEnv('TRUST_PROXY', '2');
+  it('should default TRUST_PROXY to loopback', async () => {
     vi.resetModules();
     const { config } = await import('../config.js');
-    expect(config.TRUST_PROXY).toBe(2);
+    expect(config.TRUST_PROXY).toEqual(['loopback']);
+  });
+
+  it('should read TRUST_PROXY from env as a trimmed list', async () => {
+    vi.stubEnv('TRUST_PROXY', ' 10.8.0.1, 172.16.0.0/12 ,loopback');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.TRUST_PROXY).toEqual(['10.8.0.1', '172.16.0.0/12', 'loopback']);
+  });
+
+  it('should trust no proxy when TRUST_PROXY is empty', async () => {
+    vi.stubEnv('TRUST_PROXY', '');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.TRUST_PROXY).toEqual([]);
   });
 
   it('should default TURNSTILE_HOSTNAME to empty string', async () => {
@@ -181,6 +189,35 @@ describe('validateConfig', () => {
     vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
     const { config } = await import('../config.js');
     expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);  // 5 MB default
+  });
+
+  it('should reject a legacy TRUST_PROXY hop count', async () => {
+    vi.stubEnv('TRUST_PROXY', '1');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('TRUST_PROXY is no longer a hop count');
+  });
+
+  it.each(['0.0.0.0/0', '::/0', 'true', '*', '10.0.0.1/33', 'fd00::/129', '10.0.0.0/8/1', '10.0.0.0/x', '<proxy-ip>'])(
+    'should reject TRUST_PROXY entry %s',
+    async (entry) => {
+      vi.stubEnv('TRUST_PROXY', `127.0.0.1,${entry}`);
+      const { validateConfig } = await import('../config.js');
+      expect(() => validateConfig()).toThrow(`TRUST_PROXY entry "${entry}"`);
+    }
+  );
+
+  it('should accept IPs, CIDR ranges and named ranges in TRUST_PROXY', async () => {
+    vi.stubEnv('TRUST_PROXY', '10.8.0.1, 172.18.0.0/16, fd00::/8, ::1, loopback, linklocal, uniquelocal');
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).not.toThrow();
+  });
+
+  it('should accept an empty TRUST_PROXY', async () => {
+    vi.stubEnv('TRUST_PROXY', '');
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).not.toThrow();
   });
 
   it('should warn when RATE_LIMIT_MAX exceeds RATE_LIMIT_API_MAX', async () => {
