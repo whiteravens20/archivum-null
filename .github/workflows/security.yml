@@ -76,6 +76,7 @@ jobs:
       - uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high
+          comment-summary-in-pr: always
           # Any allowlisted ID goes here as `allow-ghsas:`, and its justification
           # in .github/scripts/audit-allowlist.json. Keep the two in sync.
 
