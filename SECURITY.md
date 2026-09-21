@@ -17,7 +17,8 @@
 - [x] No user identity storage
 - [x] No cookies
 - [x] No analytics / tracking
-- [x] No persistent IP logging (in-memory rate limit only)
+- [x] No persistent IP logging (in-memory rate limit only) — request logs omit the client address and port
+- [x] No vault or upload IDs in logs — request logs record the matched route pattern, never the raw URL
 - [x] Streaming file upload — no full-file memory buffering
 - [x] Path traversal protection on vault IDs
 - [x] File size enforced at frontend, backend, and proxy levels:
@@ -61,7 +62,8 @@ running a current version is. See
   - Upload tier: `POST /api/vault` (default 10 req/window) — stricter
   - Download tier: `GET /api/vault/:id/download` (default 30 req/window) — prevents bulk download exhaustion
 - [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
-- [x] `TRUST_PROXY` validated at startup: must be 0–10 (prevents misconfiguration that would allow unlimited-hop IP spoofing)
+- [x] IPv6 clients rate-limited and capped on open upload sessions per /64, not per address — rotating addresses inside one allocation gains no extra quota
+- [x] `TRUST_PROXY` validated at startup: IPs, CIDR ranges with a non-zero prefix, or named private ranges only — hop counts are rejected, because a hop count cannot check who is connecting and lets a client that reaches the port directly spoof its IP (GHSA-3m5p-2c4r-xxw2)
 - [x] Max file size enforcement (413 response)
 - [x] CAPTCHA timeout — frontend enforces a 10-second verification deadline; if the widget does not respond, upload is blocked and the user must reload
 - [x] TTL clamping (min 60s, max configurable)
@@ -97,7 +99,7 @@ running a current version is. See
 - [x] Deployment validation script (`scripts/check-deployment.sh`) to verify posture on the running host
 - [x] No LAN exposure in production mode
 - [x] CORS restricted in production
-- [x] Configurable reverse-proxy trust depth (`TRUST_PROXY`, default `1` — trusts nearest hop only; prevents `X-Forwarded-For` spoofing)
+- [x] Reverse-proxy trust by address (`TRUST_PROXY`, default `loopback`) — `X-Forwarded-For` is honoured only when the connection comes from a listed proxy, so a direct client cannot spoof its IP
 
 ## Admin Panel
 

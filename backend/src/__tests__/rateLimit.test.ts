@@ -191,4 +191,14 @@ describe('Rate-limit middleware', () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
   });
+
+  it('should share one bucket across IPv6 addresses in the same /64', async () => {
+    const download = (remoteAddress: string) =>
+      app.inject({ method: 'GET', url: '/api/vault/test-id/download', remoteAddress });
+
+    expect((await download('2001:db8:1:2::1')).statusCode).toBe(200);
+    expect((await download('2001:db8:1:2::2')).statusCode).toBe(200);
+    expect((await download('2001:db8:1:2:ffff::3')).statusCode).toBe(429);
+    expect((await download('2001:db8:1:3::1')).statusCode).toBe(200);
+  });
 });

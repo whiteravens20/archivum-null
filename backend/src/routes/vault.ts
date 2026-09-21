@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { vaultManager } from '../vault/manager.js';
 import { config } from '../config.js';
 import { verifyTurnstile } from '../middleware/turnstile.js';
+import { clientKey } from '../middleware/clientKey.js';
 
 interface VaultParams {
   vaultId: string;
@@ -9,6 +10,20 @@ interface VaultParams {
 
 interface UploadParams {
   uploadId: string;
+}
+
+/**
+ * Reply to a failed chunked-upload call. Only the client errors the vault manager
+ * raises itself (4xx with a statusCode) are passed through; anything else — fs errors
+ * in particular, whose messages carry STORAGE_PATH — is logged and hidden behind a 500.
+ */
+function sendUploadError(request: FastifyRequest, reply: FastifyReply, err: unknown) {
+  const error = err as Error & { statusCode?: number };
+  if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+    return reply.status(error.statusCode).send({ error: error.message });
+  }
+  request.log.error(err, 'Chunked upload failed');
+  return reply.status(500).send({ error: 'Internal server error' });
 }
 
 export async function vaultRoutes(app: FastifyInstance): Promise<void> {
@@ -124,12 +139,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       ? rawCPS
       : config.CRYPTO_CHUNK_SIZE;
 
-    if (!totalSize || totalSize <= 0) {
-      return reply.status(400).send({ error: 'totalSize is required and must be positive' });
+    if (!Number.isSafeInteger(totalSize) || totalSize <= 0) {
+      return reply.status(400).send({ error: 'totalSize is required and must be a positive integer' });
     }
 
     try {
-      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize, request.ip);
+      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize, clientKey(request.ip));
       const sessionToken = vaultManager.signUploadSession(session.uploadId);
       return reply.status(201).send({
         uploadId: session.uploadId,
@@ -144,7 +159,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
           error: 'Storage quota exceeded. Please try again later or contact the administrator.',
         });
       }
-      return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
+      return sendUploadError(request, reply, err);
     }
   });
 
@@ -180,8 +195,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         nextChunkIndex: session.nextChunkIndex,
       });
     } catch (err: unknown) {
-      const error = err as Error & { statusCode?: number };
-      return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
+      return sendUploadError(request, reply, err);
     }
   });
 
@@ -204,8 +218,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         ciphertextSize: meta.ciphertextSize,
       });
     } catch (err: unknown) {
-      const error = err as Error & { statusCode?: number };
-      return reply.status(error.statusCode || 500).send({ error: error.message || 'Internal server error' });
+      return sendUploadError(request, reply, err);
     }
   });
 

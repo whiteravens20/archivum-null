@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
@@ -8,6 +8,7 @@ import { vaultRoutes } from './routes/vault.js';
 import { adminRoutes } from './routes/admin.js';
 import { healthRoutes } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
+import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
 import path from 'node:path';
@@ -15,6 +16,19 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Request log fields. Fastify's default adds `remoteAddress` and `remotePort`, which
+ * would write every client's IP to the container log — the service keeps no record
+ * of who connected, so they are left out.
+ *
+ * The matched route pattern stands in for the URL: a raw URL carries vault and upload
+ * IDs (`/api/vault/<id>/download`, the SPA's `/vault/<id>`), and anyone reading the log
+ * could use one to burn a vault's downloads. Unmatched paths are not logged at all.
+ */
+export function serializeRequest(request: FastifyRequest) {
+  return { method: request.method, route: request.routeOptions.url, host: request.host };
+}
 
 /**
  * Build the fully-wired Fastify instance (without listening).
@@ -28,14 +42,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+      serializers: { req: serializeRequest },
       transport:
         config.NODE_ENV === 'development'
           ? { target: 'pino-pretty', options: { colorize: true } }
           : undefined,
     },
-    // Trust only as many proxy hops as configured (default: 1 — nearest proxy).
-    // Do NOT use `true` (trust all) in production — clients can spoof X-Forwarded-For.
-    trustProxy: config.TRUST_PROXY,
+    // Honour X-Forwarded-For only when the connecting peer is a configured proxy address.
+    // Never `true` (trust all) and never a hop count — neither checks who is connecting,
+    // so a client reaching the port directly could spoof its IP past rate limiting.
+    trustProxy: [...config.TRUST_PROXY],
     bodyLimit: config.CHUNK_SIZE + 1024 * 64,
   });
 
@@ -86,6 +102,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   // hook in a child context where it never runs for the sibling-registered
   // routes — silently disabling all rate limiting.
   await rateLimitPlugin(app);
+
+  // With client addresses kept out of the logs, this is how an operator learns the
+  // proxy address to put in TRUST_PROXY.
+  app.addHook('onRequest', buildProxyHint());
 
   // API routes
   await app.register(healthRoutes);

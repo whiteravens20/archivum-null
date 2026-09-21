@@ -83,42 +83,11 @@ The table below lists the only hard requirement and optional conveniences.
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  Browser (Client)                                        │
-│                                                          │
-│  1. Select file                                          │
-│  2. Generate AES-256-GCM key (WebCrypto)                 │
-│  3. Encrypt file client-side (streaming per-chunk)       │
-│     Plaintext split into 5 MB chunks, each encrypted     │
-│     independently: AES-256-GCM with unique IV + AAD      │
-│     (chunk index prevents reordering attacks)            │
-│  4. Upload ciphertext to server                          │
-│  5. Receive vault URL:                                   │
-│       /vault/{id}#BASE64_KEY.BASE64_FILENAME             │
-│                                                          │
-│  Key and filename NEVER leave the browser via HTTP.      │
-│  URL fragment (#) is NOT included in HTTP requests.      │
-└──────────────────────────────────────────────────────────┘
-               │ HTTPS (encrypted blob + vault config only)
-               ▼
-┌──────────────────────────────────────────────────────────┐
-│  Server                                                  │
-│                                                          │
-│  Stores only:                                            │
-│  - vault_id                                              │
-│  - ciphertext (encrypted blob — filename/MIME inside)    │
-│  - created_at / expires_at                               │
-│  - remaining_downloads / max_downloads                   │
-│                                                          │
-│  NEVER stores:                                           │
-│  - plaintext                                             │
-│  - encryption keys                                       │
-│  - original filename or MIME type (encrypted in blob)    │
-│  - user identity                                         │
-│  - persistent IP logs                                    │
-└──────────────────────────────────────────────────────────┘
-```
+Everything that touches your file in readable form happens in the browser. When you pick a file, the page generates a fresh AES-256-GCM key with the WebCrypto API and encrypts the file as a stream of 5 MB chunks. Each chunk gets its own IV and is bound to its position — its index and whether it is the last one — so the server cannot reorder, drop or append chunks without decryption failing. The original filename and MIME type are encrypted inside the blob too.
+
+Only the ciphertext is uploaded, over HTTPS, together with the vault settings (expiry and download limit). In return you get a link of the form `/vault/{id}#KEY.FILENAME`. The key sits after the `#`, and browsers never send that part of a URL to the server, so the key reaches the recipient only through the link you share.
+
+The server is a relay that cannot read what it relays. For each vault it keeps the vault ID, the encrypted blob, when it was created and when it expires, and how many downloads it allows and has left. It never sees the plaintext, the key, the real filename or MIME type, or who uploaded the file, and it keeps no log of client IP addresses — rate limiting counts requests in memory only. When a vault expires or runs out of downloads, the blob and its metadata are deleted.
 
 ## Development Setup
 
@@ -213,7 +182,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 | `DEFAULT_TTL` / `MAX_TTL` | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d) |
 | `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
-| `TRUST_PROXY` | `1` | Trusted reverse-proxy hops for `X-Forwarded-For`. Setting this higher than the real hop count lets clients spoof their IP and bypass rate limiting. |
+| `TRUST_PROXY` | `loopback` | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
 | `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
 | `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images; **required for bare-metal installs** |
 
@@ -221,12 +190,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 
 ### Production Mode (Secure Homelab)
 
-```
-Internet
-  → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
-  → private tunnel (WireGuard, SSH tunnel, VPN overlay, …)
-  → Archivum Null VM / homelab host (tunnel interface IP only)
-```
+Visitors connect to a small VPS, which holds the public IP, terminates TLS and runs nothing but a reverse proxy (nginx, Caddy, …). The proxy forwards requests over a private tunnel — WireGuard, an SSH tunnel or a VPN overlay — to the homelab host or VM that actually runs Archivum Null. That host listens only on its tunnel interface, so the app and the stored vaults are never exposed directly to the internet or the LAN.
 
 **Key requirements:**
 - Docker port published **only** on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
@@ -287,12 +251,13 @@ Images are published to `ghcr.io/whiteravens20/archivum-null`.
 |---|---|---|---|
 | `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
 | `:main` | Rolling pointer to the latest tagged release on `main` | ✅ Yes | Production — auto-rolls forward; use this if you want unattended updates instead of a pinned version |
-| `:edge` | Every push to `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
-| `:dev` | Every push to `dev` | ❌ No | Snapshot — development builds, may be broken |
+| `:latest` | Alias of `:main`, pushed by the same release job | ✅ Yes | Production — identical image and digest to `:main` |
+| `:edge` | Snapshot build, run by hand from `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
+| `:dev` | Snapshot build, run by hand from `dev` | ❌ No | Snapshot — development builds, may be broken |
 | `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
 
-> **Only `:main` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`.
-> `:latest` is intentionally **not published** — it is ambiguous by Docker convention (simply the last image built, not necessarily stable).
+> **Only `:main`, `:latest` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`.
+> `:latest` usually earns its bad reputation by meaning "the last image built". It cannot mean that here: the release workflow only ever runs on a semver tag, and snapshots are pushed under `:dev` / `:edge` by a different workflow. So `:latest` is simply another name for `:main` — same image, same digest.
 > `:edge` and `:dev` are CI snapshot builds — do not use them for any internet-facing deployment.
 
 ## Upgrading
