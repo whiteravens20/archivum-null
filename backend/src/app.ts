@@ -8,6 +8,7 @@ import { vaultRoutes } from './routes/vault.js';
 import { adminRoutes } from './routes/admin.js';
 import { healthRoutes } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
+import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
 import path from 'node:path';
@@ -97,6 +98,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   // hook in a child context where it never runs for the sibling-registered
   // routes — silently disabling all rate limiting.
   await rateLimitPlugin(app);
+
+  // With client addresses kept out of the logs, this is how an operator learns the
+  // proxy address to put in TRUST_PROXY.
+  app.addHook('onRequest', buildProxyHint());
 
   // API routes
   await app.register(healthRoutes);
