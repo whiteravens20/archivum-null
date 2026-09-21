@@ -172,7 +172,7 @@ server {
 }
 ```
 
-**Security note:** set `TRUST_PROXY` in `.env` to the address the proxy connects to the app from — its tunnel IP when it runs on another host, `loopback` when both run on the same bare-metal host. Behind Docker the address depends on how the port is reached, so check it: send one request through the proxy and read `remoteAddress` from `docker compose logs archivum-null`. List the proxy and nothing else — every listed address can set a client's IP, while `X-Forwarded-For` from any other peer is ignored.
+**Security note:** set `TRUST_PROXY` in `.env` to the address the proxy connects to the app from — its tunnel IP when it runs on another host, `loopback` when both run on the same bare-metal host. Behind Docker the address depends on how the port is reached, so check it: send one request through the proxy and read the `peer` address from the `Ignored X-Forwarded-For` warning in `docker compose logs archivum-null`. List the proxy and nothing else — every listed address can set a client's IP, while `X-Forwarded-For` from any other peer is ignored.
 
 ### Caddy (recommended — automatic TLS via Let's Encrypt)
 

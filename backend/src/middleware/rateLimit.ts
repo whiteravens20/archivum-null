@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config.js';
+import { clientKey } from './clientKey.js';
 
 /**
  * In-memory rate limiter. IP addresses are NOT persisted.
@@ -13,7 +14,8 @@ import { config } from '../config.js';
  * `request.ip` is used directly — Fastify resolves it correctly from
  * X-Forwarded-For according to the `trustProxy` setting. Do NOT re-read
  * X-Forwarded-For manually; that would bypass the trust chain and allow
- * clients to spoof their IP.
+ * clients to spoof their IP. Buckets are keyed by `clientKey()`, which groups
+ * IPv6 clients by /64 so rotating addresses inside one allocation gains nothing.
  */
 interface RateBucket {
   count: number;
@@ -83,7 +85,7 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     if (!pathname.startsWith('/api/')) return;
 
     // `request.ip` is already resolved via Fastify's trustProxy chain.
-    const ip = request.ip;
+    const ip = clientKey(request.ip);
 
     // Tier 1 — general API limit (guards /api/tos file I/O, vault GET, etc.)
     if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;

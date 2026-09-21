@@ -325,6 +325,18 @@ describe('Vault routes', () => {
     expect(res.json().error).toContain('totalSize');
   });
 
+  it.each([1.5, '12abc', -1, 1e300])('POST /api/vault/upload/init rejects totalSize %s', async (totalSize) => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize, ttl: 3600 }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockManager.initChunkedUpload).not.toHaveBeenCalled();
+  });
+
   it('POST /api/vault/upload/init returns 507 when quota exceeded', async () => {
     mockManager.initChunkedUpload.mockImplementationOnce(() => {
       throw Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 });
@@ -412,6 +424,32 @@ describe('Vault routes', () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toContain('not found');
+  });
+
+  it.each([
+    ['init', 'initChunkedUpload', '/api/vault/upload/init'],
+    ['chunk', 'appendChunk', '/api/vault/upload/upload-abc/chunk'],
+    ['complete', 'completeChunkedUpload', '/api/vault/upload/upload-abc/complete'],
+  ] as const)('POST %s hides unexpected error messages behind a generic 500', async (_name, method, url) => {
+    const leak = Object.assign(
+      new Error("ENOENT: no such file or directory, open '/data/vaults/_uploads/x/data.enc'"),
+      { code: 'ENOENT' }
+    );
+    mockManager[method].mockImplementationOnce(() => { throw leak; });
+
+    const res = await app.inject({
+      method: 'POST',
+      url,
+      headers: method === 'appendChunk'
+        ? { 'content-type': `multipart/form-data; boundary=${boundary}`, 'x-session-token': 'mock-session-token-abc' }
+        : { 'content-type': 'application/json', 'x-session-token': 'mock-session-token-abc' },
+      payload: method === 'appendChunk'
+        ? buildMultipart(boundary, { chunkIndex: '0' }, { name: 'chunk', content: Buffer.from('x') })
+        : JSON.stringify({ totalSize: 200 }),
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: 'Internal server error' });
   });
 
   it('DELETE /api/vault/upload/:uploadId returns 204 and calls abort', async () => {
