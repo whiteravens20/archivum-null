@@ -166,7 +166,7 @@ export class VaultManager {
   initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE, clientIp?: string): ChunkedUploadSession {
     const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
     const maxAllowed = plaintextMax + calcEncryptionOverhead(plaintextMax);
-    if (totalSize <= 0 || totalSize > maxAllowed) {
+    if (!Number.isSafeInteger(totalSize) || totalSize <= 0 || totalSize > maxAllowed) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
 
