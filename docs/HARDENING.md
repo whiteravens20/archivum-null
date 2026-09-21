@@ -96,12 +96,7 @@ Rules applied with `iptables` or `nft` commands are **in-memory only** and lost 
 
 ## Production Architecture
 
-```
-Internet
-  → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
-  → private tunnel (WireGuard, SSH tunnel, VPN overlay, …)
-  → Archivum Null VM / homelab host (tunnel interface IP only)
-```
+Visitors connect to a small VPS, which holds the public IP, terminates TLS and runs nothing but a reverse proxy (nginx, Caddy, …). The proxy forwards requests over a private tunnel — WireGuard, an SSH tunnel or a VPN overlay — to the homelab host or VM that actually runs Archivum Null. That host listens only on its tunnel interface, so the app and the stored vaults are never exposed directly to the internet or the LAN.
 
 **Key requirements:**
 
@@ -357,9 +352,7 @@ With a `/32` `AllowedIPs`, even if the container is misconfigured, WireGuard wil
 
 Cloudflare Tunnel (`cloudflared`) creates an **outbound-only** encrypted connection from your homelab to Cloudflare's edge. No VPS, no public IP, no open inbound ports are required — the daemon initiates the connection.
 
-```
-Internet → Cloudflare edge (TLS termination) → cloudflared daemon → Archivum Null
-```
+Visitors reach Cloudflare's edge, which terminates TLS and passes each request down the tunnel that `cloudflared` holds open from your host. The daemon hands it to Archivum Null locally, so the host only ever makes outbound connections.
 
 ### Setup
 
@@ -456,10 +449,7 @@ iptables -I OUTPUT -d 198.41.192.0/24 -p tcp --dport 443 -j ACCEPT
 
 Tailscale is a WireGuard-based mesh VPN. It automatically handles NAT traversal — no VPS, no port forwarding, no public IP needed. Devices join a shared network ("tailnet") and get stable `100.x.x.x` addresses.
 
-```
-Internet client  →  (not applicable — Tailscale is for admin/internal access)
-Admin device  →  Tailscale mesh  →  Archivum Null host (100.x.x.x)
-```
+Only devices you have joined to the tailnet can reach the host, at its `100.x.x.x` address — typically your own machine, for admin access. Public visitors are not on the tailnet, so on its own Tailscale does not serve the upload page to the internet.
 
 > **Use case distinction:** Tailscale is primarily suited for **restricting admin access** to the Archivum Null host and admin panel, not for serving the public-facing upload interface. For public access, combine Tailscale with a VPS reverse proxy or use Cloudflare Tunnel.
 

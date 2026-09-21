@@ -83,42 +83,11 @@ The table below lists the only hard requirement and optional conveniences.
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  Browser (Client)                                        │
-│                                                          │
-│  1. Select file                                          │
-│  2. Generate AES-256-GCM key (WebCrypto)                 │
-│  3. Encrypt file client-side (streaming per-chunk)       │
-│     Plaintext split into 5 MB chunks, each encrypted     │
-│     independently: AES-256-GCM with unique IV + AAD      │
-│     (chunk index prevents reordering attacks)            │
-│  4. Upload ciphertext to server                          │
-│  5. Receive vault URL:                                   │
-│       /vault/{id}#BASE64_KEY.BASE64_FILENAME             │
-│                                                          │
-│  Key and filename NEVER leave the browser via HTTP.      │
-│  URL fragment (#) is NOT included in HTTP requests.      │
-└──────────────────────────────────────────────────────────┘
-               │ HTTPS (encrypted blob + vault config only)
-               ▼
-┌──────────────────────────────────────────────────────────┐
-│  Server                                                  │
-│                                                          │
-│  Stores only:                                            │
-│  - vault_id                                              │
-│  - ciphertext (encrypted blob — filename/MIME inside)    │
-│  - created_at / expires_at                               │
-│  - remaining_downloads / max_downloads                   │
-│                                                          │
-│  NEVER stores:                                           │
-│  - plaintext                                             │
-│  - encryption keys                                       │
-│  - original filename or MIME type (encrypted in blob)    │
-│  - user identity                                         │
-│  - persistent IP logs                                    │
-└──────────────────────────────────────────────────────────┘
-```
+Everything that touches your file in readable form happens in the browser. When you pick a file, the page generates a fresh AES-256-GCM key with the WebCrypto API and encrypts the file as a stream of 5 MB chunks. Each chunk gets its own IV and is bound to its position — its index and whether it is the last one — so the server cannot reorder, drop or append chunks without decryption failing. The original filename and MIME type are encrypted inside the blob too.
+
+Only the ciphertext is uploaded, over HTTPS, together with the vault settings (expiry and download limit). In return you get a link of the form `/vault/{id}#KEY.FILENAME`. The key sits after the `#`, and browsers never send that part of a URL to the server, so the key reaches the recipient only through the link you share.
+
+The server is a relay that cannot read what it relays. For each vault it keeps the vault ID, the encrypted blob, when it was created and when it expires, and how many downloads it allows and has left. It never sees the plaintext, the key, the real filename or MIME type, or who uploaded the file, and it keeps no log of client IP addresses — rate limiting counts requests in memory only. When a vault expires or runs out of downloads, the blob and its metadata are deleted.
 
 ## Development Setup
 
@@ -221,12 +190,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 
 ### Production Mode (Secure Homelab)
 
-```
-Internet
-  → VPS running a reverse proxy (nginx, Caddy, …) with TLS termination
-  → private tunnel (WireGuard, SSH tunnel, VPN overlay, …)
-  → Archivum Null VM / homelab host (tunnel interface IP only)
-```
+Visitors connect to a small VPS, which holds the public IP, terminates TLS and runs nothing but a reverse proxy (nginx, Caddy, …). The proxy forwards requests over a private tunnel — WireGuard, an SSH tunnel or a VPN overlay — to the homelab host or VM that actually runs Archivum Null. That host listens only on its tunnel interface, so the app and the stored vaults are never exposed directly to the internet or the LAN.
 
 **Key requirements:**
 - Docker port published **only** on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
