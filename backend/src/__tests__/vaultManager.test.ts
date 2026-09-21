@@ -232,6 +232,10 @@ describe('VaultManager — download counter atomicity', () => {
     }).toThrow();
   });
 
+  it('rejects init when totalSize is not an integer', () => {
+    expect(() => manager.initChunkedUpload(1.5, 3600, 5)).toThrow(/Invalid total size/);
+  });
+
   it('rejects chunk when session does not exist', async () => {
     await expect(
       manager.appendChunk('nonexistent-session-id', 0, makeStream('data'))

@@ -325,6 +325,18 @@ describe('Vault routes', () => {
     expect(res.json().error).toContain('totalSize');
   });
 
+  it.each([1.5, '12abc', -1, 1e300])('POST /api/vault/upload/init rejects totalSize %s', async (totalSize) => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize, ttl: 3600 }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockManager.initChunkedUpload).not.toHaveBeenCalled();
+  });
+
   it('POST /api/vault/upload/init returns 507 when quota exceeded', async () => {
     mockManager.initChunkedUpload.mockImplementationOnce(() => {
       throw Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 });

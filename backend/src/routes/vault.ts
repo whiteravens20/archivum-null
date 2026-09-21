@@ -138,8 +138,8 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       ? rawCPS
       : config.CRYPTO_CHUNK_SIZE;
 
-    if (!totalSize || totalSize <= 0) {
-      return reply.status(400).send({ error: 'totalSize is required and must be positive' });
+    if (!Number.isSafeInteger(totalSize) || totalSize <= 0) {
+      return reply.status(400).send({ error: 'totalSize is required and must be a positive integer' });
     }
 
     try {
