@@ -86,7 +86,9 @@ export class LocalStorage implements StorageBackend {
 
   async deleteVault(vaultId: string): Promise<boolean> {
     try {
-      await fsp.rm(this.vaultDir(vaultId), { recursive: true, force: true });
+      // No `force`: a missing directory must reject so the caller can tell it apart
+      // from a vault that was actually removed.
+      await fsp.rm(this.vaultDir(vaultId), { recursive: true });
       return true;
     } catch {
       return false;
