@@ -21,9 +21,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * Request log fields. Fastify's default adds `remoteAddress` and `remotePort`, which
  * would write every client's IP to the container log — the service keeps no record
  * of who connected, so they are left out.
+ *
+ * The matched route pattern stands in for the URL: a raw URL carries vault and upload
+ * IDs (`/api/vault/<id>/download`, the SPA's `/vault/<id>`), and anyone reading the log
+ * could use one to burn a vault's downloads. Unmatched paths are not logged at all.
  */
 export function serializeRequest(request: FastifyRequest) {
-  return { method: request.method, url: request.url, host: request.host };
+  return { method: request.method, route: request.routeOptions.url, host: request.host };
 }
 
 /**

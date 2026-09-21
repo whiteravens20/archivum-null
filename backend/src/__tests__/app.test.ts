@@ -132,15 +132,16 @@ describe('buildApp wiring — client IP resolution behind TRUST_PROXY', () => {
 });
 
 describe('request log serializer', () => {
-  it('leaves the client address and port out of request logs', async () => {
+  it('leaves the client address, port and raw URL out of request logs', async () => {
     const { serializeRequest } = await import('../app.js');
     const logged = serializeRequest({
       method: 'GET',
-      url: '/api/health',
+      url: '/api/vault/abc123/download',
+      routeOptions: { url: '/api/vault/:vaultId/download' },
       host: 'example.com',
       ip: '203.0.113.1',
       socket: { remotePort: 51234 },
     } as unknown as FastifyRequest);
-    expect(logged).toEqual({ method: 'GET', url: '/api/health', host: 'example.com' });
+    expect(logged).toEqual({ method: 'GET', route: '/api/vault/:vaultId/download', host: 'example.com' });
   });
 });
