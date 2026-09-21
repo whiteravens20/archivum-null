@@ -43,6 +43,8 @@ The README covers the variables you usually touch. This page is the complete ref
 
 ### Rate limiting
 
+IPv4 clients are counted per address, IPv6 clients per /64 — the same applies to `MAX_UPLOAD_SESSIONS_PER_IP`.
+
 | Variable | Default | Description |
 |---|---|---|
 | `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |

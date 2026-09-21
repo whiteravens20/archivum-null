@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { vaultManager } from '../vault/manager.js';
 import { config } from '../config.js';
 import { verifyTurnstile } from '../middleware/turnstile.js';
+import { clientKey } from '../middleware/clientKey.js';
 
 interface VaultParams {
   vaultId: string;
@@ -143,7 +144,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize, request.ip);
+      const session = vaultManager.initChunkedUpload(totalSize, ttl, maxDownloads, chunkPlaintextSize, clientKey(request.ip));
       const sessionToken = vaultManager.signUploadSession(session.uploadId);
       return reply.status(201).send({
         uploadId: session.uploadId,
