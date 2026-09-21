@@ -17,7 +17,7 @@
 - [x] No user identity storage
 - [x] No cookies
 - [x] No analytics / tracking
-- [x] No persistent IP logging (in-memory rate limit only)
+- [x] No persistent IP logging (in-memory rate limit only) — request logs omit the client address and port
 - [x] Streaming file upload — no full-file memory buffering
 - [x] Path traversal protection on vault IDs
 - [x] File size enforced at frontend, backend, and proxy levels:

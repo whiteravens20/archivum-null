@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
@@ -17,6 +17,15 @@ import fs from 'node:fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
+ * Request log fields. Fastify's default adds `remoteAddress` and `remotePort`, which
+ * would write every client's IP to the container log — the service keeps no record
+ * of who connected, so they are left out.
+ */
+export function serializeRequest(request: FastifyRequest) {
+  return { method: request.method, url: request.url, host: request.host };
+}
+
+/**
  * Build the fully-wired Fastify instance (without listening).
  *
  * Kept separate from the server entrypoint so tests exercise the exact same
@@ -28,6 +37,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+      serializers: { req: serializeRequest },
       transport:
         config.NODE_ENV === 'development'
           ? { target: 'pino-pretty', options: { colorize: true } }

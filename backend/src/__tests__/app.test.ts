@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -128,5 +128,19 @@ describe('buildApp wiring — client IP resolution behind TRUST_PROXY', () => {
     expect((await get('198.51.100.7', '203.0.113.1')).statusCode).toBe(200);
     // A spoofed header must not buy the direct client a fresh bucket.
     expect((await get('198.51.100.7', '203.0.113.2')).statusCode).toBe(429);
+  });
+});
+
+describe('request log serializer', () => {
+  it('leaves the client address and port out of request logs', async () => {
+    const { serializeRequest } = await import('../app.js');
+    const logged = serializeRequest({
+      method: 'GET',
+      url: '/api/health',
+      host: 'example.com',
+      ip: '203.0.113.1',
+      socket: { remotePort: 51234 },
+    } as unknown as FastifyRequest);
+    expect(logged).toEqual({ method: 'GET', url: '/api/health', host: 'example.com' });
   });
 });
