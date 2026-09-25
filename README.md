@@ -13,6 +13,7 @@ Anonymous encrypted file sharing for privacy-first users — zero-knowledge, no 
 [![Release](https://github.com/whiteravens20/archivum-null/actions/workflows/release.yml/badge.svg)](https://github.com/whiteravens20/archivum-null/actions/workflows/release.yml)
 [![CodeQL](https://github.com/whiteravens20/archivum-null/actions/workflows/codeql.yml/badge.svg)](https://github.com/whiteravens20/archivum-null/actions/workflows/codeql.yml)
 [![Security scan](https://github.com/whiteravens20/archivum-null/actions/workflows/security.yml/badge.svg)](https://github.com/whiteravens20/archivum-null/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/whiteravens20/archivum-null/badge)](https://scorecard.dev/viewer/?uri=github.com/whiteravens20/archivum-null)
 
 <br />
 
