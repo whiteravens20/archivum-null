@@ -1,4 +1,6 @@
 <div align="center">
+    <img src="docs/img/logo-icon.png" width="128" alt="Archivum Null logo">
+    <br><br>
     <img src=frontend/public/logo-text-modern.svg width="85%">
 <br \><br \>
 
