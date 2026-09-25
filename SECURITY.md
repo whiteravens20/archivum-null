@@ -1,6 +1,20 @@
-# Security Checklist — Archivum Null
+# Security — Archivum Null
 
-## Cryptography
+## Reporting a vulnerability
+
+Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/whiteravens20/archivum-null/security/advisories/new). Please do not open a public issue, discussion or pull request for a security bug.
+
+Include the version or commit you tested, the steps that reproduce the problem and the impact you expect. You will get a first reply within a week. A confirmed issue is fixed in a new release, and the advisory credits you unless you ask otherwise.
+
+## Supported versions
+
+Only the latest release receives security fixes.
+
+## Security checklist
+
+What the code guarantees today, and what it deliberately does not protect against.
+
+### Cryptography
 
 - [x] AES-256-GCM (authenticated encryption)
 - [x] 256-bit key from `crypto.getRandomValues()`
@@ -10,7 +24,7 @@
 - [x] Key stored exclusively in URL fragment (`#`) — never sent to server
 - [x] Server receives only ciphertext — zero-knowledge
 
-## Server-Side Security
+### Server-Side Security
 
 - [x] No plaintext storage
 - [x] No encryption key storage
@@ -30,7 +44,7 @@
 - [x] Security headers: HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
 - [x] No outbound connections by default — the only two are opt-in (Turnstile verification, and the admin update check)
 
-## Version Disclosure
+### Version Disclosure
 
 Knowing which release a host runs turns a published advisory into a target list, so
 the version is treated as something to withhold from unauthenticated callers.
@@ -52,7 +66,7 @@ nothing short of not shipping JavaScript would. Obscurity is not the control her
 running a current version is. See
 [HARDENING.md → Version Disclosure](docs/HARDENING.md#version-disclosure).
 
-## Anti-Abuse
+### Anti-Abuse
 
 - [x] Cloudflare Turnstile integration (optional)
 - [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
@@ -71,12 +85,12 @@ running a current version is. See
 - [x] Chunked upload sessions protected by HMAC-SHA256 session token — returned at `POST /api/vault/upload/init`, required on all subsequent `/chunk`, `/complete`, and abort requests (`x-session-token` header); token is signed server-side with a per-process random key and verified in constant time
 - [x] Storage quota enforced atomically — `reservedBytes` counter tracks in-progress chunked upload sessions; quota check uses `totalStorageBytes + reservedBytes` to prevent TOCTOU races where concurrent uploads could collectively exceed `MAX_TOTAL_STORAGE`
 
-## Client-Side Defenses
+### Client-Side Defenses
 
 - [x] Filename sanitization — `sanitizeFilename()` strips path separators (`/`, `\`), ASCII control characters (0x00–0x1F, 0x7F), bidirectional text overrides (U+202A–202E, U+2066–2069), zero-width characters (ZWSP, ZWNJ, ZWJ, BOM, LRM, RLM), leading dots, and trailing whitespace; truncates to 255 characters; falls back to `"file"` when the result is empty
 - [x] Filename mismatch detection — on download, the decrypted filename from the encrypted payload is compared to the one encoded in the URL fragment; a visible warning is shown if they differ, indicating possible link tampering
 
-## Container Security
+### Container Security
 
 - [x] Non-root container user (UID 1001)
 - [x] Read-only root filesystem
@@ -87,7 +101,7 @@ running a current version is. See
 - [x] Resource limits (memory, CPU)
 - [x] Health checks
 
-## Network Security
+### Network Security
 
 - [x] Docker port published only on tunnel/private interface (`HOST_BIND_ADDRESS` in `.env`, default `127.0.0.1`)
 - [x] App inside container binds to `0.0.0.0` of its own network namespace — Docker port mapping is the enforcement boundary
@@ -101,7 +115,7 @@ running a current version is. See
 - [x] CORS restricted in production
 - [x] Reverse-proxy trust by address (`TRUST_PROXY`, default `loopback`) — `X-Forwarded-For` is honoured only when the connection comes from a listed proxy, so a direct client cannot spoof its IP
 
-## Admin Panel
+### Admin Panel
 
 - [x] HTTP Basic Auth (env-based, no DB)
 - [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct
@@ -114,7 +128,7 @@ running a current version is. See
 - [x] When enabled it sends no token, no cookies, and no version in the `User-Agent`; the response is cached and never reaches end users
 - [x] `UPDATE_CHECK_REPO` validated as `owner/repo` at startup — the value is interpolated into the api.github.com URL and must not be able to steer the request elsewhere
 
-## Supply Chain
+### Supply Chain
 
 - [x] Minimal dependencies
 - [x] 7-day dependency quarantine — Dependabot `cooldown: default-days: 7` on every ecosystem, so a freshly published version is never proposed, never auto-merged. Security advisories are exempt and land immediately.
@@ -124,7 +138,7 @@ running a current version is. See
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images
 
-## What This Does NOT Protect Against
+### What This Does NOT Protect Against
 
 | Threat vector | Why it is out of scope |
 |---|---|
