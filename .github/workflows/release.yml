@@ -156,6 +156,9 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+          # No artifact storage record: it needs the artifact-metadata:write
+          # permission and only feeds the org's Linked Artifacts page.
+          create-storage-record: false
 
   # ── Job 2: GitHub Release with auto-generated changelog ─────────────────────
   # Creates (or updates) the GitHub Release for this tag.
