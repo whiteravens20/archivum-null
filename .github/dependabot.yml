@@ -4,7 +4,8 @@
 #
 # Versioning strategy:
 #   - github-actions: bumps the version tag in `uses:` lines (e.g. @v3 → @v4)
-#   - npm: respects semver ranges in package.json; groups minor+patch into one PR
+#   - npm: respects semver ranges in package.json; groups minor+patch into one PR,
+#     and vitest with its plugins into a PR of their own for every kind of bump
 #
 # Supply-chain quarantine: every ecosystem below sets `cooldown: 7`, so Dependabot
 # will not even propose a version until it has been public for a week. This is the
@@ -61,10 +62,20 @@ updates:
     # Group all non-breaking updates into a single PR to reduce noise.
     # Security updates are always opened as separate PRs regardless.
     groups:
+      # @vitest/coverage-v8 pins vitest to its own exact version, so neither can be
+      # bumped alone. They always update together here; the non-breaking group
+      # excludes them so they cannot match both.
+      backend-vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
       backend-non-breaking:
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - "vitest"
+          - "@vitest/*"
 
   # ── Frontend npm ─────────────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -84,7 +95,15 @@ updates:
     cooldown:
       default-days: 7
     groups:
+      # Same exact-version pin as in the backend.
+      frontend-vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
       frontend-non-breaking:
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - "vitest"
+          - "@vitest/*"

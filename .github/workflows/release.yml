@@ -40,6 +40,9 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: read
+
 jobs:
   # ── Job 0: guard — ensure tag points to a commit on main ────────────────────
   # github.event.base_ref is unreliable for tags pushed via `git push origin <tag>`
