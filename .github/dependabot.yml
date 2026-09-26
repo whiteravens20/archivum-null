@@ -63,8 +63,8 @@ updates:
     # Security updates are always opened as separate PRs regardless.
     groups:
       # @vitest/coverage-v8 pins vitest to its own exact version, so neither can be
-      # bumped alone. This group comes first because Dependabot assigns each
-      # dependency to the first group that matches it.
+      # bumped alone. They always update together here; the non-breaking group
+      # excludes them so they cannot match both.
       backend-vitest:
         patterns:
           - "vitest"
@@ -73,6 +73,9 @@ updates:
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - "vitest"
+          - "@vitest/*"
 
   # ── Frontend npm ─────────────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -92,7 +95,7 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      # Same exact-version pin as in the backend; keep this group first.
+      # Same exact-version pin as in the backend.
       frontend-vitest:
         patterns:
           - "vitest"
@@ -101,3 +104,6 @@ updates:
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - "vitest"
+          - "@vitest/*"
