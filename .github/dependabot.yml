@@ -1,11 +1,15 @@
 # ── Dependabot configuration ──────────────────────────────────────────────────
-# Keeps GitHub Actions and npm dependencies up to date automatically.
-# Opens PRs weekly against `dev` — CI must pass before merging.
+# Keeps GitHub Actions, npm dependencies and the Docker base image up to date
+# automatically. Opens PRs against `dev`, weekly for npm and the base image and
+# monthly for actions — CI must pass before merging.
 #
 # Versioning strategy:
-#   - github-actions: bumps the version tag in `uses:` lines (e.g. @v3 → @v4)
+#   - github-actions: bumps the commit SHA and the version comment in `uses:`
+#     lines; minor and patch bumps come as one PR, a major on its own
 #   - npm: respects semver ranges in package.json; groups minor+patch into one PR,
 #     and vitest with its plugins into a PR of their own for every kind of bump
+#   - docker: bumps the version and the digest in `FROM` lines, or the digest
+#     alone when the same version is rebuilt; a new major of Node is not proposed
 #
 # Supply-chain quarantine: every ecosystem below sets `cooldown: 7`, so Dependabot
 # will not even propose a version until it has been public for a week. This is the
@@ -23,8 +27,7 @@ updates:
     directory: /
     target-branch: dev
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "08:00"
       timezone: UTC
     labels:
@@ -34,10 +37,15 @@ updates:
       prefix: "ci"
     # Let a newly published version settle for a week before proposing it. A tag
     # can be repointed or a release yanked in the hours after it lands, and none
-    # of these bumps is urgent — a real security advisory is exempt and still
-    # opens immediately.
+    # of these bumps is urgent. A pinned action gets no Dependabot alert, so the
+    # "Actions audit" job in security.yml watches the advisory database instead.
     cooldown:
       default-days: 7
+    groups:
+      actions-non-breaking:
+        update-types:
+          - minor
+          - patch
 
   # ── Backend npm ──────────────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -107,3 +115,28 @@ updates:
         exclude-patterns:
           - "vitest"
           - "@vitest/*"
+
+  # ── Docker base image ────────────────────────────────────────────────────────
+  # Both Dockerfiles pin node by version and digest. A new minor or patch moves
+  # the two together; a rebuild of the same version moves the digest alone.
+  - package-ecosystem: docker
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: UTC
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(docker)"
+    # Same week-long settling window, for a new version and for a rebuilt one.
+    cooldown:
+      default-days: 7
+    # A new major of Node is a change to the project, made by hand together with
+    # `node-version` in the workflows.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major

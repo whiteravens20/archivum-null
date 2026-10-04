@@ -1,8 +1,12 @@
 # ── Archivum Null Backend Dockerfile ──
 # Multi-stage build for minimal production image
+#
+# Every stage starts from the same base image, pinned by version and digest: the
+# digest is what gets pulled, the version says what it is. Dependabot moves both
+# (.github/dependabot.yml).
 
 # Stage 1: Build backend
-FROM node:24-alpine AS backend-build
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS backend-build
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
 RUN npm ci --ignore-scripts
@@ -10,7 +14,7 @@ COPY backend/ ./
 RUN npm run build
 
 # Stage 2: Build frontend
-FROM node:24-alpine AS frontend-build
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* frontend/.npmrc* ./
 RUN npm ci --ignore-scripts
@@ -18,7 +22,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 3: Production image
-FROM node:24-alpine AS production
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS production
 
 # Bust Docker layer cache for apk upgrade so CI always pulls the latest security patches.
 # In CI, CACHE_BUST_APK is set to github.run_id so the layer is never stale.

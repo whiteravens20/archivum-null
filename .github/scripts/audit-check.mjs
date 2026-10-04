@@ -12,7 +12,8 @@
 // Failure modes that are deliberately hard errors:
 //   - an expired allowlist entry (forces periodic re-review)
 //   - a malformed allowlist (never fail open)
-//   - npm audit itself not producing parseable JSON
+//   - npm audit itself not producing a report: no parseable JSON, or an error
+//     in place of the results (no lockfile, registry unreachable)
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -101,6 +102,16 @@ try {
   process.exit(2);
 }
 
+// npm answers in JSON even when the audit could not run at all: an `error`
+// object in place of the report (no lockfile, registry unreachable). That is
+// not a clean audit — there is no result to read "no advisories" from.
+if (report.error || !report.vulnerabilities || typeof report.vulnerabilities !== 'object') {
+  const { code, summary, detail } = report.error || {};
+  const why = [code, report.message, summary, detail].filter(Boolean).join(' — ');
+  console.error(`audit-check: npm audit did not run for ${dir}${why ? `: ${why}` : ''}`);
+  process.exit(2);
+}
+
 // ── Collect advisories ───────────────────────────────────────────────────────
 // Deduplicate by GHSA: npm repeats the same advisory once per affected path.
 const found = new Map();
@@ -128,7 +139,10 @@ const suppressed = [];
 const expired = [];
 
 for (const adv of found.values()) {
-  if (SEVERITY.indexOf(adv.severity) < threshold) continue;
+  // A severity this script does not know is held to the bar like any other:
+  // skipping it would let the gate fail open.
+  const level = SEVERITY.indexOf(adv.severity);
+  if (level !== -1 && level < threshold) continue;
   const entry = allow.get(adv.ghsa);
   if (!entry) {
     blocking.push(adv);
