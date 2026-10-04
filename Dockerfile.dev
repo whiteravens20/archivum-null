@@ -8,7 +8,7 @@ RUN apk upgrade --no-cache
 # Install backend dependencies
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 # Copy backend source (will be overridden by volume mount in dev)
 COPY backend/ ./
