@@ -5,15 +5,10 @@ FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c
 # Upgrade all Alpine packages to latest patched versions (catches zlib CVE-2026-22184 and any future OS-level CVEs)
 RUN apk upgrade --no-cache
 
-# Update npm to patch CVEs in npm's bundled dependencies:
-#   - minimatch + tar  (CVE-2026-27903, CVE-2026-27904, CVE-2026-29786, CVE-2026-31802)
-#   - undici WebSocket DoS (CVE-2026-12151) — npm@11.17.0 bundles undici@6.26.0 (patched; 11.13.0 shipped 6.25.0)
-RUN npm install -g npm@11.17.0
-
 # Install backend dependencies
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 # Copy backend source (will be overridden by volume mount in dev)
 COPY backend/ ./
