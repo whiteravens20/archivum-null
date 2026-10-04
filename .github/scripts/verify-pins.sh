@@ -23,6 +23,8 @@ uses='^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*["'\'']?([^[:space:]"'\''#@]
 declare -A tag_commit asked
 failed=0 count=0
 fail() { echo "::error file=$1,line=$2::$3"; failed=1; }
+# Three tries, so a network hiccup does not read as a broken pin.
+retry() { local try; for try in 1 2 3; do "$@" && return 0; sleep $((try * 3)); done; return 1; }
 
 # Read into an array first: git and gh inside the loop would otherwise eat the lines it is still to read.
 mapfile -t found_uses < <(grep -n -H -E '^[[:space:]]*(-[[:space:]]*)?uses:' "${files[@]}")
@@ -39,7 +41,8 @@ for entry in "${found_uses[@]}"; do
     [[ $version =~ ^[A-Za-z0-9._-]+$ && ! -v asked[$key] ]] || continue
     asked[$key]=1
     count=$((count + 1))
-    found=$(ACTION_REPO=$repo gh api "advisories?ecosystem=actions&per_page=100&affects=$repo%40${version#v}" \
+    export ACTION_REPO=$repo
+    found=$(retry gh api "advisories?ecosystem=actions&per_page=100&affects=$repo%40${version#v}" \
       --jq '.[] | "\(.ghsa_id) (\(.severity)), fixed in \([.vulnerabilities[] | select(.package.name | ascii_downcase == (env.ACTION_REPO | ascii_downcase)) | .first_patched_version // empty] | unique | join(", ") | if . == "" then "no version yet" else . end)"')
     while IFS= read -r advisory; do
       [[ -z $advisory ]] || fail "$file" "$line" "$repo $version has a known vulnerability: $advisory"
@@ -54,7 +57,7 @@ for entry in "${found_uses[@]}"; do
   else
     if [[ ! -v tag_commit[$key] ]]; then
       # An annotated tag lists twice: the tag object, then the commit it points at as `^{}`. The commit is the last line.
-      tag_commit[$key]=$(git ls-remote "https://github.com/$repo" "refs/tags/$version" "refs/tags/$version^{}" | tail -n 1 | cut -f1)
+      tag_commit[$key]=$(retry git ls-remote "https://github.com/$repo" "refs/tags/$version" "refs/tags/$version^{}" | tail -n 1 | cut -f1)
     fi
     if [[ -z ${tag_commit[$key]} ]]; then
       fail "$file" "$line" "$repo has no tag $version, so $action@${ref:0:12} cannot be checked"
