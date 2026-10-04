@@ -137,6 +137,7 @@ running a current version is. See
 - [x] `npm ci --ignore-scripts` in Docker build
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images
+- [x] Base image pinned by version and digest in both Dockerfiles; Dependabot updates it under the same 7-day quarantine
 
 ### What This Does NOT Protect Against
 
