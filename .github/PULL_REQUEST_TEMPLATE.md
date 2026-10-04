@@ -9,6 +9,7 @@ Please check the relevant options:
 - [ ] Documentation update
 - [ ] Performance improvement
 - [ ] Code refactoring
+- [ ] CI, build or tooling
 
 ## Related Issue
 Closes #(issue number)
@@ -29,7 +30,6 @@ Please review the [Contributing Guidelines](../CONTRIBUTING.md) before submittin
 - [ ] My changes generate no new warnings
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
-- [ ] I have updated the CHANGELOG.md (if applicable)
 
 ## ⚠️ Additional Security Checklist
 
