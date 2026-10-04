@@ -139,7 +139,10 @@ const suppressed = [];
 const expired = [];
 
 for (const adv of found.values()) {
-  if (SEVERITY.indexOf(adv.severity) < threshold) continue;
+  // A severity this script does not know is held to the bar like any other:
+  // skipping it would let the gate fail open.
+  const level = SEVERITY.indexOf(adv.severity);
+  if (level !== -1 && level < threshold) continue;
   const entry = allow.get(adv.ghsa);
   if (!entry) {
     blocking.push(adv);
