@@ -272,12 +272,12 @@ Archivum Null is a security-sensitive project. The following rules apply strictl
 
 ### AI-assisted code
 
-This project was partially built with AI assistance. The same standard applies to all contributions:
+Most of this project is written with AI coding tools, as the [README](README.md#how-the-code-is-written-and-checked) describes, and contributions may be too. The same standard applies to every contribution:
 
-- AI-generated code **must be reviewed line by line** before submission.
-- Security-critical files (`crypto/encrypt.ts`, `middleware/basicAuth.ts`, `storage/local.ts`, vault expiry logic) must be reviewed with extra care.
-- Do not submit AI output that you cannot explain and defend in a PR review.
-- AI slop (plausible-looking but logically broken code) is a known risk — tests are the primary guard against it.
+- Read AI-generated code line by line before you submit it.
+- Take extra care with the security-critical files: `crypto/encrypt.ts`, `middleware/basicAuth.ts`, `storage/local.ts` and the vault expiry logic.
+- Do not submit code that you cannot explain and defend in review.
+- Code that looks right and is subtly wrong is the usual failure. Tests are the main guard against it.
 
 ### Pull request security checklist
 
