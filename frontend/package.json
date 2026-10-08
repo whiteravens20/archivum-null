@@ -51,7 +51,6 @@
     "@vitejs/plugin-basic-ssl": {
       "vite": "$vite"
     },
-    "minimatch": "^10.2.4",
     "postcss-selector-parser": "^7.1.6"
   }
 }
