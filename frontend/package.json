@@ -48,9 +48,6 @@
     "vitest": "5.0.2"
   },
   "overrides": {
-    "@vitejs/plugin-basic-ssl": {
-      "vite": "$vite"
-    },
     "postcss-selector-parser": "^7.1.6"
   }
 }
