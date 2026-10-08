@@ -440,21 +440,6 @@ Before exposing this service publicly:
 - [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
 
-## Development with AI Assistance
-
-> [!NOTE]
-> **This project was developed with AI assistance.**
->
-> AI-generated code can contain subtle bugs, insecure patterns, or plausible-looking nonsense ("AI slop"). Here is what we do to keep the bar high — and what you should check when auditing:
->
-> - **Tests are mandatory.** Every module has unit tests. `npm test` must pass with 0 failures across backend and frontend before any commit lands.
-> - **ESLint enforces standards.** Both projects run `eslint --max-warnings 0`. No warnings are silently ignored.
-> - **Architecture decisions are human-driven.** Crypto primitives (AES-256-GCM, key in URL fragment, no plaintext on server) were specified explicitly — not delegated to AI defaults.
-> - **Security-critical code is read line by line.** `crypto/encrypt.ts`, `basicAuth.ts`, `storage/local.ts` (path traversal guard), and vault expiry logic were reviewed manually after generation.
-> - **AI does not write the threat model.** See the *Threat Model Limitations* section above — those are our honest assessments, not AI boilerplate.
->
-> If you find a slop pattern, a logical bug, or a security issue, please open an issue or see [SECURITY.md](SECURITY.md).
-
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for coding guidelines, testing requirements, and the secure contributing checklist before opening a pull request.
@@ -462,6 +447,31 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for co
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
+## How the code is written and checked
+
+Archivum Null is built by one maintainer using AI coding tools. The tools write most of the code, tests and documentation; the maintainer decides what gets built and is responsible for everything that is merged. There is no second human reviewer, so the project relies on checks that anyone can inspect.
+
+**What a change goes through**
+
+- Every push and pull request runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend, then builds the Docker image. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
+- CodeQL, `npm audit` and Trivy scans of the repository and of the image run on every push and pull request, and again every week ([codeql.yml](.github/workflows/codeql.yml), [security.yml](.github/workflows/security.yml)).
+- Pull requests other than automated dependency updates also get an automated review by an AI reviewer that looks for security, correctness and supply-chain problems. It is an extra check, not one of the gates.
+- Commits are signed, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/whiteravens20/archivum-null) results are public.
+
+**What the maintainer decided and read**
+
+- The security design was specified by the maintainer rather than left to a tool's defaults: AES-256-GCM in the browser, the key only in the URL fragment, no plaintext on the server.
+- The [threat model](#threat-model--what-we-protect-against) and its [limitations](#threat-model-limitations) are the maintainer's own assessment.
+- These modules are read line by line by the maintainer whenever they change: `frontend/src/crypto/encrypt.ts`, `backend/src/middleware/basicAuth.ts`, `backend/src/storage/local.ts` (the path traversal guard) and the vault expiry logic in `backend/src/vault/manager.ts`.
+
+**Before a release**
+
+- A release is cut only from `main`, and nothing reaches `main` without passing every check above. That rule binds the maintainer too.
+- The release candidate is built from a clean export and run the way the Compose file runs it. In a real browser, files are encrypted and uploaded, opened from their links in a fresh session and decrypted, and everything the browser sent is searched for the key. What was checked is written into the release pull request ([#196](https://github.com/whiteravens20/archivum-null/pull/196) for v3.1.1).
+- Each release image and tarball carries a Sigstore build provenance that `gh attestation verify` checks.
+
+If something looks wrong, open an issue. For a vulnerability, follow [SECURITY.md](SECURITY.md).
 
 ## License
 
