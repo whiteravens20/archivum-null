@@ -11,7 +11,7 @@ import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
-import { applyBranding, parseBranding } from './static/branding.js';
+import { applyBranding, brandingWarnings, parseBranding } from './static/branding.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -39,7 +39,11 @@ export function serializeRequest(request: FastifyRequest) {
  */
 export async function buildApp(): Promise<FastifyInstance> {
   validateConfig();
-  const branding = parseBranding({ name: config.BRAND_NAME, tagline: config.BRAND_TAGLINE });
+  const branding = parseBranding({
+    name: config.BRAND_NAME,
+    tagline: config.BRAND_TAGLINE,
+    accentColor: config.BRAND_ACCENT_COLOR,
+  });
 
   const app = Fastify({
     logger: {
@@ -135,6 +139,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Branding goes on top of the cloak's output, once, here — the request path
     // below only ever sends a finished string.
     const indexHtml = applyBranding(assetCloak.indexHtml, branding);
+    for (const warning of brandingWarnings(branding)) app.log.warn(warning);
 
     const sendIndex = (reply: FastifyReply) =>
       reply

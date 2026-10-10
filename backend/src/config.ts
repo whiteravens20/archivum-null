@@ -54,6 +54,8 @@ const envSchema = {
   // static/branding.ts; see docs/BRANDING.md.
   BRAND_NAME: process.env.BRAND_NAME?.trim() || 'Archivum Null',
   BRAND_TAGLINE: process.env.BRAND_TAGLINE?.trim() || 'Zero trust file relay',
+  // #RRGGBB. Empty keeps the accent built into the stylesheet.
+  BRAND_ACCENT_COLOR: process.env.BRAND_ACCENT_COLOR?.trim() || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
   BIND_ADDRESS: process.env.BIND_ADDRESS || '0.0.0.0',
   PORT: Number(process.env.PORT || 3000),

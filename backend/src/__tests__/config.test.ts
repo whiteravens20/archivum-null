@@ -92,6 +92,7 @@ describe('config', () => {
     const { config } = await import('../config.js');
     expect(config.BRAND_NAME).toBe('Archivum Null');
     expect(config.BRAND_TAGLINE).toBe('Zero trust file relay');
+    expect(config.BRAND_ACCENT_COLOR).toBe('');
   });
 
   it('should read the brand name and tagline from env, trimmed', async () => {

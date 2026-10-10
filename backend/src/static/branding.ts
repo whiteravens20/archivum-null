@@ -10,12 +10,15 @@
 export interface Branding {
   name: string;
   tagline: string;
+  /** `#rrggbb`, or null to keep the accent built into the stylesheet. */
+  accentColor: string | null;
 }
 
 /** The values as they come from the environment, not yet checked. */
 export interface BrandingInput {
   name: string;
   tagline: string;
+  accentColor: string;
 }
 
 const NAME_MAX_LENGTH = 64;
@@ -41,7 +44,59 @@ export function parseBranding(input: BrandingInput): Branding {
   if (!isDisplayText(input.tagline, TAGLINE_MAX_LENGTH)) {
     throw new Error(`BRAND_TAGLINE must be 1 to ${TAGLINE_MAX_LENGTH} characters with no control characters`);
   }
-  return { name: input.name, tagline: input.tagline };
+  // The colour is written into a <style> element, so nothing but six hex digits
+  // gets through: no names, no rgb(), no url().
+  if (input.accentColor !== '' && !/^#[0-9a-f]{6}$/i.test(input.accentColor)) {
+    throw new Error('BRAND_ACCENT_COLOR must be a six-digit hex colour such as #60A5FA');
+  }
+  return {
+    name: input.name,
+    tagline: input.tagline,
+    accentColor: input.accentColor === '' ? null : input.accentColor.toLowerCase(),
+  };
+}
+
+/** Page background of the dark theme — `--color-vault-bg` in frontend/src/index.css. */
+const DARK_BACKGROUND = '#0b0f19';
+/** The two colours a label on an accent fill can take. */
+const INK = '#0b0f19';
+const WHITE = '#ffffff';
+
+function linear(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(hex: string): number {
+  const rgb = parseInt(hex.slice(1), 16);
+  return 0.2126 * linear(rgb >> 16) + 0.7152 * linear((rgb >> 8) & 0xff) + 0.0722 * linear(rgb & 0xff);
+}
+
+/** WCAG 2 contrast ratio of two `#rrggbb` colours, from 1 (same) to 21 (black on white). */
+export function contrastRatio(a: string, b: string): number {
+  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * The colour of text on an accent-coloured button: the dark ink or white, whichever
+ * reads better. Without it a dark accent would get dark labels and a light one white.
+ */
+export function onAccentColor(accent: string): string {
+  return contrastRatio(accent, INK) >= contrastRatio(accent, WHITE) ? INK : WHITE;
+}
+
+/** Below this the accent, which is also the colour of links, is hard to read as text. */
+const MIN_TEXT_CONTRAST = 3;
+
+/** Choices that work but will look wrong — reported at startup, never fatal. */
+export function brandingWarnings(branding: Branding): string[] {
+  if (branding.accentColor === null) return [];
+  const contrast = contrastRatio(branding.accentColor, DARK_BACKGROUND);
+  if (contrast >= MIN_TEXT_CONTRAST) return [];
+  return [
+    `BRAND_ACCENT_COLOR ${branding.accentColor} has a contrast of ${contrast.toFixed(1)}:1 against the dark page background; links and highlighted text will be hard to read (aim for 3:1 or more).`,
+  ];
 }
 
 export function escapeHtml(value: string): string {
@@ -78,6 +133,12 @@ export function applyBranding(indexHtml: string, branding: Branding): string {
     `<meta name="description" content="${escapeHtml(describePage(branding))}" />`,
     `<meta name="brand-tagline" content="${escapeHtml(branding.tagline)}" />`,
   ];
+  if (branding.accentColor !== null) {
+    // Unlayered, so it wins over the defaults the stylesheet keeps in @layer theme.
+    tags.push(
+      `<style>:root{--color-vault-accent:${branding.accentColor};--color-vault-on-accent:${onAccentColor(branding.accentColor)}}</style>`
+    );
+  }
   const block = tags.map((tag) => `    ${tag}\n`).join('');
 
   return (
