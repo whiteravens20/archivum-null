@@ -51,6 +51,9 @@ services:
     volumes:
       - vault-data:/data/vaults
       - ./TOS.md:/app/TOS.md:ro
+      # Your own logo and icons (optional). Put the files in ./branding and uncomment;
+      # docs/BRANDING.md lists the file names the server looks for.
+      # - ./branding:/app/branding:ro
 
     # Network: expose only on the tunnel/private interface IP.
     # HOST_BIND_ADDRESS (from .env) controls which HOST interface Docker publishes

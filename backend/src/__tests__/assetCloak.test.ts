@@ -12,31 +12,14 @@
  * `etag` back to its default would leave every unit test green.
  */
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 import { buildAssetCloak } from '../static/assetCloak.js';
-
-const HASHED_JS = 'index-Qld3srqp.js';
-const HASHED_CSS = 'index-Da10O7nR.css';
-
-function writeDist(root: string, indexHtml: string): void {
-  fs.mkdirSync(path.join(root, 'assets'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'index.html'), indexHtml);
-  fs.writeFileSync(path.join(root, 'assets', HASHED_JS), 'console.log(1);');
-  fs.writeFileSync(path.join(root, 'assets', HASHED_CSS), 'body{color:red}');
-}
-
-const INDEX_HTML = [
-  '<!DOCTYPE html><html><head>',
-  `<script type="module" crossorigin src="/assets/${HASHED_JS}"></script>`,
-  `<link rel="stylesheet" crossorigin href="/assets/${HASHED_CSS}">`,
-  '</head><body><div id="root"></div></body></html>',
-].join('\n');
+import { HASHED_JS, HASHED_CSS, INDEX_HTML, writeDist } from './standInBundle.js';
 
 describe('buildAssetCloak', () => {
   let distRoot: string;
@@ -186,31 +169,10 @@ describe('buildAssetCloak', () => {
 });
 
 describe('buildApp — static serving does not disclose the running version', () => {
-  // buildApp resolves the bundle at <backend>/../frontend/dist. The backend test job
-  // never builds the frontend, so provision a stand-in when one is not already there
-  // and remove exactly what we created.
-  const distRoot = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    '..',
-    'frontend',
-    'dist'
-  );
-  let provisioned = false;
+  // buildApp resolves the bundle at <backend>/../frontend/dist; standInBundle.ts puts
+  // one there for the whole run when the frontend has not been built.
   let app: FastifyInstance;
   let storageDir: string;
-
-  beforeAll(() => {
-    if (!fs.existsSync(path.join(distRoot, 'index.html'))) {
-      writeDist(distRoot, INDEX_HTML);
-      provisioned = true;
-    }
-  });
-
-  afterAll(() => {
-    if (provisioned) fs.rmSync(distRoot, { recursive: true, force: true });
-  });
 
   beforeEach(async () => {
     vi.resetModules();

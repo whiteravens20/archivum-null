@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getBranding } from '../branding.ts';
 
 interface TurnstileProps {
   siteKey: string;
@@ -61,7 +62,7 @@ export default function Turnstile({ siteKey, onVerify, onError, onExpire }: Turn
       callback: handleVerify,
       'error-callback': onError,
       'expired-callback': onExpire,
-      theme: 'dark',
+      theme: getBranding().theme,
       size: 'normal',
     });
 

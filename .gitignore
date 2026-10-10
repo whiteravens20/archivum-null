@@ -4,6 +4,7 @@ build/
 .env
 *.log
 data/
+/branding/
 .DS_Store
 .vscode/
 *.swp
@@ -11,6 +12,3 @@ data/
 coverage/
 .turbo/
 .github/CICD.md
-.claude/settings.local.json
-.claude/*.local.*
-.claude/

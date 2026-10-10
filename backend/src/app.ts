@@ -11,6 +11,14 @@ import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
+import {
+  applyBranding,
+  brandingWarnings,
+  buildManifest,
+  MANIFEST_PATH,
+  parseBranding,
+} from './static/branding.js';
+import { loadBrandingAssets } from './static/brandingAssets.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -38,6 +46,12 @@ export function serializeRequest(request: FastifyRequest) {
  */
 export async function buildApp(): Promise<FastifyInstance> {
   validateConfig();
+  const branding = parseBranding({
+    name: config.BRAND_NAME,
+    tagline: config.BRAND_TAGLINE,
+    accentColor: config.BRAND_ACCENT_COLOR,
+    theme: config.BRAND_THEME,
+  });
 
   const app = Fastify({
     logger: {
@@ -130,11 +144,23 @@ export async function buildApp(): Promise<FastifyInstance> {
   const assetCloak = fs.existsSync(frontendDist) ? buildAssetCloak(frontendDist) : null;
 
   if (assetCloak) {
+    // Branding goes on top of the cloak's output, once, here — the request path
+    // below only ever sends a finished string.
+    const brandingAssets = loadBrandingAssets(
+      config.BRANDING_PATH || path.join(__dirname, '..', '..', 'branding'),
+      (warning) => app.log.warn(warning)
+    );
+    const indexHtml = applyBranding(assetCloak.indexHtml, branding, brandingAssets);
+    for (const warning of brandingWarnings(branding)) app.log.warn(warning);
+    if (brandingAssets.files.size > 0) {
+      app.log.info({ files: [...brandingAssets.files.keys()] }, 'Serving the operator\'s branding files');
+    }
+
     const sendIndex = (reply: FastifyReply) =>
       reply
         .header('Cache-Control', 'no-store')
         .type('text/html; charset=utf-8')
-        .send(assetCloak.indexHtml);
+        .send(indexHtml);
 
     // Cloaked assets. The name changes on every restart, so the bytes behind a given
     // URL never do — safe to cache immutably for as long as the client likes.
@@ -149,6 +175,27 @@ export async function buildApp(): Promise<FastifyInstance> {
       }
       return reply.sendFile(asset.relativePath, frontendDist);
     });
+
+    // The operator's own images, answered from memory. These are exact routes, which
+    // the router prefers over the static plugin's wildcard, so each one takes the
+    // place of the built-in file at the same URL. Cached like any unhashed public file.
+    for (const [url, asset] of brandingAssets.files) {
+      app.get(url, async (_request, reply) =>
+        reply
+          .header('Cache-Control', 'public, max-age=0, must-revalidate')
+          .type(asset.contentType)
+          .send(asset.body)
+      );
+    }
+
+    // Generated, because it carries the configured name. Built once: config is frozen.
+    const manifest = buildManifest(branding);
+    app.get(MANIFEST_PATH, async (_request, reply) =>
+      reply
+        .header('Cache-Control', 'public, max-age=0, must-revalidate')
+        .type('application/manifest+json; charset=utf-8')
+        .send(manifest)
+    );
 
     await app.register(fastifyStatic, {
       root: frontendDist,

@@ -152,29 +152,29 @@ export default function Admin() {
   if (!authenticated) {
     return (
       <div className="max-w-sm mx-auto px-4 py-20">
-        <h1 className="text-xl font-bold text-center mb-6 text-gray-100">Admin Panel</h1>
+        <h1 className="text-xl font-bold text-center mb-6 text-vault-heading">Admin Panel</h1>
         <form onSubmit={handleLogin} className="space-y-4">
           <input
             type="text"
             placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full bg-vault-secondary border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-vault-accent"
+            className="w-full bg-vault-secondary border border-vault-line rounded px-3 py-2 text-sm text-vault-text focus:outline-none focus:border-vault-accent-ink"
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-vault-secondary border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-vault-accent"
+            className="w-full bg-vault-secondary border border-vault-line rounded px-3 py-2 text-sm text-vault-text focus:outline-none focus:border-vault-accent-ink"
           />
           <button
             type="submit"
-            className="w-full py-2 bg-vault-accent text-vault-bg rounded font-medium hover:bg-vault-accent/90"
+            className="w-full py-2 bg-vault-accent text-vault-on-accent rounded font-medium hover:bg-vault-accent/90"
           >
             Login
           </button>
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && <p className="text-vault-danger text-sm text-center">{error}</p>}
         </form>
       </div>
     );
@@ -184,29 +184,29 @@ export default function Admin() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-xl font-bold text-gray-100">Admin Panel</h1>
-          <p className="text-xs text-gray-500">Operational monitoring</p>
+          <h1 className="text-xl font-bold text-vault-heading">Admin Panel</h1>
+          <p className="text-xs text-vault-subtle">Operational monitoring</p>
         </div>
-        <a href="/" className="text-sm text-vault-accent hover:underline">← Home</a>
+        <a href="/" className="text-sm text-vault-accent-ink hover:underline">← Home</a>
       </div>
 
       {loading ? (
-        <p className="text-gray-500 animate-pulse">Loading...</p>
+        <p className="text-vault-subtle animate-pulse">Loading...</p>
       ) : error ? (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400">
+        <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-4 text-vault-danger">
           {error}
         </div>
       ) : (
         <>
           {/* Update notice — only when a newer release actually exists */}
           {version?.updateAvailable && version.latest && (
-            <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+            <div className="mb-6 rounded-lg border border-vault-warning-fill/30 bg-vault-warning-fill/10 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-yellow-300">
+                  <p className="text-sm font-medium text-vault-warning-strong">
                     Update available — {version.latest}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-vault-muted mt-0.5">
                     This instance runs {version.current}
                     {version.publishedAt &&
                       ` · released ${new Date(version.publishedAt).toLocaleDateString()}`}
@@ -218,7 +218,7 @@ export default function Admin() {
                       href={version.compareUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-medium text-yellow-300 hover:underline"
+                      className="text-xs font-medium text-vault-warning-strong hover:underline"
                     >
                       View changes →
                     </a>
@@ -228,7 +228,7 @@ export default function Admin() {
                       href={version.releaseUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-gray-400 hover:text-gray-200 hover:underline"
+                      className="text-xs text-vault-muted hover:text-vault-text hover:underline"
                     >
                       Release notes
                     </a>
@@ -242,64 +242,64 @@ export default function Admin() {
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Active Vaults</p>
-                <p className="text-lg font-bold text-gray-200">{stats.activeVaults}</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">Active Vaults</p>
+                <p className="text-lg font-bold text-vault-text">{stats.activeVaults}</p>
               </div>
 
               {/* Storage card — shows quota bar when limit is set */}
               <div className="bg-vault-secondary/50 rounded-lg p-4 sm:col-span-1">
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Storage</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">Storage</p>
                 {stats.storageQuotaBytes > 0 ? (() => {
                   const pct = Math.min(100, (stats.totalStorageBytes / stats.storageQuotaBytes) * 100);
                   const isNearFull = pct >= 90;
                   const isFull = pct >= 100;
                   return (
                     <>
-                      <p className={`text-lg font-bold ${isFull ? 'text-red-400' : isNearFull ? 'text-yellow-400' : 'text-gray-200'}`}>
+                      <p className={`text-lg font-bold ${isFull ? 'text-vault-danger' : isNearFull ? 'text-vault-warning' : 'text-vault-text'}`}>
                         {formatBytes(stats.totalStorageBytes)}
-                        <span className="text-xs font-normal text-gray-500 ml-1">/ {formatBytes(stats.storageQuotaBytes)}</span>
+                        <span className="text-xs font-normal text-vault-subtle ml-1">/ {formatBytes(stats.storageQuotaBytes)}</span>
                       </p>
                       <div className="mt-2 h-1.5 rounded-full bg-vault-secondary overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
-                            isFull ? 'bg-red-500' : isNearFull ? 'bg-yellow-400' : 'bg-vault-accent'
+                            isFull ? 'bg-vault-danger-fill' : isNearFull ? 'bg-vault-warning-fill' : 'bg-vault-accent'
                           }`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-gray-500 mt-1">{pct.toFixed(1)}% used</p>
+                      <p className="text-[10px] text-vault-subtle mt-1">{pct.toFixed(1)}% used</p>
                     </>
                   );
                 })() : (
-                  <p className="text-lg font-bold text-gray-200">
+                  <p className="text-lg font-bold text-vault-text">
                     {formatBytes(stats.totalStorageBytes)}
-                    <span className="text-xs font-normal text-gray-500 ml-1">/ ∞</span>
+                    <span className="text-xs font-normal text-vault-subtle ml-1">/ ∞</span>
                   </p>
                 )}
               </div>
 
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Version</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">Version</p>
                 <p
                   className={`text-lg font-bold ${
-                    version?.updateAvailable ? 'text-yellow-400' : 'text-gray-200'
+                    version?.updateAvailable ? 'text-vault-warning' : 'text-vault-text'
                   }`}
                 >
                   {version?.current ?? '—'}
                 </p>
-                <p className="text-[10px] text-gray-500 mt-1">
+                <p className="text-[10px] text-vault-subtle mt-1">
                   {version ? `● Online · up ${formatUptime(version.uptime)}` : '● Online'}
                 </p>
                 {version && !version.enabled && (
-                  <p className="text-[10px] text-gray-600 mt-1">
+                  <p className="text-[10px] text-vault-faint mt-1">
                     Update check off — set <code>UPDATE_CHECK_ENABLED=true</code>
                   </p>
                 )}
                 {version?.enabled && version.updateAvailable === false && (
-                  <p className="text-[10px] text-gray-500 mt-1">Up to date</p>
+                  <p className="text-[10px] text-vault-subtle mt-1">Up to date</p>
                 )}
                 {version?.enabled && version.error && (
-                  <p className="text-[10px] text-gray-500 mt-1">{version.error}</p>
+                  <p className="text-[10px] text-vault-subtle mt-1">{version.error}</p>
                 )}
               </div>
             </div>
@@ -307,22 +307,22 @@ export default function Admin() {
 
           {/* Vault list */}
           <div className="bg-vault-secondary/30 rounded-lg overflow-hidden">
-            <div className="px-4 py-3 border-b border-vault-secondary text-xs text-gray-500 uppercase tracking-wider">
+            <div className="px-4 py-3 border-b border-vault-secondary text-xs text-vault-subtle uppercase tracking-wider">
               Active Vaults ({vaults.length})
             </div>
             {vaults.length === 0 ? (
-              <p className="p-6 text-sm text-gray-500 text-center">No active vaults</p>
+              <p className="p-6 text-sm text-vault-subtle text-center">No active vaults</p>
             ) : (
               <div className="divide-y divide-vault-secondary/50">
                 {vaults.map((v) => (
                   <div key={v.vaultId} className="px-4 py-3 flex items-center justify-between text-sm">
                     <div className="min-w-0 flex-1">
                       <div className="flex gap-3 items-baseline">
-                        <span className="text-vault-accent font-mono text-xs truncate max-w-[200px]">
+                        <span className="text-vault-accent-ink font-mono text-xs truncate max-w-[200px]">
                           {v.vaultId}
                         </span>
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
+                      <div className="text-xs text-vault-subtle mt-0.5">
                         {formatBytes(v.ciphertextSize)} · {v.remainingDownloads}/{v.maxDownloads} DL ·
                         Expires {new Date(v.expiresAt).toLocaleString()}
                       </div>
@@ -330,16 +330,16 @@ export default function Admin() {
                     <div className="ml-4 flex items-center gap-2 whitespace-nowrap">
                       {pendingDelete === v.vaultId ? (
                         <>
-                          <span className="text-xs text-gray-400">Confirm?</span>
+                          <span className="text-xs text-vault-muted">Confirm?</span>
                           <button
                             onClick={() => handleDeleteConfirmed(v.vaultId)}
-                            className="text-xs text-red-400 hover:text-red-300 font-medium"
+                            className="text-xs text-vault-danger hover:text-vault-danger-strong font-medium"
                           >
                             Yes
                           </button>
                           <button
                             onClick={() => setPendingDelete(null)}
-                            className="text-xs text-gray-500 hover:text-gray-300"
+                            className="text-xs text-vault-subtle hover:text-vault-text-soft"
                           >
                             Cancel
                           </button>
@@ -347,7 +347,7 @@ export default function Admin() {
                       ) : (
                         <button
                           onClick={() => setPendingDelete(v.vaultId)}
-                          className="text-xs text-red-400 hover:text-red-300"
+                          className="text-xs text-vault-danger hover:text-vault-danger-strong"
                         >
                           Delete
                         </button>

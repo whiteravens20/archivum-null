@@ -3,10 +3,13 @@ import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
 import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes, sanitizeFilename } from '../crypto/encrypt.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
+import Logo from '../components/Logo.tsx';
+import { getBranding } from '../branding.ts';
 
 type Stage = 'loading' | 'ready' | 'downloading' | 'decrypting' | 'done' | 'error';
 
 export default function Vault() {
+  const { name } = getBranding();
   const { vaultId } = useParams<{ vaultId: string }>();
   const [info, setInfo] = useState<VaultInfo | null>(null);
   const [stage, setStage] = useState<Stage>(() => (vaultId ? 'loading' : 'error'));
@@ -131,30 +134,30 @@ export default function Vault() {
     <div className="max-w-xl mx-auto px-4 py-12 sm:py-20">
       <div className="text-center mb-8">
         <a href="/" className="inline-block">
-          <img src="/logo-symbol.webp" alt="" className="w-12 h-12 mx-auto mb-2" />
-          <h1 className="text-2xl font-bold tracking-[0.05em] text-gray-100 mb-1 uppercase">
-            Archivum Null
+          <Logo className="w-12 h-12 mx-auto mb-2" />
+          <h1 className="text-2xl font-bold tracking-[0.05em] text-vault-heading mb-1 uppercase">
+            {name}
           </h1>
         </a>
-        <p className="text-gray-500 text-xs tracking-[0.15em] uppercase font-mono">
+        <p className="text-vault-subtle text-xs tracking-[0.15em] uppercase font-mono">
           Vault retrieval
         </p>
       </div>
 
       {stage === 'loading' && (
         <div className="text-center py-12">
-          <div className="text-gray-500 animate-pulse">Loading vault...</div>
+          <div className="text-vault-subtle animate-pulse">Loading vault...</div>
         </div>
       )}
 
       {stage === 'error' && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center">
+        <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-6 text-center">
           <div className="text-2xl mb-3 opacity-40">⊘</div>
-          <p className="text-red-400 font-medium mb-1">Vault unavailable</p>
-          <p className="text-xs text-gray-500">{error}</p>
+          <p className="text-vault-danger font-medium mb-1">Vault unavailable</p>
+          <p className="text-xs text-vault-subtle">{error}</p>
           <a
             href="/"
-            className="inline-block mt-4 text-sm text-vault-accent hover:underline"
+            className="inline-block mt-4 text-sm text-vault-accent-ink hover:underline"
           >
             ← Create a new vault
           </a>
@@ -167,30 +170,30 @@ export default function Vault() {
           <div className="bg-vault-secondary/50 rounded-lg p-6 space-y-4">
             {fragmentFilename && (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 uppercase tracking-wider">File</span>
-                <span className="text-sm text-gray-200 truncate ml-4 max-w-[60%] text-right font-mono">
+                <span className="text-xs text-vault-subtle uppercase tracking-wider">File</span>
+                <span className="text-sm text-vault-text truncate ml-4 max-w-[60%] text-right font-mono">
                   {fragmentFilename}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">Size</span>
-              <span className="text-sm text-gray-300">{formatBytes(info.ciphertextSize)}</span>
+              <span className="text-xs text-vault-subtle uppercase tracking-wider">Size</span>
+              <span className="text-sm text-vault-text-soft">{formatBytes(info.ciphertextSize)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">Downloads left</span>
-              <span className="text-sm text-gray-300">{info.remainingDownloads}</span>
+              <span className="text-xs text-vault-subtle uppercase tracking-wider">Downloads left</span>
+              <span className="text-sm text-vault-text-soft">{info.remainingDownloads}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">Expires in</span>
-              <span className="text-sm text-gray-300">{formatDuration(timeRemaining)}</span>
+              <span className="text-xs text-vault-subtle uppercase tracking-wider">Expires in</span>
+              <span className="text-sm text-vault-text-soft">{formatDuration(timeRemaining)}</span>
             </div>
           </div>
 
           {/* Sender trust warning */}
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs text-yellow-400/90 space-y-1">
+          <div className="bg-vault-warning-fill/10 border border-vault-warning-fill/20 rounded-lg p-3 text-xs text-vault-warning/90 space-y-1">
             <p className="font-medium">⚠ Security notice</p>
-            <ul className="list-disc list-inside space-y-0.5 text-yellow-400/70">
+            <ul className="list-disc list-inside space-y-0.5 text-vault-warning-soft">
               <li>The file name and type are set by the sender and cannot be verified by the server.</li>
               <li>Do not open files from untrusted senders. Scan downloaded files with antivirus software before opening.</li>
               <li>Be cautious of misleading file extensions (e.g. <span className="font-mono">.pdf.exe</span>).</li>
@@ -199,7 +202,7 @@ export default function Vault() {
 
           {/* Filename mismatch warning */}
           {decryptedFilename && fragmentFilename && decryptedFilename !== fragmentFilename && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-xs text-red-400 space-y-1">
+            <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-xs text-vault-danger space-y-1">
               <p className="font-medium">⚠ Filename mismatch detected</p>
               <p>
                 The link indicated <span className="font-mono">&quot;{fragmentFilename}&quot;</span> but
@@ -211,7 +214,7 @@ export default function Vault() {
 
           {/* Key warning */}
           {!keyFragment && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+            <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
               ⚠ No decryption key found in URL. The key must be in the URL fragment (#).
               Decryption will fail.
             </div>
@@ -227,7 +230,7 @@ export default function Vault() {
 
           {/* Done */}
           {stage === 'done' && (
-            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm text-green-400 text-center">
+            <div className="bg-vault-success-fill/10 border border-vault-success-fill/20 rounded-lg p-3 text-sm text-vault-success text-center">
               ✓ File decrypted and downloaded successfully
             </div>
           )}
@@ -236,7 +239,7 @@ export default function Vault() {
           <button
             onClick={handleDownload}
             disabled={stage !== 'ready' && stage !== 'done'}
-            className="w-full py-3 bg-vault-accent text-vault-bg rounded-lg font-medium
+            className="w-full py-3 bg-vault-accent text-vault-on-accent rounded-lg font-medium
                        hover:bg-vault-accent/90 transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -251,7 +254,7 @@ export default function Vault() {
               : 'Processing...'}
           </button>
 
-          <p className="text-xs text-gray-500 text-center">
+          <p className="text-xs text-vault-subtle text-center">
             Decryption happens entirely in your browser. The server never sees the key.
           </p>
         </div>

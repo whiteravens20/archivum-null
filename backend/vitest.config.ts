@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/__tests__/*.test.ts'],
+    globalSetup: ['src/__tests__/standInBundle.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

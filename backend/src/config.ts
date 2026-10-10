@@ -50,6 +50,17 @@ const envSchema = {
   UPDATE_CHECK_REPO: process.env.UPDATE_CHECK_REPO || 'whiteravens20/archivum-null',
   // Seconds between checks (default 6 h). Failures are retried sooner.
   UPDATE_CHECK_INTERVAL: Number(process.env.UPDATE_CHECK_INTERVAL || 21600),
+  // Branding — cosmetic. Checked and written into index.html at startup by
+  // static/branding.ts; see docs/BRANDING.md.
+  BRAND_NAME: process.env.BRAND_NAME?.trim() || 'Archivum Null',
+  BRAND_TAGLINE: process.env.BRAND_TAGLINE?.trim() || 'Zero trust file relay',
+  // #RRGGBB. Empty keeps the accent built into the stylesheet.
+  BRAND_ACCENT_COLOR: process.env.BRAND_ACCENT_COLOR?.trim() || '',
+  // dark | light | auto. `auto` follows the visitor's system setting.
+  BRAND_THEME: process.env.BRAND_THEME?.trim() || 'dark',
+  // Directory with the operator's own logo and icons. Empty means `branding` in the
+  // install directory (/app/branding in the image). Only known file names are read.
+  BRANDING_PATH: process.env.BRANDING_PATH || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
   BIND_ADDRESS: process.env.BIND_ADDRESS || '0.0.0.0',
   PORT: Number(process.env.PORT || 3000),

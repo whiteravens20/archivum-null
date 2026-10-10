@@ -67,6 +67,18 @@ IPv4 clients are counted per address, IPv6 clients per /64 — the same applies 
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**, see above) |
 
+### Branding
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRAND_NAME` | `Archivum Null` | Name shown in the browser tab, the page headings, the footer and the web app manifest. 1 to 64 characters. |
+| `BRAND_TAGLINE` | `Zero trust file relay` | Line under the name on the home page and at the end of the footer. 1 to 120 characters. |
+| `BRAND_ACCENT_COLOR` | `#60A5FA` | Accent colour as six hex digits (`#RRGGBB`). The label colour of buttons is chosen to match. |
+| `BRAND_THEME` | `dark` | `dark`, `light`, or `auto` to follow the visitor's system colour scheme. |
+| `BRANDING_PATH` | `branding` in the install directory (`/app/branding` in the image) | Directory holding your own logo and icons. Only a fixed list of file names is read from it, at startup. |
+
+All of these are cosmetic and are applied when the server starts; a value that fails its check stops the startup with a message naming the variable. [BRANDING.md](BRANDING.md) explains each setting and lists the image files.
+
 ### Version & update check
 
 | Variable | Default | Description |

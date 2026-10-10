@@ -61,6 +61,23 @@ describe('Turnstile', () => {
     vi.useRealTimers();
   });
 
+  it.each(['light', 'auto'] as const)('should render the widget in the %s theme of the page', async (theme) => {
+    vi.useFakeTimers();
+    document.documentElement.dataset.theme = theme;
+
+    const renderFn = vi.fn().mockReturnValue('widget-1');
+    window.turnstile = { render: renderFn, remove: vi.fn(), reset: vi.fn() };
+
+    render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(renderFn).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ theme }));
+
+    vi.useRealTimers();
+  });
+
   it('should clean up widget on unmount', async () => {
     vi.useFakeTimers();
 

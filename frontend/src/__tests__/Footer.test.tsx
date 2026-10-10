@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Footer from '../components/Footer.js';
+import { setBrandingTags } from '../test/brandingTags.js';
 
 describe('Footer', () => {
   it('should render the brand name', () => {
@@ -20,6 +21,41 @@ describe('Footer', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('Zero trust file relay.')).toBeInTheDocument();
+  });
+
+  it('should render the configured name and tagline', () => {
+    setBrandingTags({ 'application-name': 'Acme Drop', 'brand-tagline': 'Files, sealed' });
+    render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Acme Drop')).toBeInTheDocument();
+    expect(screen.getByText('Files, sealed.')).toBeInTheDocument();
+    expect(screen.queryByText('Archivum Null')).not.toBeInTheDocument();
+  });
+
+  it('should not add a full stop to a tagline that ends with punctuation', () => {
+    setBrandingTags({ 'brand-tagline': 'Share it safely!' });
+    render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Share it safely!')).toBeInTheDocument();
+  });
+
+  it('should keep the Source link when the name is changed', () => {
+    setBrandingTags({ 'application-name': 'Acme Drop' });
+    render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('link', { name: 'Source' })).toHaveAttribute(
+      'href',
+      'https://github.com/whiteravens20/archivum-null'
+    );
   });
 
   it('should render a Source link pointing to GitHub', () => {

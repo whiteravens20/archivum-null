@@ -175,7 +175,7 @@ All checks should pass before exposing the service publicly.
 
 All variables live in a single `.env` file at the project root. Copy `.env.example` to get started.
 
-Most deployments only touch the variables below. For the full reference (chunk sizes, rate limit tuning, Turnstile hostname pinning, etc.), see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+Most deployments only touch the variables below. For the full reference (chunk sizes, rate limit tuning, Turnstile hostname pinning, etc.), see [docs/CONFIGURATION.md](docs/CONFIGURATION.md). To change the name, colours or logo, see [Branding](#branding).
 
 | Variable | Default | Description |
 |---|---|---|
@@ -360,6 +360,21 @@ To enable:
 When secrets are default/missing, Turnstile verification is skipped.
 
 When Turnstile is enabled, the frontend enforces a **10-second CAPTCHA timeout** — if the widget does not verify within 10 seconds of file selection, the user is shown an error and must reload.
+
+## Branding
+
+An instance can carry its own name, tagline, accent colour, logo and icons, and can use a light theme or follow the visitor's system setting. All of it is set in `.env` and an optional `branding/` directory, so the published image is used as it is:
+
+```bash
+BRAND_NAME=Acme Drop
+BRAND_TAGLINE=Files, sealed and gone
+BRAND_ACCENT_COLOR=#F97316
+BRAND_THEME=auto
+```
+
+![The light theme on the left; a custom name, tagline, accent colour and logo on the right](docs/img/branding-examples.png)
+
+Branding is cosmetic only: no setting takes a URL, nothing is loaded from another origin, and no security header changes. [docs/BRANDING.md](docs/BRANDING.md) lists every setting and the file names the server looks for.
 
 ## Security
 

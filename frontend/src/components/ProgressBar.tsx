@@ -9,7 +9,7 @@ export default function ProgressBar({ progress, label }: ProgressBarProps) {
   return (
     <div className="space-y-1">
       {label && (
-        <div className="flex justify-between text-xs text-gray-400">
+        <div className="flex justify-between text-xs text-vault-muted">
           <span>{label}</span>
           <span>{pct.toFixed(0)}%</span>
         </div>
