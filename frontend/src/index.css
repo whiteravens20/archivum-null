@@ -33,7 +33,8 @@
 
 /* ─── Theme tokens (TailwindCSS v4) ───
  * Every colour in the UI is one of these roles; components do not name a palette
- * shade directly. A theme is then another set of values for the same variables.
+ * shade directly, and __tests__/theme.test.ts fails if one does. A theme is then
+ * another set of values for the same variables.
  */
 @theme {
   /* Surfaces: the page, and what sits on it (cards, inputs, tracks) */
