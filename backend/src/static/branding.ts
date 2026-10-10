@@ -141,6 +141,12 @@ function themeColorTags(theme: Theme): string[] {
   return [`<meta name="theme-color" content="${THEME_BACKGROUND[theme]}" />`];
 }
 
+/** URLs of the operator's own logo per theme, where one was supplied. */
+export interface BrandLogos {
+  logo?: string;
+  logoLight?: string;
+}
+
 const HEAD_END = /[ \t]*<\/head>/i;
 
 /**
@@ -150,7 +156,7 @@ const HEAD_END = /[ \t]*<\/head>/i;
  * tags, which is also how the SPA learns the values (frontend/src/branding.ts): the
  * Content-Security-Policy allows no inline script, so there is no script to put them in.
  */
-export function applyBranding(indexHtml: string, branding: Branding): string {
+export function applyBranding(indexHtml: string, branding: Branding, logos: BrandLogos = {}): string {
   // No </head>, nowhere to put the tags — leave such a page as it is.
   if (!HEAD_END.test(indexHtml)) return indexHtml;
 
@@ -162,6 +168,8 @@ export function applyBranding(indexHtml: string, branding: Branding): string {
     `<meta name="brand-tagline" content="${escapeHtml(branding.tagline)}" />`,
     ...themeColorTags(branding.theme),
   ];
+  if (logos.logo) tags.push(`<meta name="brand-logo" content="${escapeHtml(logos.logo)}" />`);
+  if (logos.logoLight) tags.push(`<meta name="brand-logo-light" content="${escapeHtml(logos.logoLight)}" />`);
   if (branding.accentColor !== null) {
     // Unlayered, so it wins over the defaults the stylesheet keeps in @layer theme.
     tags.push(

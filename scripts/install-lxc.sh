@@ -593,6 +593,8 @@ cat << 'POSTINSTALL'
 │    /opt/archivum-null/.env     runtime settings (see section 1)     │
 │    /opt/archivum-null/TOS.md   terms of service shown at /tos       │
 │      → edit, then restart:  systemctl restart archivum-null         │
+│    /opt/archivum-null/branding/   your own logo and icons           │
+│      → file names in docs/BRANDING.md, then restart as above        │
 │    /etc/systemd/system/archivum-null.service   service unit         │
 │                                                                     │
 │  On the Proxmox host:                                               │

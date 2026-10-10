@@ -4,6 +4,7 @@ build/
 .env
 *.log
 data/
+/branding/
 .DS_Store
 .vscode/
 *.swp

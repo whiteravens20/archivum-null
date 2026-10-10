@@ -268,6 +268,18 @@ describe('applyBranding', () => {
     expect(light.indexOf('<style>')).toBeLessThan(light.indexOf('</head>'));
   });
 
+  it('names the operator logos for the SPA when there are any', () => {
+    const none = applyBranding(SOURCE_PAGE, DEFAULTS);
+    const both = applyBranding(SOURCE_PAGE, DEFAULTS, { logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' });
+    const lightOnly = applyBranding(SOURCE_PAGE, DEFAULTS, { logoLight: '/brand/logo-light.png' });
+
+    expect(none).not.toContain('brand-logo');
+    expect(both).toContain('<meta name="brand-logo" content="/brand/logo.svg" />');
+    expect(both).toContain('<meta name="brand-logo-light" content="/brand/logo-light.png" />');
+    expect(lightOnly).not.toContain('name="brand-logo" ');
+    expect(lightOnly).toContain('<meta name="brand-logo-light" content="/brand/logo-light.png" />');
+  });
+
   it('adds a title to a page that had none', () => {
     const page = applyBranding('<html><head><meta charset="UTF-8" /></head><body></body></html>', DEFAULTS);
 
@@ -301,6 +313,8 @@ describe('buildApp — branding on the served page', () => {
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('STORAGE_PATH', storageDir);
     vi.stubEnv('ADMIN_PASSWORD', 'strong-test-password');
+    // An empty directory, so a branding/ folder in the checkout cannot leak into the page.
+    vi.stubEnv('BRANDING_PATH', storageDir);
     for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
 
     const { buildApp } = await import('../app.js');
