@@ -4,6 +4,7 @@ import VaultConfig from '../components/VaultConfig.tsx';
 import ProgressBar from '../components/ProgressBar.tsx';
 import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
+import Logo from '../components/Logo.tsx';
 import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
 import { getBranding } from '../branding.ts';
@@ -200,7 +201,7 @@ export default function Home() {
       {/* Header */}
       <div className="text-center mb-12">
         <div className="flex justify-center mb-4">
-          <img src="/logo-symbol.webp" alt="" className="w-16 h-16 sm:w-20 sm:h-20" />
+          <Logo className="w-16 h-16 sm:w-20 sm:h-20" />
         </div>
         <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.05em] text-vault-heading mb-2 uppercase">
           {name}

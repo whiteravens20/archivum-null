@@ -60,18 +60,74 @@
   --color-vault-line: oklch(44.6% 0.03 256.802);
   --color-vault-line-soft: oklch(37.3% 0.034 259.733);
 
-  /* Status: the plain name is text, `-strong` its emphasised form, and `-fill`
-   * the base of tinted backgrounds and borders */
+  /* Status: the plain name is text, `-strong` and `-soft` its emphasised and
+   * toned-down forms, and `-fill` the base of bars, tinted backgrounds and borders */
   --color-vault-danger: oklch(70.4% 0.191 22.216);
   --color-vault-danger-strong: oklch(80.8% 0.114 19.571);
   --color-vault-danger-fill: oklch(63.7% 0.237 25.331);
   --color-vault-warning: oklch(85.2% 0.199 91.936);
   --color-vault-warning-strong: oklch(90.5% 0.182 98.111);
+  --color-vault-warning-soft: color-mix(in oklab, oklch(85.2% 0.199 91.936) 70%, transparent);
   --color-vault-warning-fill: oklch(79.5% 0.184 86.047);
   --color-vault-success: oklch(79.2% 0.209 151.711);
   --color-vault-success-fill: oklch(72.3% 0.219 149.579);
 
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ─── Light theme ───
+ * The server sets data-theme on <html> from BRAND_THEME. `light` always takes the
+ * palette below, `auto` takes it when the visitor's system asks for a light scheme,
+ * and anything else keeps the dark values above. No script is involved.
+ */
+@custom-variant theme-light {
+  &:where([data-theme="light"], [data-theme="light"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: light) {
+    &:where([data-theme="auto"], [data-theme="auto"] *) {
+      @slot;
+    }
+  }
+}
+
+:root {
+  /* Native controls — the open select list, scrollbars — follow the theme too */
+  color-scheme: dark;
+
+  @variant theme-light {
+    color-scheme: light;
+
+    --color-vault-bg: #F8FAFC;
+    --color-vault-secondary: #E2E8F0;
+
+    /* The accent is the operator's to choose and most accents are too light to
+     * read on a light page, so text and lines take a darkened form of it. Fills
+     * keep the accent as it is. */
+    --color-vault-accent-ink: color-mix(in oklab, var(--color-vault-accent) 60%, black);
+
+    --color-vault-heading: #0F172A;
+    --color-vault-text: #1E293B;
+    --color-vault-text-soft: #334155;
+    --color-vault-muted: #475569;
+    --color-vault-subtle: #5B6B80;
+    --color-vault-faint: #8A99AE;
+
+    --color-vault-line-strong: #64748B;
+    --color-vault-line: #94A3B8;
+    --color-vault-line-soft: #CBD5E1;
+
+    --color-vault-danger: #B91C1C;
+    --color-vault-danger-strong: #7F1D1D;
+    --color-vault-danger-fill: #EF4444;
+    --color-vault-warning: #713F12;
+    --color-vault-warning-strong: #422006;
+    /* Toned down by colour here: fading dark text only costs it contrast */
+    --color-vault-warning-soft: #854D0E;
+    --color-vault-warning-fill: #EAB308;
+    --color-vault-success: #166534;
+    --color-vault-success-fill: #22C55E;
+  }
 }
 
 body {
@@ -111,6 +167,9 @@ body {
   --tw-prose-code: var(--color-vault-heading);
   --tw-prose-pre-code: var(--color-vault-text-soft);
   --tw-prose-pre-bg: rgb(0 0 0 / 50%);
+  @variant theme-light {
+    --tw-prose-pre-bg: rgb(0 0 0 / 6%);
+  }
   --tw-prose-th-borders: var(--color-vault-line);
   --tw-prose-td-borders: var(--color-vault-line-soft);
 }

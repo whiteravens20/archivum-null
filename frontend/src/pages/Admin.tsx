@@ -262,7 +262,7 @@ export default function Admin() {
                       <div className="mt-2 h-1.5 rounded-full bg-vault-secondary overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
-                            isFull ? 'bg-vault-danger-fill' : isNearFull ? 'bg-vault-warning' : 'bg-vault-accent'
+                            isFull ? 'bg-vault-danger-fill' : isNearFull ? 'bg-vault-warning-fill' : 'bg-vault-accent'
                           }`}
                           style={{ width: `${pct}%` }}
                         />

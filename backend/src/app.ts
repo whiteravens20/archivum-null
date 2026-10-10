@@ -43,6 +43,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     name: config.BRAND_NAME,
     tagline: config.BRAND_TAGLINE,
     accentColor: config.BRAND_ACCENT_COLOR,
+    theme: config.BRAND_THEME,
   });
 
   const app = Fastify({

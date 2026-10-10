@@ -93,6 +93,7 @@ describe('config', () => {
     expect(config.BRAND_NAME).toBe('Archivum Null');
     expect(config.BRAND_TAGLINE).toBe('Zero trust file relay');
     expect(config.BRAND_ACCENT_COLOR).toBe('');
+    expect(config.BRAND_THEME).toBe('dark');
   });
 
   it('should read the brand name and tagline from env, trimmed', async () => {

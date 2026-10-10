@@ -21,17 +21,36 @@ import {
   escapeHtml,
   onAccentColor,
   parseBranding,
+  THEME_BACKGROUND,
 } from '../static/branding.js';
 
 /** What the environment holds when nothing is configured, and what that parses to. */
-const INPUT = { name: 'Archivum Null', tagline: 'Zero trust file relay', accentColor: '' };
-const DEFAULTS = { name: 'Archivum Null', tagline: 'Zero trust file relay', accentColor: null };
+const INPUT = { name: 'Archivum Null', tagline: 'Zero trust file relay', accentColor: '', theme: 'dark' };
+const DEFAULTS = {
+  name: 'Archivum Null',
+  tagline: 'Zero trust file relay',
+  accentColor: null,
+  theme: 'dark',
+} as const;
 
 /** The page the frontend build starts from — the anchors applyBranding relies on live here. */
 const SOURCE_PAGE = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'index.html'),
   'utf-8'
 );
+
+/** The stylesheet whose variables the injected values have to line up with. */
+const STYLESHEET = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'src', 'index.css'),
+  'utf-8'
+);
+
+/** Every hex value the stylesheet gives a token, in source order: the dark default first. */
+function tokenValues(name: string): string[] {
+  const values = [...STYLESHEET.matchAll(new RegExp(`--color-vault-${name}:\\s*(#[0-9a-fA-F]{6});`, 'g'))];
+  if (values.length === 0) throw new Error(`--color-vault-${name} is not a hex colour in index.css`);
+  return values.map((match) => match[1].toLowerCase());
+}
 
 const count = (haystack: string, needle: RegExp): number => (haystack.match(needle) ?? []).length;
 
@@ -69,6 +88,14 @@ describe('parseBranding', () => {
     expect(parseBranding({ ...INPUT, accentColor: '#F97316' }).accentColor).toBe('#f97316');
   });
 
+  it.each(['dark', 'light', 'auto'] as const)('accepts the %s theme', (theme) => {
+    expect(parseBranding({ ...INPUT, theme }).theme).toBe(theme);
+  });
+
+  it.each(['', 'Dark', 'system', 'light dark', 'dark" onload="x'])('rejects the theme %j', (theme) => {
+    expect(() => parseBranding({ ...INPUT, theme })).toThrow('BRAND_THEME must be one of: dark, light, auto');
+  });
+
   it.each([
     ['a colour name', 'orange'],
     ['three digits', '#f90'],
@@ -103,19 +130,9 @@ describe('onAccentColor', () => {
   });
 
   it('agrees with the label colour the stylesheet ships for its own accent', () => {
-    const css = fs.readFileSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'src', 'index.css'),
-      'utf-8'
-    );
-    const token = (name: string): string => {
-      const match = new RegExp(`--color-vault-${name}:\\s*(#[0-9a-fA-F]{6});`).exec(css);
-      if (!match) throw new Error(`--color-vault-${name} is not a hex colour in index.css`);
-      return match[1].toLowerCase();
-    };
-
     // The injected <style> overrides exactly these two variables; if the stylesheet
     // renamed either, a configured accent would silently stop applying.
-    expect(onAccentColor(token('accent'))).toBe(token('on-accent'));
+    expect(onAccentColor(tokenValues('accent')[0])).toBe(tokenValues('on-accent')[0]);
   });
 });
 
@@ -123,6 +140,12 @@ describe('brandingWarnings', () => {
   it('says nothing about the built-in accent or a readable one', () => {
     expect(brandingWarnings(DEFAULTS)).toEqual([]);
     expect(brandingWarnings({ ...DEFAULTS, accentColor: '#f97316' })).toEqual([]);
+  });
+
+  it('does not warn in the light theme, which darkens the accent for text itself', () => {
+    expect(brandingWarnings({ ...DEFAULTS, accentColor: '#1e3a8a', theme: 'light' })).toEqual([]);
+    // `auto` still shows the dark page to visitors who ask for it.
+    expect(brandingWarnings({ ...DEFAULTS, accentColor: '#1e3a8a', theme: 'auto' })).toHaveLength(1);
   });
 
   it('warns about an accent that cannot be read on the dark page', () => {
@@ -169,7 +192,7 @@ describe('applyBranding', () => {
     const page = applyBranding(SOURCE_PAGE, DEFAULTS);
 
     for (const line of SOURCE_PAGE.split('\n')) {
-      if (/<title>|name="description"|<\/head>/.test(line)) continue;
+      if (/<html\b|<title>|name="description"|<\/head>/.test(line)) continue;
       expect(page).toContain(line);
     }
   });
@@ -205,6 +228,30 @@ describe('applyBranding', () => {
 
     expect(plain).toContain('content="A — Share safely. Anonymous');
     expect(punctuated).toContain('content="A — Share safely! Anonymous');
+  });
+
+  it('marks the page with the theme and tints the browser UI to match', () => {
+    const dark = applyBranding(SOURCE_PAGE, DEFAULTS);
+    const light = applyBranding(SOURCE_PAGE, { ...DEFAULTS, theme: 'light' });
+
+    expect(dark).toContain('<html data-theme="dark" lang="en">');
+    expect(dark).toContain('<meta name="theme-color" content="#0b0f19" />');
+    expect(light).toContain('<html data-theme="light" lang="en">');
+    expect(light).toContain('<meta name="theme-color" content="#f8fafc" />');
+    expect(count(light, /name="theme-color"/g)).toBe(1);
+  });
+
+  it('gives the auto theme one browser-UI colour per colour scheme', () => {
+    const page = applyBranding(SOURCE_PAGE, { ...DEFAULTS, theme: 'auto' });
+
+    expect(page).toContain('<html data-theme="auto" lang="en">');
+    expect(page).toContain('<meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />');
+    expect(page).toContain('<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />');
+  });
+
+  it('uses the page backgrounds the stylesheet defines', () => {
+    // First the dark default in @theme, then the light override.
+    expect(tokenValues('bg')).toEqual([THEME_BACKGROUND.dark, THEME_BACKGROUND.light]);
   });
 
   it('adds no style element while the accent is the built-in one', () => {
@@ -297,6 +344,15 @@ describe('buildApp — branding on the served page', () => {
     expect(res.body).toContain('--color-vault-accent:#f97316;--color-vault-on-accent:#0b0f19');
   });
 
+  it('serves the dark theme unless another one is configured', async () => {
+    const dark = await (await start()).inject({ method: 'GET', url: '/' });
+    await stop();
+    const auto = await (await start({ BRAND_THEME: 'auto' })).inject({ method: 'GET', url: '/' });
+
+    expect(dark.body).toContain('<html data-theme="dark"');
+    expect(auto.body).toContain('<html data-theme="auto"');
+  });
+
   it('serves the same branded page on SPA routes', async () => {
     const res = await (await start({ BRAND_NAME: 'Acme Drop' })).inject({ method: 'GET', url: '/vault/abc123' });
 
@@ -308,7 +364,12 @@ describe('buildApp — branding on the served page', () => {
     const plain = await (await start()).inject({ method: 'GET', url: '/' });
     await stop();
     const branded = await (
-      await start({ BRAND_NAME: 'Acme Drop', BRAND_TAGLINE: 'Files, sealed', BRAND_ACCENT_COLOR: '#f97316' })
+      await start({
+        BRAND_NAME: 'Acme Drop',
+        BRAND_TAGLINE: 'Files, sealed',
+        BRAND_ACCENT_COLOR: '#f97316',
+        BRAND_THEME: 'light',
+      })
     ).inject({ method: 'GET', url: '/' });
 
     for (const header of SECURITY_HEADERS) {
@@ -319,6 +380,10 @@ describe('buildApp — branding on the served page', () => {
 
   it('refuses to start on a name it cannot show safely', async () => {
     await expect(start({ BRAND_NAME: 'two\nlines' })).rejects.toThrow(/^BRAND_NAME must be/);
+  });
+
+  it('refuses to start on an unknown theme', async () => {
+    await expect(start({ BRAND_THEME: 'sepia' })).rejects.toThrow('BRAND_THEME must be one of');
   });
 
   it('refuses to start on an accent that is not a plain hex colour', async () => {

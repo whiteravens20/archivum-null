@@ -7,11 +7,15 @@
  * origin, and this module sets no header and reads no request.
  */
 
+/** `auto` follows the visitor's system setting, in CSS alone. */
+export type Theme = 'dark' | 'light' | 'auto';
+
 export interface Branding {
   name: string;
   tagline: string;
   /** `#rrggbb`, or null to keep the accent built into the stylesheet. */
   accentColor: string | null;
+  theme: Theme;
 }
 
 /** The values as they come from the environment, not yet checked. */
@@ -19,6 +23,13 @@ export interface BrandingInput {
   name: string;
   tagline: string;
   accentColor: string;
+  theme: string;
+}
+
+const THEMES: readonly string[] = ['dark', 'light', 'auto'];
+
+function isTheme(value: string): value is Theme {
+  return THEMES.includes(value);
 }
 
 const NAME_MAX_LENGTH = 64;
@@ -49,15 +60,19 @@ export function parseBranding(input: BrandingInput): Branding {
   if (input.accentColor !== '' && !/^#[0-9a-f]{6}$/i.test(input.accentColor)) {
     throw new Error('BRAND_ACCENT_COLOR must be a six-digit hex colour such as #60A5FA');
   }
+  if (!isTheme(input.theme)) {
+    throw new Error('BRAND_THEME must be one of: dark, light, auto');
+  }
   return {
     name: input.name,
     tagline: input.tagline,
     accentColor: input.accentColor === '' ? null : input.accentColor.toLowerCase(),
+    theme: input.theme,
   };
 }
 
-/** Page background of the dark theme — `--color-vault-bg` in frontend/src/index.css. */
-const DARK_BACKGROUND = '#0b0f19';
+/** Page background of each theme — `--color-vault-bg` in frontend/src/index.css. */
+export const THEME_BACKGROUND = { dark: '#0b0f19', light: '#f8fafc' } as const;
 /** The two colours a label on an accent fill can take. */
 const INK = '#0b0f19';
 const WHITE = '#ffffff';
@@ -91,8 +106,10 @@ const MIN_TEXT_CONTRAST = 3;
 
 /** Choices that work but will look wrong — reported at startup, never fatal. */
 export function brandingWarnings(branding: Branding): string[] {
-  if (branding.accentColor === null) return [];
-  const contrast = contrastRatio(branding.accentColor, DARK_BACKGROUND);
+  // The light theme darkens the accent for text by itself, so only the dark page,
+  // which shows it as it is, can end up unreadable.
+  if (branding.accentColor === null || branding.theme === 'light') return [];
+  const contrast = contrastRatio(branding.accentColor, THEME_BACKGROUND.dark);
   if (contrast >= MIN_TEXT_CONTRAST) return [];
   return [
     `BRAND_ACCENT_COLOR ${branding.accentColor} has a contrast of ${contrast.toFixed(1)}:1 against the dark page background; links and highlighted text will be hard to read (aim for 3:1 or more).`,
@@ -111,6 +128,17 @@ export function escapeHtml(value: string): string {
 function describePage(branding: Branding): string {
   const lead = /[\p{L}\p{N}]$/u.test(branding.tagline) ? `${branding.tagline}.` : branding.tagline;
   return `${branding.name} — ${lead} Anonymous, zero-knowledge encrypted file sharing with expiring vaults.`;
+}
+
+/** Colours the browser's own UI around the page; `auto` gets one per colour scheme. */
+function themeColorTags(theme: Theme): string[] {
+  if (theme === 'auto') {
+    return [
+      `<meta name="theme-color" content="${THEME_BACKGROUND.dark}" media="(prefers-color-scheme: dark)" />`,
+      `<meta name="theme-color" content="${THEME_BACKGROUND.light}" media="(prefers-color-scheme: light)" />`,
+    ];
+  }
+  return [`<meta name="theme-color" content="${THEME_BACKGROUND[theme]}" />`];
 }
 
 const HEAD_END = /[ \t]*<\/head>/i;
@@ -132,6 +160,7 @@ export function applyBranding(indexHtml: string, branding: Branding): string {
     `<meta name="application-name" content="${name}" />`,
     `<meta name="description" content="${escapeHtml(describePage(branding))}" />`,
     `<meta name="brand-tagline" content="${escapeHtml(branding.tagline)}" />`,
+    ...themeColorTags(branding.theme),
   ];
   if (branding.accentColor !== null) {
     // Unlayered, so it wins over the defaults the stylesheet keeps in @layer theme.
@@ -145,6 +174,8 @@ export function applyBranding(indexHtml: string, branding: Branding): string {
     indexHtml
       .replace(/<title>[\s\S]*?<\/title>\s*/i, '')
       .replace(/<meta\s+name="description"[^>]*>\s*/i, '')
+      // The stylesheet picks its palette from this attribute.
+      .replace(/<html\b/i, `<html data-theme="${branding.theme}"`)
       // A function, not a string: in a replacement string `$&` and `$1` are
       // expanded, and a name such as "Cash $& Carry" would be mangled.
       .replace(HEAD_END, () => `${block}  </head>`)

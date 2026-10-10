@@ -7,6 +7,7 @@ describe('getBranding', () => {
     expect(getBranding()).toEqual({
       name: 'Archivum Null',
       tagline: 'Zero trust file relay',
+      theme: 'dark',
     });
   });
 
@@ -20,6 +21,18 @@ describe('getBranding', () => {
     setBrandingTags({ 'application-name': '' });
 
     expect(getBranding().name).toBe('Archivum Null');
+  });
+
+  it.each(['light', 'auto', 'dark'] as const)('should read the %s theme from the root element', (theme) => {
+    document.documentElement.dataset.theme = theme;
+
+    expect(getBranding().theme).toBe(theme);
+  });
+
+  it('should treat an unknown theme as dark', () => {
+    document.documentElement.dataset.theme = 'sepia';
+
+    expect(getBranding().theme).toBe('dark');
   });
 
   it('should return markup in a value as plain text', () => {
