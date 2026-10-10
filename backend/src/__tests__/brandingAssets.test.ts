@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 import { loadBrandingAssets, MAX_ASSET_BYTES } from '../static/brandingAssets.js';
 
@@ -143,6 +144,25 @@ describe('loadBrandingAssets', () => {
 
     expect(load().files.size).toBe(0);
     expect(warnings).toEqual(['Branding: favicon.svg is not a file and was skipped']);
+  });
+
+  // Node has no mkfifo of its own, and Windows has no named pipes of this kind.
+  it.skipIf(process.platform === 'win32')('skips a named pipe without waiting on it', () => {
+    execFileSync('mkfifo', [path.join(dir, 'favicon.svg')]);
+
+    // A blocking open would hang here until something wrote to the pipe.
+    expect(load().files.size).toBe(0);
+    expect(warnings).toEqual(['Branding: favicon.svg is not a file and was skipped']);
+  });
+
+  it('holds each file in a buffer of its own size', () => {
+    put('favicon.svg');
+
+    const body = load().files.get('/favicon.svg')!.body;
+
+    expect(body.toString()).toBe(SVG);
+    // Not a view into the megabyte it was read into.
+    expect(body.buffer.byteLength).toBeLessThan(MAX_ASSET_BYTES);
   });
 
   it('follows a symbolic link to a file, as a mounted ConfigMap presents one', () => {

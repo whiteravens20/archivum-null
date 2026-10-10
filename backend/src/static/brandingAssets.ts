@@ -56,6 +56,20 @@ export interface BrandingAssets {
   logoLight?: string;
 }
 
+/** Read an open file up to `limit` bytes. Returns null when it holds more. */
+function readUpTo(fd: number, limit: number): Buffer | null {
+  const buffer = Buffer.alloc(limit + 1);
+  let length = 0;
+  for (;;) {
+    const read = fs.readSync(fd, buffer, length, buffer.length - length, null);
+    if (read === 0) break;
+    length += read;
+    if (length > limit) return null;
+  }
+  // A copy of the right size, so the megabyte it was read into can be freed.
+  return Buffer.from(buffer.subarray(0, length));
+}
+
 /**
  * Read the operator's files from `dir`. A missing directory is the normal case and
  * yields nothing; a file that cannot be used is skipped with a warning, so one bad
@@ -75,21 +89,28 @@ export function loadBrandingAssets(dir: string, warn: (message: string) => void)
   // and never from a request — so the path cannot leave `dir`.
   const read = (name: string): BrandingAsset | undefined => {
     if (!present.has(name)) return undefined;
+    let fd: number | undefined;
     try {
-      const file = path.join(dir, name);
-      const stat = fs.statSync(file);
-      if (!stat.isFile()) {
+      // Opened once, and everything after is asked of the descriptor: the file that
+      // is checked is the file that is read, even if the directory entry is swapped
+      // in between. O_NONBLOCK keeps a named pipe from stalling the startup.
+      fd = fs.openSync(path.join(dir, name), fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+      if (!fs.fstatSync(fd).isFile()) {
         warn(`Branding: ${name} is not a file and was skipped`);
         return undefined;
       }
-      if (stat.size > MAX_ASSET_BYTES) {
+      // The limit is enforced on what is actually read, not on a size reported earlier.
+      const body = readUpTo(fd, MAX_ASSET_BYTES);
+      if (body === null) {
         warn(`Branding: ${name} is larger than ${MAX_ASSET_BYTES / 1024} KiB and was skipped`);
         return undefined;
       }
-      return { body: fs.readFileSync(file), contentType: CONTENT_TYPES[path.extname(name)] };
+      return { body, contentType: CONTENT_TYPES[path.extname(name)] };
     } catch {
       warn(`Branding: ${name} could not be read and was skipped`);
       return undefined;
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
     }
   };
 
