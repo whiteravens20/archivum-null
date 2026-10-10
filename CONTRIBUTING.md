@@ -127,12 +127,14 @@ backend/src/
   index.ts           # server entrypoint (buildApp + listen + graceful shutdown)
   middleware/        # auth, rate limiting, turnstile
   routes/            # HTTP route handlers
+  static/            # serving the frontend: asset cloak, branding
   storage/           # pluggable storage back-ends
   vault/             # vault manager and types
   __tests__/         # unit/integration tests (Vitest)
 
 frontend/src/
   api/               # fetch wrappers
+  branding.ts        # name, tagline, theme and logo the server wrote into the page
   components/        # reusable UI components
   crypto/            # client-side AES-256-GCM (WebCrypto)
   pages/             # route-level React pages

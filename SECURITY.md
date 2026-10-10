@@ -66,6 +66,18 @@ nothing short of not shipping JavaScript would. Obscurity is not the control her
 running a current version is. See
 [HARDENING.md → Version Disclosure](docs/HARDENING.md#version-disclosure).
 
+### Branding
+
+Operators can change the name, tagline, accent colour, theme, logo and icons
+([docs/BRANDING.md](docs/BRANDING.md)). None of it is security logic, and it is kept
+from becoming an attack surface:
+
+- [x] `BRAND_*` values are validated at startup and the server refuses to start on a bad one; the name and tagline are HTML-escaped where they are written into the page and rendered as text by the frontend
+- [x] The accent colour is accepted as six hex digits and nothing else, because it is written into a `<style>` element
+- [x] No branding setting takes a URL — logo and icons come from a local directory, by a fixed list of file names, with a size limit, read once at startup; no request path reaches that directory
+- [x] Branding changes no security header: the Content-Security-Policy is the same with and without it, and still refuses images and fonts from other origins
+- [x] The web app manifest is metadata only. There is no service worker, so the client-side code is fetched from the server on every visit and never served from a copy held by the browser
+
 ### Anti-Abuse
 
 - [x] Cloudflare Turnstile integration (optional)
