@@ -288,6 +288,21 @@ describe('applyBranding', () => {
     expect(lightOnly).toContain('<meta name="brand-logo-light" content="/brand/logo-light.png" />');
   });
 
+  it('leaves the page free of URLs to other origins, whatever is configured', () => {
+    const page = applyBranding(
+      SOURCE_PAGE,
+      { name: 'Acme https://evil.example', tagline: 'Files, sealed', accentColor: '#f97316', theme: 'auto' },
+      { logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' }
+    );
+
+    // The name is text and may say anything; nothing that the browser fetches may.
+    const fetched = [...page.matchAll(/\b(?:src|href|content)\s*=\s*"([^"]*)"/g)]
+      .map((match) => match[1])
+      .filter((value) => /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(value));
+    expect(fetched).toEqual([]);
+    expect(page).not.toContain('url(');
+  });
+
   it('adds a title to a page that had none', () => {
     const page = applyBranding('<html><head><meta charset="UTF-8" /></head><body></body></html>', DEFAULTS);
 
