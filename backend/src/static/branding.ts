@@ -147,6 +147,33 @@ export interface BrandLogos {
   logoLight?: string;
 }
 
+export const MANIFEST_PATH = '/manifest.webmanifest';
+
+/**
+ * The web app manifest: what a browser shows when the site is added to a home screen.
+ *
+ * It is metadata only. There is deliberately no service worker behind it — one would
+ * keep serving a stored copy of the client-side crypto code after a fix was deployed.
+ */
+export function buildManifest(branding: Branding): string {
+  // A manifest holds one colour pair, so `auto` gets the dark one, the default theme.
+  const background = THEME_BACKGROUND[branding.theme === 'light' ? 'light' : 'dark'];
+  return JSON.stringify({
+    name: branding.name,
+    description: branding.tagline,
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    background_color: background,
+    theme_color: background,
+    icons: [
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  });
+}
+
 const HEAD_END = /[ \t]*<\/head>/i;
 
 /**
@@ -167,6 +194,7 @@ export function applyBranding(indexHtml: string, branding: Branding, logos: Bran
     `<meta name="description" content="${escapeHtml(describePage(branding))}" />`,
     `<meta name="brand-tagline" content="${escapeHtml(branding.tagline)}" />`,
     ...themeColorTags(branding.theme),
+    `<link rel="manifest" href="${MANIFEST_PATH}" />`,
   ];
   if (logos.logo) tags.push(`<meta name="brand-logo" content="${escapeHtml(logos.logo)}" />`);
   if (logos.logoLight) tags.push(`<meta name="brand-logo-light" content="${escapeHtml(logos.logoLight)}" />`);

@@ -11,7 +11,13 @@ import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
-import { applyBranding, brandingWarnings, parseBranding } from './static/branding.js';
+import {
+  applyBranding,
+  brandingWarnings,
+  buildManifest,
+  MANIFEST_PATH,
+  parseBranding,
+} from './static/branding.js';
 import { loadBrandingAssets } from './static/brandingAssets.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -181,6 +187,15 @@ export async function buildApp(): Promise<FastifyInstance> {
           .send(asset.body)
       );
     }
+
+    // Generated, because it carries the configured name. Built once: config is frozen.
+    const manifest = buildManifest(branding);
+    app.get(MANIFEST_PATH, async (_request, reply) =>
+      reply
+        .header('Cache-Control', 'public, max-age=0, must-revalidate')
+        .type('application/manifest+json; charset=utf-8')
+        .send(manifest)
+    );
 
     await app.register(fastifyStatic, {
       root: frontendDist,

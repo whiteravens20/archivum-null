@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import {
   applyBranding,
   brandingWarnings,
+  buildManifest,
   contrastRatio,
   escapeHtml,
   onAccentColor,
@@ -268,6 +269,13 @@ describe('applyBranding', () => {
     expect(light.indexOf('<style>')).toBeLessThan(light.indexOf('</head>'));
   });
 
+  it('links the web app manifest, once', () => {
+    const page = applyBranding(SOURCE_PAGE, DEFAULTS);
+
+    expect(count(page, /rel="manifest"/g)).toBe(1);
+    expect(page).toContain('<link rel="manifest" href="/manifest.webmanifest" />');
+  });
+
   it('names the operator logos for the SPA when there are any', () => {
     const none = applyBranding(SOURCE_PAGE, DEFAULTS);
     const both = applyBranding(SOURCE_PAGE, DEFAULTS, { logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' });
@@ -289,6 +297,64 @@ describe('applyBranding', () => {
 
   it('leaves a page without a head alone', () => {
     expect(applyBranding('<html>bare</html>', DEFAULTS)).toBe('<html>bare</html>');
+  });
+});
+
+describe('buildManifest', () => {
+  const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'public');
+
+  it('carries the configured name and tagline', () => {
+    const manifest = JSON.parse(buildManifest({ ...DEFAULTS, name: 'Acme Drop', tagline: 'Files, sealed' }));
+
+    expect(manifest).toMatchObject({
+      name: 'Acme Drop',
+      description: 'Files, sealed',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+    });
+  });
+
+  it('stays valid JSON whatever the name contains', () => {
+    const name = 'Acme "Drop" \\ </script> 🗄';
+
+    expect(JSON.parse(buildManifest({ ...DEFAULTS, name })).name).toBe(name);
+  });
+
+  it('takes its colours from the theme, with the dark pair for auto', () => {
+    const colours = (theme: 'dark' | 'light' | 'auto') => {
+      const { background_color, theme_color } = JSON.parse(buildManifest({ ...DEFAULTS, theme }));
+      return [background_color, theme_color];
+    };
+
+    expect(colours('dark')).toEqual(['#0b0f19', '#0b0f19']);
+    expect(colours('light')).toEqual(['#f8fafc', '#f8fafc']);
+    expect(colours('auto')).toEqual(['#0b0f19', '#0b0f19']);
+  });
+
+  it('names only icons the frontend ships, at the sizes it claims for them', () => {
+    const { icons } = JSON.parse(buildManifest(DEFAULTS)) as {
+      icons: { src: string; sizes: string; type: string; purpose?: string }[];
+    };
+
+    expect(icons.map((icon) => icon.src)).toEqual(['/icon-192.png', '/icon-512.png', '/icon-maskable-512.png']);
+    for (const icon of icons) {
+      const png = fs.readFileSync(path.join(PUBLIC_DIR, icon.src));
+      // A PNG states its width and height as two big-endian integers right after the IHDR tag.
+      expect(png.subarray(1, 4).toString('latin1'), icon.src).toBe('PNG');
+      expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`, icon.src).toBe(icon.sizes);
+      expect(icon.type).toBe('image/png');
+      // Every origin-relative: a manifest that pointed elsewhere would load a third-party image.
+      expect(icon.src.startsWith('/') && !icon.src.startsWith('//')).toBe(true);
+    }
+  });
+
+  it('declares no service worker and nothing that would need one', () => {
+    const manifest = JSON.parse(buildManifest(DEFAULTS));
+
+    expect(Object.keys(manifest).sort()).toEqual(
+      ['background_color', 'description', 'display', 'icons', 'name', 'scope', 'start_url', 'theme_color'].sort()
+    );
   });
 });
 
@@ -390,6 +456,18 @@ describe('buildApp — branding on the served page', () => {
       expect(plain.headers[header], header).toBeDefined();
       expect(branded.headers[header], header).toBe(plain.headers[header]);
     }
+  });
+
+  it('serves a manifest that carries the configured name', async () => {
+    const res = await (
+      await start({ BRAND_NAME: 'Acme Drop', BRAND_THEME: 'light' })
+    ).inject({ method: 'GET', url: '/manifest.webmanifest' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('application/manifest+json; charset=utf-8');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, must-revalidate');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.json()).toMatchObject({ name: 'Acme Drop', theme_color: '#f8fafc' });
   });
 
   it('refuses to start on a name it cannot show safely', async () => {

@@ -56,6 +56,15 @@ describe('loadBrandingAssets', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('lets the icons of the web app manifest be replaced too', () => {
+    for (const name of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png']) put(name, Buffer.from([0x89, 0x50]));
+
+    const assets = load();
+
+    expect([...assets.files.keys()].sort()).toEqual(['/icon-192.png', '/icon-512.png', '/icon-maskable-512.png']);
+    expect(warnings).toEqual([]);
+  });
+
   it('takes the type from the file name, not from the content', () => {
     put('apple-touch-icon.png', '<script>alert(1)</script>');
 

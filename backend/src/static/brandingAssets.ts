@@ -23,7 +23,15 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 /** Icons replace the built-in file of the same name, at the same URL. */
-const ICON_FILES = ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png'];
+const ICON_FILES = [
+  'favicon.ico',
+  'favicon.svg',
+  'apple-touch-icon.png',
+  // Named in the web app manifest (static/branding.ts)
+  'icon-192.png',
+  'icon-512.png',
+  'icon-maskable-512.png',
+];
 
 /** A logo may come in any of these formats; the first one found is used. */
 const LOGO_EXTENSIONS = ['.svg', '.webp', '.png'];
