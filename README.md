@@ -357,7 +357,7 @@ To enable:
 2. Set `TURNSTILE_SITE_KEY` in `.env`
 3. Set `TURNSTILE_SECRET` in `.env`
 
-When secrets are default/missing, Turnstile verification is skipped.
+When secrets are default/missing, Turnstile verification is skipped, and the page never contacts Cloudflare. With Turnstile enabled, the visitor's browser requests the Turnstile script only on the upload form, once a file is selected; opening a vault link, the terms or any other page does not.
 
 When Turnstile is enabled, the frontend enforces a **10-second CAPTCHA timeout** — if the widget does not verify within 10 seconds of file selection, the user is shown an error and must reload.
 
