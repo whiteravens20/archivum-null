@@ -28,15 +28,15 @@ export default function VaultConfig({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
-        <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">
+        <label className="block text-xs text-vault-muted mb-2 uppercase tracking-wider">
           Expires after
         </label>
         <select
           value={ttl}
           onChange={(e) => onTtlChange(Number(e.target.value))}
           disabled={disabled}
-          className="w-full bg-vault-secondary border border-gray-600 rounded px-3 py-2 text-sm
-                     text-gray-200 focus:border-vault-accent focus:outline-none
+          className="w-full bg-vault-secondary border border-vault-line rounded px-3 py-2 text-sm
+                     text-vault-text focus:border-vault-accent-ink focus:outline-none
                      disabled:opacity-50"
         >
           {TTL_OPTIONS.map((opt) => (
@@ -48,15 +48,15 @@ export default function VaultConfig({
       </div>
 
       <div>
-        <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">
+        <label className="block text-xs text-vault-muted mb-2 uppercase tracking-wider">
           Max downloads
         </label>
         <select
           value={maxDownloads}
           onChange={(e) => onMaxDownloadsChange(Number(e.target.value))}
           disabled={disabled}
-          className="w-full bg-vault-secondary border border-gray-600 rounded px-3 py-2 text-sm
-                     text-gray-200 focus:border-vault-accent focus:outline-none
+          className="w-full bg-vault-secondary border border-vault-line rounded px-3 py-2 text-sm
+                     text-vault-text focus:border-vault-accent-ink focus:outline-none
                      disabled:opacity-50"
         >
           {DOWNLOAD_OPTIONS.map((n) => (

@@ -200,17 +200,17 @@ export default function Home() {
         <div className="flex justify-center mb-4">
           <img src="/logo-symbol.webp" alt="" className="w-16 h-16 sm:w-20 sm:h-20" />
         </div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.05em] text-gray-100 mb-2 uppercase">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.05em] text-vault-heading mb-2 uppercase">
           Archivum Null
         </h1>
-        <p className="text-gray-400 text-sm tracking-[0.15em] uppercase font-mono">
+        <p className="text-vault-muted text-sm tracking-[0.15em] uppercase font-mono">
           Zero trust file relay
         </p>
         <div className="mt-4 flex justify-center gap-2 flex-wrap">
           {['No accounts', 'No cookies', 'No tracking', 'Zero-knowledge'].map((tag) => (
             <span
               key={tag}
-              className="text-[10px] uppercase tracking-widest text-gray-500 border border-gray-700 rounded px-2 py-0.5"
+              className="text-[10px] uppercase tracking-widest text-vault-subtle border border-vault-line-soft rounded px-2 py-0.5"
             >
               {tag}
             </span>
@@ -221,11 +221,11 @@ export default function Home() {
       {stage === 'done' && vaultUrl ? (
         /* Success state */
         <div className="space-y-6">
-          <div className="bg-vault-secondary/50 border border-green-500/20 rounded-lg p-6">
+          <div className="bg-vault-secondary/50 border border-vault-success-fill/20 rounded-lg p-6">
             <div className="text-center mb-6">
               <div className="text-3xl mb-2">◈</div>
-              <p className="text-green-400 font-medium">Vault created</p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-vault-success font-medium">Vault created</p>
+              <p className="text-xs text-vault-subtle mt-1">
                 File encrypted and uploaded successfully
               </p>
             </div>
@@ -234,7 +234,7 @@ export default function Home() {
 
           <button
             onClick={handleReset}
-            className="w-full py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+            className="w-full py-2 text-sm text-vault-muted hover:text-vault-text transition-colors"
           >
             Create another vault
           </button>
@@ -253,13 +253,13 @@ export default function Home() {
               {/* Selected file info */}
               <div className="bg-vault-secondary/50 rounded-lg p-4 flex items-center justify-between">
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-200 truncate">{file.name}</p>
-                  <p className="text-xs text-gray-500">{formatSize(file.size)}</p>
+                  <p className="text-sm text-vault-text truncate">{file.name}</p>
+                  <p className="text-xs text-vault-subtle">{formatSize(file.size)}</p>
                 </div>
                 {stage === 'idle' && (
                   <button
                     onClick={() => setFile(null)}
-                    className="text-gray-500 hover:text-gray-300 text-sm ml-4"
+                    className="text-vault-subtle hover:text-vault-text-soft text-sm ml-4"
                   >
                     ✕
                   </button>
@@ -284,7 +284,7 @@ export default function Home() {
               )}
 
               {captchaError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+                <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
                   {captchaError}
                 </div>
               )}
@@ -297,7 +297,7 @@ export default function Home() {
                   />
                   <button
                     onClick={handleCancel}
-                    className="w-full py-2 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg transition-colors"
+                    className="w-full py-2 text-sm text-vault-danger hover:text-vault-danger-strong border border-vault-danger-fill/30 rounded-lg transition-colors"
                   >
                     Cancel upload
                   </button>
@@ -305,7 +305,7 @@ export default function Home() {
               )}
 
               {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+                <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
                   {error}
                 </div>
               )}
@@ -313,7 +313,7 @@ export default function Home() {
               {stage === 'error' ? (
                 <button
                   onClick={handleReset}
-                  className="w-full py-3 text-sm text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg transition-colors"
+                  className="w-full py-3 text-sm text-vault-muted hover:text-vault-text border border-vault-line-soft rounded-lg transition-colors"
                 >
                   ← Return to main page
                 </button>
@@ -321,7 +321,7 @@ export default function Home() {
                 <button
                   onClick={handleUpload}
                   disabled={stage !== 'idle' || !file || (runtimeConfig.turnstileEnabled && !captchaVerified)}
-                  className="w-full py-3 bg-vault-accent text-vault-bg rounded-lg font-medium
+                  className="w-full py-3 bg-vault-accent text-vault-on-accent rounded-lg font-medium
                              hover:bg-vault-accent/90 transition-colors
                              disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -337,20 +337,20 @@ export default function Home() {
 
           {/* How it works */}
           <div className="mt-12 border-t border-vault-secondary pt-8">
-            <h2 className="text-xs uppercase tracking-widest text-gray-500 mb-4">
+            <h2 className="text-xs uppercase tracking-widest text-vault-subtle mb-4">
               How it works
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-gray-400">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-vault-muted">
               <div className="bg-vault-secondary/30 rounded p-4">
-                <div className="text-vault-accent font-mono text-lg mb-2">01</div>
+                <div className="text-vault-accent-ink font-mono text-lg mb-2">01</div>
                 <p>File is encrypted in your browser using AES-256-GCM before upload.</p>
               </div>
               <div className="bg-vault-secondary/30 rounded p-4">
-                <div className="text-vault-accent font-mono text-lg mb-2">02</div>
+                <div className="text-vault-accent-ink font-mono text-lg mb-2">02</div>
                 <p>Only the ciphertext is sent to the server. The key stays in the URL fragment.</p>
               </div>
               <div className="bg-vault-secondary/30 rounded p-4">
-                <div className="text-vault-accent font-mono text-lg mb-2">03</div>
+                <div className="text-vault-accent-ink font-mono text-lg mb-2">03</div>
                 <p>Vault auto-deletes after TTL expires or download limit is reached.</p>
               </div>
             </div>

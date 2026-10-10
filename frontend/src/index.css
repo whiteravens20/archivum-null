@@ -31,17 +31,50 @@
     U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* ─── Custom theme (TailwindCSS v4) ─── */
+/* ─── Theme tokens (TailwindCSS v4) ───
+ * Every colour in the UI is one of these roles; components do not name a palette
+ * shade directly. A theme is then another set of values for the same variables.
+ */
 @theme {
+  /* Surfaces: the page, and what sits on it (cards, inputs, tracks) */
   --color-vault-bg: #0B0F19;
   --color-vault-secondary: #1C2433;
+
+  /* Accent: `accent` fills, `on-accent` is what is drawn on a fill, and
+   * `accent-ink` is the accent used as text or as a line on the page */
   --color-vault-accent: #60A5FA;
+  --color-vault-on-accent: #0B0F19;
+  --color-vault-accent-ink: var(--color-vault-accent);
+
+  /* Text, from most to least prominent */
+  --color-vault-heading: oklch(96.7% 0.003 264.542);
+  --color-vault-text: oklch(92.8% 0.006 264.531);
+  --color-vault-text-soft: oklch(87.2% 0.01 258.338);
+  --color-vault-muted: oklch(70.7% 0.022 261.325);
+  --color-vault-subtle: oklch(55.1% 0.027 264.364);
+  --color-vault-faint: oklch(44.6% 0.03 256.802);
+
+  /* Lines: borders and dividers */
+  --color-vault-line-strong: oklch(70.7% 0.022 261.325);
+  --color-vault-line: oklch(44.6% 0.03 256.802);
+  --color-vault-line-soft: oklch(37.3% 0.034 259.733);
+
+  /* Status: the plain name is text, `-strong` its emphasised form, and `-fill`
+   * the base of tinted backgrounds and borders */
+  --color-vault-danger: oklch(70.4% 0.191 22.216);
+  --color-vault-danger-strong: oklch(80.8% 0.114 19.571);
+  --color-vault-danger-fill: oklch(63.7% 0.237 25.331);
+  --color-vault-warning: oklch(85.2% 0.199 91.936);
+  --color-vault-warning-strong: oklch(90.5% 0.182 98.111);
+  --color-vault-warning-fill: oklch(79.5% 0.184 86.047);
+  --color-vault-success: oklch(79.2% 0.209 151.711);
+  --color-vault-success-fill: oklch(72.3% 0.219 149.579);
 
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
 body {
-  @apply bg-vault-bg text-gray-200 font-mono min-h-screen;
+  @apply bg-vault-bg text-vault-text font-mono min-h-screen;
 }
 
 /* Custom scrollbar */
@@ -53,4 +86,30 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   @apply bg-vault-secondary rounded;
+}
+
+/* ─── Terms page typography ───
+ * The terms are operator-written Markdown, so any element the typography plugin
+ * styles can turn up. Its colour variables point at the theme tokens, which makes
+ * every one of those elements follow the theme.
+ */
+.prose {
+  --tw-prose-body: var(--color-vault-text-soft);
+  --tw-prose-headings: var(--color-vault-heading);
+  --tw-prose-lead: var(--color-vault-muted);
+  --tw-prose-links: var(--color-vault-accent-ink);
+  --tw-prose-bold: var(--color-vault-text-soft);
+  --tw-prose-counters: var(--color-vault-muted);
+  --tw-prose-bullets: var(--color-vault-faint);
+  --tw-prose-hr: var(--color-vault-line-soft);
+  --tw-prose-quotes: var(--color-vault-heading);
+  --tw-prose-quote-borders: var(--color-vault-line-soft);
+  --tw-prose-captions: var(--color-vault-muted);
+  --tw-prose-kbd: var(--color-vault-heading);
+  --tw-prose-kbd-shadows: color-mix(in oklab, var(--color-vault-heading) 10%, transparent);
+  --tw-prose-code: var(--color-vault-heading);
+  --tw-prose-pre-code: var(--color-vault-text-soft);
+  --tw-prose-pre-bg: rgb(0 0 0 / 50%);
+  --tw-prose-th-borders: var(--color-vault-line);
+  --tw-prose-td-borders: var(--color-vault-line-soft);
 }
