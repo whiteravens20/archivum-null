@@ -3,10 +3,12 @@ import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
 import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes, sanitizeFilename } from '../crypto/encrypt.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
+import { getBranding } from '../branding.ts';
 
 type Stage = 'loading' | 'ready' | 'downloading' | 'decrypting' | 'done' | 'error';
 
 export default function Vault() {
+  const { name } = getBranding();
   const { vaultId } = useParams<{ vaultId: string }>();
   const [info, setInfo] = useState<VaultInfo | null>(null);
   const [stage, setStage] = useState<Stage>(() => (vaultId ? 'loading' : 'error'));
@@ -133,7 +135,7 @@ export default function Vault() {
         <a href="/" className="inline-block">
           <img src="/logo-symbol.webp" alt="" className="w-12 h-12 mx-auto mb-2" />
           <h1 className="text-2xl font-bold tracking-[0.05em] text-vault-heading mb-1 uppercase">
-            Archivum Null
+            {name}
           </h1>
         </a>
         <p className="text-vault-subtle text-xs tracking-[0.15em] uppercase font-mono">

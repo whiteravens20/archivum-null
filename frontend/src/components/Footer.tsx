@@ -1,11 +1,16 @@
 import { Link } from 'react-router-dom';
+import { getBranding } from '../branding.ts';
 
 export default function Footer() {
+  const { name, tagline } = getBranding();
+  // The tagline closes the footer as a sentence, unless it brings its own punctuation.
+  const closing = /[\p{L}\p{N}]$/u.test(tagline) ? `${tagline}.` : tagline;
+
   return (
     <footer className="border-t border-vault-secondary/50 py-6 px-4 text-center text-xs text-vault-subtle">
       <div className="max-w-2xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <span className="tracking-wider uppercase">Archivum Null</span>
+          <span className="tracking-wider uppercase">{name}</span>
           <span className="text-vault-secondary/50">|</span>
 {/* If you like this project please keep "Powered by Archivum Null" or Source link in the footer ❤️ */}
           <a
@@ -24,7 +29,7 @@ export default function Footer() {
             Terms of Service
           </Link>
         </div>
-        <span>Zero trust file relay.</span>
+        <span>{closing}</span>
       </div>
     </footer>
   );

@@ -50,6 +50,10 @@ const envSchema = {
   UPDATE_CHECK_REPO: process.env.UPDATE_CHECK_REPO || 'whiteravens20/archivum-null',
   // Seconds between checks (default 6 h). Failures are retried sooner.
   UPDATE_CHECK_INTERVAL: Number(process.env.UPDATE_CHECK_INTERVAL || 21600),
+  // Branding — cosmetic. Checked and written into index.html at startup by
+  // static/branding.ts; see docs/BRANDING.md.
+  BRAND_NAME: process.env.BRAND_NAME?.trim() || 'Archivum Null',
+  BRAND_TAGLINE: process.env.BRAND_TAGLINE?.trim() || 'Zero trust file relay',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
   BIND_ADDRESS: process.env.BIND_ADDRESS || '0.0.0.0',
   PORT: Number(process.env.PORT || 3000),

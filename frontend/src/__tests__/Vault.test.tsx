@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { setBrandingTags } from '../test/brandingTags.js';
 
 // Mock crypto and API modules
 const mockImportKey = vi.fn();
@@ -103,6 +104,14 @@ describe('Vault page', () => {
     renderVault('x');
     expect(screen.getByText('Archivum Null')).toBeInTheDocument();
     expect(screen.getByText('Vault retrieval')).toBeInTheDocument();
+  });
+
+  it('should render the configured name', () => {
+    setBrandingTags({ 'application-name': 'Acme Drop' });
+    mockGetVaultInfo.mockReturnValue(new Promise(() => {}));
+    renderVault('x');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Acme Drop');
+    expect(screen.queryByText('Archivum Null')).not.toBeInTheDocument();
   });
 
   describe('filename mismatch warning', () => {

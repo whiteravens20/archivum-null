@@ -6,6 +6,7 @@ import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
 import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
+import { getBranding } from '../branding.ts';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
 const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
@@ -39,6 +40,7 @@ const DEFAULT_CONFIG: RuntimeConfig = {
 type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
 export default function Home() {
+  const { name, tagline } = getBranding();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
   const [file, setFile] = useState<File | null>(null);
   const [ttl, setTtl] = useState(DEFAULT_CONFIG.defaultTtl);
@@ -201,10 +203,10 @@ export default function Home() {
           <img src="/logo-symbol.webp" alt="" className="w-16 h-16 sm:w-20 sm:h-20" />
         </div>
         <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.05em] text-vault-heading mb-2 uppercase">
-          Archivum Null
+          {name}
         </h1>
         <p className="text-vault-muted text-sm tracking-[0.15em] uppercase font-mono">
-          Zero trust file relay
+          {tagline}
         </p>
         <div className="mt-4 flex justify-center gap-2 flex-wrap">
           {['No accounts', 'No cookies', 'No tracking', 'Zero-knowledge'].map((tag) => (

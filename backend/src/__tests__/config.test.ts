@@ -86,6 +86,29 @@ describe('config', () => {
     const { config } = await import('../config.js');
     expect(config.RATE_LIMIT_ADMIN_MAX).toBe(10);
   });
+
+  it('should default the brand name and tagline to the built-in ones', async () => {
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.BRAND_NAME).toBe('Archivum Null');
+    expect(config.BRAND_TAGLINE).toBe('Zero trust file relay');
+  });
+
+  it('should read the brand name and tagline from env, trimmed', async () => {
+    vi.stubEnv('BRAND_NAME', '  Acme Drop ');
+    vi.stubEnv('BRAND_TAGLINE', ' Files, sealed ');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.BRAND_NAME).toBe('Acme Drop');
+    expect(config.BRAND_TAGLINE).toBe('Files, sealed');
+  });
+
+  it('should treat a blank brand name as not set', async () => {
+    vi.stubEnv('BRAND_NAME', '   ');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.BRAND_NAME).toBe('Archivum Null');
+  });
 });
 
 describe('validateConfig', () => {

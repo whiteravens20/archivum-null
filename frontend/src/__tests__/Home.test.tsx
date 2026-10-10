@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { setBrandingTags } from '../test/brandingTags.js';
 
 // Mock heavy dependencies so Home renders without them
 vi.mock('../crypto/encrypt.js', () => ({
@@ -55,6 +56,31 @@ describe('Home', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('Zero trust file relay')).toBeInTheDocument();
+  });
+
+  it('should render the configured name and tagline', async () => {
+    setBrandingTags({ 'application-name': 'Acme Drop', 'brand-tagline': 'Files, sealed' });
+    const { default: Home } = await import('../pages/Home.js');
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Acme Drop');
+    expect(screen.getByText('Files, sealed')).toBeInTheDocument();
+    expect(screen.queryByText('Archivum Null')).not.toBeInTheDocument();
+  });
+
+  it('should render markup in a configured name as text', async () => {
+    setBrandingTags({ 'application-name': '<img src=x onerror=alert(1)>' });
+    const { default: Home } = await import('../pages/Home.js');
+    const { container } = render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('<img src=x onerror=alert(1)>');
+    expect(container.querySelector('h1 img')).toBeNull();
   });
 
   it('should render the privacy tags', async () => {

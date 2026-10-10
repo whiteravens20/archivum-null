@@ -11,6 +11,7 @@ import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
+import { applyBranding, parseBranding } from './static/branding.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -38,6 +39,7 @@ export function serializeRequest(request: FastifyRequest) {
  */
 export async function buildApp(): Promise<FastifyInstance> {
   validateConfig();
+  const branding = parseBranding({ name: config.BRAND_NAME, tagline: config.BRAND_TAGLINE });
 
   const app = Fastify({
     logger: {
@@ -130,11 +132,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   const assetCloak = fs.existsSync(frontendDist) ? buildAssetCloak(frontendDist) : null;
 
   if (assetCloak) {
+    // Branding goes on top of the cloak's output, once, here — the request path
+    // below only ever sends a finished string.
+    const indexHtml = applyBranding(assetCloak.indexHtml, branding);
+
     const sendIndex = (reply: FastifyReply) =>
       reply
         .header('Cache-Control', 'no-store')
         .type('text/html; charset=utf-8')
-        .send(assetCloak.indexHtml);
+        .send(indexHtml);
 
     // Cloaked assets. The name changes on every restart, so the bytes behind a given
     // URL never do — safe to cache immutably for as long as the client likes.
