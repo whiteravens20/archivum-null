@@ -10,7 +10,7 @@ export default function NotFound() {
       </p>
       <Link
         to="/"
-        className="inline-block px-5 py-2 rounded bg-vault-accent text-white text-sm font-medium hover:opacity-90 transition-opacity"
+        className="inline-block px-5 py-2 rounded bg-vault-accent text-vault-on-accent text-sm font-medium hover:opacity-90 transition-opacity"
       >
         ← Back to Home
       </Link>
