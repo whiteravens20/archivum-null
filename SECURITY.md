@@ -81,6 +81,7 @@ from becoming an attack surface:
 ### Anti-Abuse
 
 - [x] Cloudflare Turnstile integration (optional)
+- [x] The Turnstile script is requested by the upload form at the moment a challenge is shown, and only when Turnstile is enabled — the page itself references no other origin, so an instance without Turnstile never makes a visitor's browser contact a third party, and one with it does not do so for visitors who only download
 - [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
 - [x] Turnstile API call has a 10-second timeout (`AbortSignal.timeout`) — prevents hung workers on Cloudflare degradation; returns HTTP 504 on timeout
 - [x] Three-tier in-memory per-IP rate limiting:
