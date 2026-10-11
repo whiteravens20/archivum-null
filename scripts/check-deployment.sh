@@ -6,8 +6,9 @@
 # container cannot open connections of its own.
 #
 # The last part is tested, not read off the rules: the script makes the container
-# try a connection to a public address and one to this host. With the egress rules
-# in place neither leaves the container's bridge.
+# try a connection to a public address, one to this host and one to the reverse
+# proxy named in TRUST_PROXY. With the egress rules in place none of them leaves the
+# container's bridge.
 #
 # Usage:
 #   sudo ./scripts/check-deployment.sh [--tunnel-iface wg0] [--port 3000]
@@ -84,6 +85,7 @@ setting() {
   printf '%s' "$value"
 }
 HOST_BIND_ADDRESS=$(setting HOST_BIND_ADDRESS)
+TRUST_PROXY=$(setting TRUST_PROXY)
 
 # ── Check 1: Container is running ─────────────────────────────────────────────
 header "1. Container status"
@@ -314,6 +316,37 @@ else
       fail "The container can reach this host ($GATEWAY:22: $HOST_RESULT) — whatever the host listens on is exposed to it"
     fi
   fi
+
+  # The reverse proxy opens connections to the app, never the other way round. Its
+  # address is the one in TRUST_PROXY. It sits on the tunnel, the one network that a
+  # VPN client's own firewall rules are most likely to let traffic into.
+  # A proxy inside the container's own network is left out: what stays on a bridge
+  # is not routed, and no rule on this host could cut it off.
+  ip4_number() { local IFS=. a b c d; read -r a b c d <<< "$1"; echo $(( (a << 24) | (b << 16) | (c << 8) | d )); }
+  in_own_network() {
+    local net prefix mask
+    for net in $(inspect '{{range .NetworkSettings.Networks}}{{.IPAddress}}/{{.IPPrefixLen}} {{end}}'); do
+      prefix="${net#*/}"
+      [[ "${net%/*}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ && "$prefix" =~ ^[0-9]+$ ]] || continue
+      mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+      [[ $(( $(ip4_number "$1") & mask )) -eq $(( $(ip4_number "${net%/*}") & mask )) ]] && return 0
+    done
+    return 1
+  }
+  for PROXY in ${TRUST_PROXY//,/ }; do
+    [[ "$PROXY" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || continue
+    in_own_network "$PROXY" && continue
+    REACHED=""
+    for PROXY_PORT in 443 80 22; do
+      PROXY_RESULT=$(try "$PROXY" "$PROXY_PORT")
+      if ! blocked "$PROXY_RESULT"; then REACHED="$PROXY_PORT: $PROXY_RESULT"; break; fi
+    done
+    if [[ -z "$REACHED" ]]; then
+      pass "The container cannot open a connection to the reverse proxy ($PROXY, ports 443, 80 and 22)"
+    else
+      fail "The container can reach the reverse proxy ($PROXY:$REACHED) — and with it the network the tunnel leads to"
+    fi
+  done
 fi
 
 # ── Check 8: LAN reachability test ────────────────────────────────────────────

@@ -764,7 +764,7 @@ sudo bash scripts/setup-firewall.sh --mode docker --turnstile yes --tunnel-iface
   --allow 140.82.112.0/20:443 --persist
 ```
 
-**Verify.** `sudo ./scripts/check-deployment.sh` reads the rules and then tests them: it has the container try a connection to the internet and one to the host, and fails if either gets through.
+**Verify.** `sudo ./scripts/check-deployment.sh` reads the rules and then tests them: it has the container try a connection to the internet, one to the host and one to the reverse proxy named in `TRUST_PROXY`, and fails if any gets through. Run it again after you install or update a VPN client or another firewall on the host.
 
 ---
 
