@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function createMockRequest(authorization?: string) {
+function createMockRequest(authorization?: string, ip = '203.0.113.5') {
   return {
     headers: authorization ? { authorization } : {},
+    ip,
   } as any;
 }
 
@@ -119,6 +120,19 @@ describe('basicAuth', () => {
     await freshAuth(req, reply);
 
     expect(reply.statusCode).toBe(401);
+  });
+
+  it('should reject credentials that differ from the expected ones only in length', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret123');
+    vi.stubEnv('ADMIN_USER', 'admin');
+    vi.resetModules();
+    const { basicAuth: freshAuth } = await import('../middleware/basicAuth.js');
+
+    for (const [user, pass] of [['admin', 'secret12'], ['admin', 'secret1234'], ['admi', 'secret123'], ['admin', '']]) {
+      const reply = createMockReply();
+      await freshAuth(createMockRequest(encodeBasicAuth(user, pass)), reply);
+      expect(reply.statusCode).toBe(401);
+    }
   });
 
   it('should reject CHANGE_ME_IMMEDIATELY password', async () => {
