@@ -101,8 +101,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Multipart (streaming)
-  // The per-request file size limit must accommodate both single-shot uploads
-  // (up to MAX_FILE_SIZE) and individual chunk requests (up to CHUNK_SIZE).
+  // One upload request carries at most one chunk, on the single-request route and on
+  // the chunk route alike; the 64 KiB on top leave room for the encryption overhead
+  // of a chunk. The parser does not fail a file part over the limit, it cuts it off:
+  // routes/vault.ts turns that into a 413.
   await app.register(multipart, {
     limits: {
       fileSize: config.CHUNK_SIZE + 1024 * 64,
