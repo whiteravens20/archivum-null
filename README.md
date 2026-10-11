@@ -217,7 +217,9 @@ sudo bash scripts/setup-firewall.sh
 
 Running Archivum Null as a Proxmox LXC container is a lightweight alternative to a full VM. No Docker is needed — Node.js runs directly inside the LXC.
 
-For full instructions covering container creation, manual installation, the Community Scripts quick installer, systemd service hardening, Proxmox Firewall egress rules, and SDN/VLAN isolation, see **[docs/PROXMOX.md](docs/PROXMOX.md)**.
+The installer creates an unprivileged container, installs the newest release in it, and runs the app as its own user under a sandboxed systemd unit. It asks for the address of your reverse proxy and writes a Proxmox firewall file that lets only that address in and drops what the container sends out.
+
+For full instructions covering the installer, a way to check the script before you run it as root, manual installation, the service unit, updating, the Proxmox firewall, and SDN/VLAN isolation, see **[docs/PROXMOX.md](docs/PROXMOX.md)**.
 
 **Quick start (Proxmox host shell):**
 
@@ -225,7 +227,7 @@ For full instructions covering container creation, manual installation, the Comm
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
 ```
 
-**Update existing LXC:**
+**Update existing LXC** to the newest release. An install made by an earlier version of the installer, which ran the app as root, is migrated by the same command:
 
 ```bash
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)" -- --update <vmid>

@@ -5,8 +5,8 @@ Running Archivum Null as a Proxmox LXC container is a lightweight alternative to
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
-- [Creating the LXC Container](#creating-the-lxc-container)
-- [Quick Installer (Community Scripts style)](#quick-installer-community-scripts-style)
+- [Quick Installer](#quick-installer)
+  - [Checking what you run](#checking-what-you-run)
 - [Manual Installation](#manual-installation)
 - [systemd Service](#systemd-service)
 - [Updating](#updating)
@@ -17,25 +17,78 @@ Running Archivum Null as a Proxmox LXC container is a lightweight alternative to
 
 ## Prerequisites
 
-- Proxmox VE 8.x (7.x should work but is untested)
-- A Debian 12 (bookworm) or Ubuntu 24.04 CT template downloaded in Proxmox
-- At least 512 MB RAM and 2 GB root disk assigned to the container
+- Proxmox VE 8 or 9. The installer is tested on 9.2.
+- The Debian 13 (trixie) CT template; the installer downloads it when it is missing.
+- RAM: the installer's default of 2 GB is sized for building the app. The running service uses a small fraction of it.
+- Root disk: 4 GB or more; the installer's default is 10 GB. Six tenths of it become the storage quota for the vaults.
 
 ---
 
-## Creating the LXC Container
+## Quick Installer
 
-Run on the **Proxmox host shell** (`pve` node → Shell):
+One command on the **Proxmox host shell** creates the container and installs the newest release in it:
 
 ```bash
-# Replace <vmid> with a free CT ID (e.g. 200), and adjust storage/bridge names
-pct create <vmid> local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst \
+bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
+```
+
+What it does, in order. **Review the script before running it.**
+
+1. Asks for the VMID, storage, bridge, size, addressing, an optional VPN client, and the address your reverse proxy connects from.
+2. Creates an unprivileged LXC from the Debian 13 template with `nesting=1`, which Debian 13's systemd needs.
+3. Inside it: installs Node.js 24 from NodeSource's signed apt repository, creates the system user `archivum`, clones the **newest release tag**, and builds it as a throwaway user that is deleted again.
+4. Writes `/opt/archivum-null/.env` from the example, readable by root only, with the storage path, a storage quota of six tenths of the disk, the installed version, and `TRUST_PROXY` if you gave the proxy's address.
+5. Installs the sandboxed [systemd unit](#systemd-service). The app runs as `archivum`, owns its vault directory and nothing else.
+6. Writes the container's [Proxmox firewall file](#egress-containment--proxmox-firewall): outbound dropped, inbound from the proxy only.
+
+Then set `ADMIN_PASSWORD` and start the service:
+
+```bash
+pct enter <vmid>
+nano /opt/archivum-null/.env   # set ADMIN_PASSWORD=<strong-password>
+systemctl start archivum-null
+curl -s http://127.0.0.1:3000/api/health
+```
+
+The admin panel is at `/admin` of the address your reverse proxy serves. Do not log in at `http://<container-ip>:3000/admin` from the LAN: the password would cross the network unencrypted.
+
+Every prompt can be answered ahead of time through the environment, for an unattended run; the head of the script lists the variables:
+
+```bash
+VMID=200 STORAGE=local-lvm CT_DISK=20 NET_IP=dhcp VPN_SW=none CT_FIREWALL=yes PROXY_IP=192.168.1.10 \
+  bash install-lxc.sh
+```
+
+### Checking what you run
+
+The one-liner runs whatever `main` holds at that moment, as root on your hypervisor. Every release also ships as a tarball with a signed build provenance, so you can run a copy you have checked. On a machine with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+VERSION=v3.2.0   # the release you want
+gh release download "$VERSION" --repo whiteravens20/archivum-null --pattern "archivum-null-$VERSION.tar.gz"
+gh attestation verify "archivum-null-$VERSION.tar.gz" --repo whiteravens20/archivum-null
+tar -xzf "archivum-null-$VERSION.tar.gz" scripts/install-lxc.sh
+scp scripts/install-lxc.sh root@<proxmox-host>:/root/
+```
+
+Then, on the Proxmox host, `bash /root/install-lxc.sh`. `gh attestation verify` exits with an error when the file was not built by this repository's release workflow. What this covers is the script that runs on the host. The app itself is still cloned from its release tag inside the container.
+
+---
+
+## Manual Installation
+
+The same result by hand. Create the container on the **Proxmox host shell**:
+
+```bash
+# Replace <vmid> with a free CT ID (e.g. 200), and adjust the template, storage and bridge names
+pct create <vmid> local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst \
   --unprivileged 1 \
+  --features nesting=1 \
   --hostname archivum-null \
-  --memory 512 --swap 256 \
-  --cores 1 \
+  --memory 2048 --swap 256 \
+  --cores 2 \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp,firewall=1 \
-  --rootfs local-lvm:4 \
+  --rootfs local-lvm:10 \
   --onboot 1 \
   --start 1
 
@@ -44,81 +97,62 @@ pct enter <vmid>
 
 > **Tip:** If you use a dedicated VLAN/SDN VNET for the app, specify `bridge=<your-vnet>,tag=<vlan-id>` in `--net0`. This is the strongest isolation option — see [Proxmox SDN / VLAN Isolation](#proxmox-sdn--vlan-isolation) below.
 
----
-
-## Quick Installer (Community Scripts style)
-
-The [Proxmox Community Scripts](https://community-scripts.github.io/ProxmoxVE/) project provides one-liner LXC installers. Archivum Null is not yet in the official repository. Until an official script is merged, you can use the included helper directly from the **Proxmox host shell**:
+Then, **inside the container**:
 
 ```bash
-bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
-```
+apt update && apt install -y --no-install-recommends curl git ca-certificates
 
-> The `install-lxc.sh` script follows the Community Scripts conventions: it finds the next free VMID, downloads the Debian 13 template if needed, creates an unprivileged LXC (`keyctl=1,nesting=1` — nesting is required by Debian 13's systemd), installs Node.js 24, clones the repo, builds the project, creates a systemd service, and writes the Proxmox Firewall egress config. **Review the script before running it.**
+# Node.js 24 from NodeSource's apt repository, checked by apt against the key below
+install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /etc/apt/keyrings/nodesource.asc
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_24.x nodistro main" \
+  > /etc/apt/sources.list.d/nodesource.list
+apt update && apt install -y --no-install-recommends nodejs
 
-To update an existing LXC installed this way:
+# The app's own user. No home directory is created: the clone below needs the path empty.
+useradd --system --user-group --home-dir /opt/archivum-null --no-create-home --shell /usr/sbin/nologin archivum
 
-```bash
-bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)" -- --update <vmid>
-```
-
-After the installer finishes, set `ADMIN_PASSWORD` before starting the service:
-
-```bash
-pct enter <vmid>
-nano /opt/archivum-null/.env   # set ADMIN_PASSWORD=<strong-password>
-systemctl start archivum-null
-```
-
----
-
-## Manual Installation
-
-Run **inside the container** (`pct enter <vmid>` or via console):
-
-```bash
-apt update && apt install -y curl git wget
-
-# Node.js 24 (official NodeSource repo)
-curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-apt install -y nodejs
-
-# Dedicated system user (mirrors Docker UID 1001)
-useradd -r -u 1001 -s /usr/sbin/nologin -m -d /opt/archivum-null archivum
-
-# Clone and build
-git clone https://github.com/whiteravens20/archivum-null.git /opt/archivum-null
+# The newest release, not the development branch
+REPO=https://github.com/whiteravens20/archivum-null.git
+TAG=$(git ls-remote --tags --refs "$REPO" 'v[0-9]*' | awk -F/ '{ print $NF }' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+git clone --depth 1 --branch "$TAG" "$REPO" /opt/archivum-null
 cd /opt/archivum-null
 
-# Configure environment
-cp .env.example .env
-# Edit mandatory values:
+# Configuration, readable by root only. systemd reads it before it drops privileges.
+install -m 0600 .env.example .env
+sed -i "s|^STORAGE_PATH=.*|STORAGE_PATH=/opt/archivum-null/data/vaults|" .env
+# The version. Docker images get it from the release tag; a source install has to
+# say so itself, or the admin panel can only report "unknown".
+sed -i -E "s|^#? ?APP_VERSION=.*|APP_VERSION=$TAG|" .env
+# Edit by hand:
 #   ADMIN_PASSWORD=<strong-password>
-#   BIND_ADDRESS=0.0.0.0   (container has its own network namespace — this is fine)
-#   PORT=3000
-#   STORAGE_PATH=/opt/archivum-null/data/vaults
+#   MAX_TOTAL_STORAGE=<bytes the vaults may use; leave room on the disk>
+#   TRUST_PROXY=<the address your reverse proxy connects from>
 nano .env
 
-# Stamp the version. Docker images get this from the release tag; a source install
-# has to say so itself, or the admin panel can only report "unknown".
-echo "APP_VERSION=$(git describe --tags --abbrev=0)" >> .env
+# Build as a user that exists for the build only, so that no build tool runs as root
+useradd --system --user-group --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin archivum-build
+BUILD_HOME=$(mktemp -d)
+chown -R archivum-build: backend frontend "$BUILD_HOME"
+build() { runuser -u archivum-build -- env HOME="$BUILD_HOME" "$@"; }
+(cd backend  && build npm ci --ignore-scripts && build npm run build && build npm prune --omit=dev --ignore-scripts)
+(cd frontend && build npm ci --ignore-scripts && build npm run build && rm -rf node_modules)
+chown -R root:root backend frontend
+rm -rf "$BUILD_HOME"
+userdel archivum-build
 
-# Build backend
-cd backend && npm ci --ignore-scripts && npm run build && npm prune --omit=dev && cd ..
-
-# Build frontend (VITE_ vars must be set in .env before this step)
-cd frontend && npm ci --ignore-scripts && npm run build && cd ..
-
-# Data directory owned by app user
-mkdir -p /opt/archivum-null/data/vaults
-chown -R archivum:archivum /opt/archivum-null
+# The vault directory is the one thing the app owns
+mkdir -p data/vaults
+chown -R archivum:archivum data
 ```
+
+The build reads no variable from `.env`; everything in that file takes effect when the service starts.
 
 ---
 
 ## systemd Service
 
-Create `/etc/systemd/system/archivum-null.service`:
+Create `/etc/systemd/system/archivum-null.service`. This is the unit the installer writes:
 
 ```ini
 [Unit]
@@ -131,18 +165,45 @@ User=archivum
 Group=archivum
 WorkingDirectory=/opt/archivum-null
 EnvironmentFile=/opt/archivum-null/.env
-ExecStart=/usr/bin/node backend/dist/index.js
+# Node's permission model: no child process, worker thread, native addon, WASI or
+# inspector. File access is left to the directives below.
+ExecStart=/usr/bin/node --permission --allow-fs-read=* --allow-fs-write=* backend/dist/index.js
 Restart=on-failure
 RestartSec=5
+UMask=0077
 
-# Hardening
+# No privileges, and no way to gain any
 NoNewPrivileges=yes
-PrivateTmp=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+
+# Filesystem: read-only except the vault directory
 ProtectSystem=strict
 ReadWritePaths=/opt/archivum-null/data/vaults
 ProtectHome=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProcSubset=pid
+
+# Kernel, control groups, clock, host name
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# Namespaces, address families, system calls
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
@@ -154,69 +215,82 @@ systemctl enable --now archivum-null
 systemctl status archivum-null
 ```
 
+What the unit takes away, beyond running the app as `archivum`: every capability, the right to gain any, write access to everything but the vault directory, the view of other processes, device nodes, kernel tunables and modules, new namespaces, address families other than IP, local sockets and netlink, and system calls outside the set a network service uses. `systemd-analyze security archivum-null` rates the result; expect a score below 2.
+
+Keep your own changes in a drop-in (`systemctl edit archivum-null`): the installer's `--update` writes the unit again.
+
 ---
 
 ## Updating
 
+On the **Proxmox host**:
+
 ```bash
-# On the Proxmox host — snapshot first (optional but recommended):
-pct snapshot <vmid> pre-update --description "before archivum-null update $(date -I)"
-
-# Inside the container:
-pct enter <vmid>
-
-cd /opt/archivum-null
-systemctl stop archivum-null
-
-git pull
-
-cd backend && npm ci --ignore-scripts && npm run build && npm prune --omit=dev && cd ..
-cd frontend && npm ci --ignore-scripts && npm run build && cd ..
-
-systemctl start archivum-null
-systemctl status archivum-null
+bash install-lxc.sh --update <vmid>
+# or, without a local copy:
+bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)" -- --update <vmid>
 ```
 
-> To roll back: `pct rollback <vmid> pre-update` on the Proxmox host.
+It offers a snapshot, stops the service, checks out the newest release tag, rebuilds, and starts the service again. Your `.env`, your `TOS.md` and the vaults are kept. A second run with nothing new does nothing.
+
+**An install made by an earlier version of the installer is migrated by the same command.** Those ran the app as root, from the development branch, with a world-readable `.env`. After the update the app runs as `archivum` under the sandboxed unit, from a release tag, and the vaults are still there. Two things the update leaves to you, and tells you about: a storage quota, if `MAX_TOTAL_STORAGE` is still `0`, and the inbound side of the firewall file.
+
+**The update needs outbound access.** It fetches the release and its dependencies from inside the container. If the firewall below drops the container's outbound traffic, the update stops before it touches anything and says so. Set `policy_out: ACCEPT` in `/etc/pve/firewall/<vmid>.fw`, run the update, and set it back to `DROP`.
+
+By hand, inside the container, it is the manual installation again from the clone onwards, with `git fetch --depth 1 origin "$TAG" && git checkout --force --detach FETCH_HEAD` in place of the clone, between `systemctl stop archivum-null` and `systemctl start archivum-null`.
+
+> To roll back: `pct rollback <vmid> <snapshot-name>` on the Proxmox host. `pct listsnapshot <vmid>` lists the names.
+
+The update does not upgrade the container's own packages, Node.js included. Do that as on any Debian system: `apt update && apt upgrade`, with the same temporary `policy_out: ACCEPT`.
 
 ---
 
 ## Egress Containment — Proxmox Firewall
 
-Proxmox has a built-in firewall controllable from the GUI (**Datacenter → `<node>` → CT `<vmid>` → Firewall**) or by editing the container's firewall config file directly on the host.
+Proxmox has a built-in firewall controllable from the GUI (**Datacenter → `<node>` → CT `<vmid>` → Firewall**) or by editing the container's firewall config file directly on the host. It filters both directions, and both matter here: outbound, so that a compromised app cannot reach your LAN or the internet; inbound, so that only your reverse proxy can talk to the app and its admin API, and not every host on the bridge.
 
-**Step 1 — enable the firewall and set `policy_out` to DROP:**
-
-Edit `/etc/pve/firewall/<vmid>.fw` on the **Proxmox host**:
+`/etc/pve/firewall/<vmid>.fw` on the **Proxmox host**, as the installer writes it:
 
 ```ini
 [OPTIONS]
 enable: 1
-policy_in: ACCEPT
-policy_out: DROP    # block all outbound by default
+policy_in: DROP     # nothing reaches the container except what the rules below allow
+policy_out: DROP    # the container opens no connection of its own
+dhcp: 1             # only if the container gets its address by DHCP: lets the lease be renewed
 
 [RULES]
-# Return traffic for existing inbound connections (download/upload responses)
-# is allowed automatically — pve-firewall inserts a RELATED,ESTABLISHED accept
-# at the top of every guest chain. Do not add an explicit rule for it: the
-# ruleset format does not parse raw iptables options such as '-m conntrack'.
+# The reverse proxy, the one host that may reach the app
+IN ACCEPT -source <proxy-address> -proto tcp -dport 3000
 
-# --- If Turnstile IS enabled: allow only Cloudflare challenge endpoints ---
-OUT ACCEPT -dest 104.16.0.0/13 -proto tcp -dport 443
-OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
+# Return traffic for existing connections is allowed automatically — pve-firewall
+# inserts a RELATED,ESTABLISHED accept at the top of every guest chain. Do not add
+# an explicit rule for it: the ruleset format does not parse raw iptables options
+# such as '-m conntrack'.
 
-# --- DNS (required for Turnstile hostname lookup on startup) ---
+# --- If Turnstile IS enabled: Cloudflare's challenge endpoints, and name resolution ---
+# OUT ACCEPT -dest 104.16.0.0/13 -proto tcp -dport 443
+# OUT ACCEPT -dest 104.24.0.0/14 -proto tcp -dport 443
 # OUT ACCEPT -proto udp -dport 53
 # OUT ACCEPT -proto tcp -dport 53
 ```
 
-> If Turnstile is **disabled**, omit the Cloudflare and DNS ACCEPT lines — `policy_out: DROP` alone is sufficient.
+- **`<proxy-address>`** is the address the proxy connects from, as the container sees it. Set the same value as `TRUST_PROXY` in `.env`. If the tunnel to your proxy ends inside the container (WireGuard, Tailscale), the app's traffic arrives through the tunnel and no `IN` rule is needed at all; set `BIND_ADDRESS` in `.env` to the container's tunnel address, so that the app does not listen on the bridge in the first place.
+- **Turnstile** needs the four `OUT` lines. The app resolves `challenges.cloudflare.com` whenever it verifies a token, not once at startup, so the DNS lines are as necessary as the Cloudflare ones.
+- **A VPN client in the container** needs its own `OUT` lines; the installer adds them for the client you pick. [HARDENING.md](HARDENING.md#egress-containment-with-tailscale) lists the ports for Tailscale.
 
-Changes take effect immediately (no reload required). Verify in the Proxmox GUI under **CT → Firewall → Log**.
+Changes take effect within seconds, without a reload. Verify in the Proxmox GUI under **CT → Firewall → Log**.
 
-> **Important:** per-container rules only apply while the **datacenter-level firewall** is enabled (`pve-firewall status` must not report `disabled`). Enable it under **Datacenter → Firewall → Options** — reviewing the host rules first so you don't lock yourself out — or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
+> **Important:** per-container rules only apply while the **datacenter-level firewall** is enabled (`pve-firewall status` must not report `disabled`). Until then the file above does nothing, in either direction. Enable it under **Datacenter → Firewall → Options** — reviewing the host rules first so you don't lock yourself out — or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`. The installer warns when it finishes against a disabled datacenter firewall.
 
----
+**If you cannot enable the datacenter firewall**, contain the app from inside the container. The rules of [`setup-firewall.sh`](HARDENING.md#bare-metal--systemd) apply to the packets of the `archivum` user, which works in an LXC as it does on a bare-metal host:
+
+```bash
+# Inside the container, from /opt/archivum-null
+apt install -y nftables
+bash scripts/setup-firewall.sh --mode bare-metal --turnstile no --persist
+```
+
+This covers the outbound side. It restricts the inbound side only by interface (`--tunnel-iface`), which helps when a tunnel ends inside the container and not otherwise.
 
 > **Do not add iptables rules for the container's `veth` to the host's `FORWARD` chain.** An earlier version of this guide did. A guest's traffic is bridged, and the host's iptables either does not see it at all or sees it as coming from the bridge, never from `veth<vmid>i0`, so such rules match nothing. The Proxmox firewall above is what filters a guest.
 

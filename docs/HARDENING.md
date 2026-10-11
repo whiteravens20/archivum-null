@@ -519,7 +519,7 @@ The service is now reachable only from devices in the same tailnet.
 - **Disable subnet routing** unless you explicitly need it — it can expose LAN subnets to other tailnet nodes.
 - **Enable MagicDNS** for stable hostnames: set `BIND_ADDRESS` to the MagicDNS name as well as the IP.
 - **Key expiry:** set short key expiry for the Archivum Null node (e.g. 90 days) and rotate regularly.
-- For Proxmox LXC: run `tailscale up` inside the container or on the host and use the Tailscale IP as `HOST_BIND_ADDRESS`.
+- For Proxmox LXC: run `tailscale up` inside the container and set `BIND_ADDRESS` in `.env` to the container's Tailscale IP, so that the app listens on the tunnel only. (`HOST_BIND_ADDRESS` is for Docker's port publishing and has no effect there.)
 
 ### Egress containment with Tailscale
 
@@ -542,15 +542,19 @@ The service is now reachable only from devices in the same tailnet.
 
 The rules are **port-based, not address-based**. DERP is a large and changing relay fleet, so there is no stable IP range to allow the way there is for Cloudflare.
 
-**Proxmox LXC** — `/etc/pve/firewall/<VMID>.fw`. This is exactly what [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) writes when you pick Tailscale and let it configure the firewall:
+**Proxmox LXC** — `/etc/pve/firewall/<VMID>.fw`. This is what [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) writes when you pick Tailscale, give it your proxy's address and let it configure the firewall:
 
 ```ini
 [OPTIONS]
 enable: 1
-policy_in: ACCEPT
+policy_in: DROP
 policy_out: DROP
+dhcp: 1
 
 [RULES]
+# The reverse proxy, the one host that may reach the app
+IN ACCEPT -source <proxy-address> -proto tcp -dport 3000
+
 # Tailscale outbound (control plane + DERP over 443, STUN, WireGuard)
 OUT ACCEPT -proto tcp -dport 443
 OUT ACCEPT -proto udp -dport 3478
