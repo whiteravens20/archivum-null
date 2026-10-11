@@ -151,6 +151,8 @@ HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab Wire
 # Uncomment and fill in if using Cloudflare Turnstile:
 # TURNSTILE_SECRET=<your-cf-secret>
 # TURNSTILE_SITE_KEY=<your-cf-site-key>
+# Set in step 7, once the reverse proxy is in place:
+# TRUST_PROXY=<address-the-proxy-connects-from>
 ```
 
 **6. Start** the production container (pull prebuilt image — no local build needed).
@@ -161,7 +163,7 @@ docker compose pull && docker compose up -d
 
 > To build locally from source instead: `docker compose up -d --build`
 
-**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
+**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP. Then set `TRUST_PROXY` in `.env` to the address the proxy connects from, as the security note under that config describes, and run `docker compose up -d` again. Until it is set, the app ignores the proxy's `X-Forwarded-For` and all visitors share one rate-limit bucket.
 
 **8. Validate the deployment posture** on the homelab host.
 
