@@ -27,6 +27,8 @@ services:
       - ADMIN_PASSWORD=quickstart-change-me
       - HOST_BIND_ADDRESS=127.0.0.1
       - MAX_FILE_SIZE=104857600
+      # 1 GiB for all vaults together, so a trial run cannot fill the disk
+      - MAX_TOTAL_STORAGE=1073741824
       - CHUNK_SIZE=10485760
       - DEFAULT_TTL=86400
       - MAX_TTL=604800

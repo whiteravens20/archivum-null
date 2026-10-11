@@ -184,7 +184,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 | `HOST_BIND_ADDRESS` | `127.0.0.1` | Docker host interface for the published port. Set to your tunnel/WireGuard IP in production — never `0.0.0.0` on a public host. |
 | `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) |
 | `DEFAULT_TTL` / `MAX_TTL` | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d) |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit |
+| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit. Unlimited means uploads can fill the disk the vaults are on, which with Docker is the host's own. `.env.example` sets 10 GiB. |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
 | `TRUST_PROXY` | `loopback` | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
 | `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
@@ -454,6 +454,7 @@ Before exposing this service publicly:
 - [ ] Add your contact information to TOS.md (`Replace with your contact information`)
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
+- [ ] Set `MAX_TOTAL_STORAGE` to what the disk under the vaults can spare — without it, uploads are limited only by that disk
 - [ ] Apply egress containment rules — Option A (`internal: true`) if Turnstile is off, Option B (FORWARD rules) if Turnstile is on (see [Egress Containment](docs/HARDENING.md#egress-containment))
 - [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
