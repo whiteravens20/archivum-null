@@ -66,7 +66,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Never `true` (trust all) and never a hop count — neither checks who is connecting,
     // so a client reaching the port directly could spoof its IP past rate limiting.
     trustProxy: [...config.TRUST_PROXY],
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64,
+    // Small by default: the JSON bodies this API takes are a few hundred bytes. The
+    // two upload routes carry a limit of their own (routes/vault.ts).
+    bodyLimit: 16 * 1024,
   });
 
   // Security headers
@@ -223,9 +225,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     app.get('/', async (_request, reply) => sendIndex(reply));
 
-    // SPA fallback — serve index.html for non-API routes
+    // SPA fallback — serve index.html for non-API routes. The page is the answer to a
+    // navigation, so only to GET and HEAD: a POST or DELETE that matches no route gets
+    // a 404, not a page and a 200.
     app.setNotFoundHandler(async (request, reply) => {
-      if (request.url.startsWith('/api/')) {
+      const navigation = request.method === 'GET' || request.method === 'HEAD';
+      if (!navigation || request.url.startsWith('/api/')) {
         return reply.status(404).send({ error: 'Not found' });
       }
       return sendIndex(reply);

@@ -18,30 +18,30 @@ interface UploadParams {
  * in particular, whose messages carry STORAGE_PATH — is logged and hidden behind a 500.
  */
 function sendUploadError(request: FastifyRequest, reply: FastifyReply, err: unknown) {
-  const error = err as Error & { statusCode?: number };
+  const error = err as Error & { statusCode?: number; expectedChunkIndex?: number };
   if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
-    return reply.status(error.statusCode).send({ error: error.message });
+    return reply.status(error.statusCode).send(
+      typeof error.expectedChunkIndex === 'number'
+        ? { error: error.message, expectedChunkIndex: error.expectedChunkIndex }
+        : { error: error.message }
+    );
   }
   request.log.error(err, 'Chunked upload failed');
   return reply.status(500).send({ error: 'Internal server error' });
 }
 
+/** The most one upload request may carry: a chunk, plus room for the multipart framing. */
+const UPLOAD_REQUEST_LIMIT = config.CHUNK_SIZE + 1024 * 64;
+
 export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   // Upload (create vault)
   app.post('/api/vault', {
     preHandler: verifyTurnstile,
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64, // with streaming encryption, single uploads also fit in one CHUNK_SIZE
+    bodyLimit: UPLOAD_REQUEST_LIMIT, // with streaming encryption, single uploads also fit in one CHUNK_SIZE
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const data = await request.file();
     if (!data) {
       return reply.status(400).send({ error: 'No file provided' });
-    }
-
-    // Multipart stream was truncated — file exceeded the allowed size
-    if (data.file.truncated) {
-      // Drain the stream to free the connection before responding
-      data.file.resume();
-      return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
     }
 
     // Read TTL and maxDownloads from fields.
@@ -54,12 +54,20 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       ? rawCPS
       : config.CRYPTO_CHUNK_SIZE;
 
+    // The request's own length bounds what this upload can add to storage. Handing it
+    // over lets the quota refuse an upload before any of it is read.
+    const contentLength = Number(request.headers['content-length']);
+    const declaredSize = Number.isSafeInteger(contentLength) && contentLength > 0
+      ? Math.min(contentLength, UPLOAD_REQUEST_LIMIT)
+      : undefined;
+
     try {
       const meta = await vaultManager.createVault(
         data.file,
         ttl,
         maxDownloads,
-        chunkPlaintextSize
+        chunkPlaintextSize,
+        declaredSize
       );
 
       return reply.status(201).send({
@@ -69,10 +77,15 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         ciphertextSize: meta.ciphertextSize,
       });
     } catch (err: unknown) {
+      // An upload refused before it was read still has its body waiting. Drain it.
+      data.file.resume();
       // Narrow unknown error to Error with an optional statusCode set by the vault manager.
       const error = err as Error & { statusCode?: number };
       if (error.statusCode === 413) {
         return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
+      }
+      if (error.statusCode === 400) {
+        return reply.status(400).send({ error: error.message });
       }
       if (error.statusCode === 507) {
         return reply.status(507).send({
@@ -103,8 +116,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // Download vault content (consumes a download)
-  app.get<{ Params: VaultParams }>('/api/vault/:vaultId/download', async (request, reply) => {
+  // Download vault content (consumes a download).
+  // No HEAD twin: Fastify would run this handler for HEAD as well, and a request that
+  // only asks for headers would take a download without delivering anything.
+  app.get<{ Params: VaultParams }>('/api/vault/:vaultId/download', {
+    exposeHeadRoute: false,
+  }, async (request, reply) => {
     const { vaultId } = request.params;
     const result = await vaultManager.consumeDownload(vaultId);
 
@@ -165,7 +182,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
 
   // 2. Upload a single chunk
   app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/chunk', {
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64, // chunk + multipart overhead
+    bodyLimit: UPLOAD_REQUEST_LIMIT,
   }, async (request, reply) => {
     const { uploadId } = request.params;
 
@@ -195,6 +212,9 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         nextChunkIndex: session.nextChunkIndex,
       });
     } catch (err: unknown) {
+      // A refused chunk never reached storage, so its body is still unread. Drain it,
+      // or the connection is left waiting on a request nobody will finish reading.
+      data.file.resume();
       return sendUploadError(request, reply, err);
     }
   });

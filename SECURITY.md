@@ -19,7 +19,7 @@ What the code guarantees today, and what it deliberately does not protect agains
 - [x] AES-256-GCM (authenticated encryption)
 - [x] 256-bit key from `crypto.getRandomValues()`
 - [x] Unique IV (96-bit) per **chunk** (not per file)
-- [x] Additional Authenticated Data (AAD) = chunk index (uint32 BE) — prevents chunk reordering attacks
+- [x] Additional Authenticated Data (AAD) = chunk index (uint32 BE) followed by a last-chunk marker (uint8) — reordering, dropping or appending chunks makes decryption fail
 - [x] WebCrypto API (hardware-accelerated, constant-time)
 - [x] Key stored exclusively in URL fragment (`#`) — never sent to server
 - [x] Server receives only ciphertext — zero-knowledge
@@ -35,9 +35,13 @@ What the code guarantees today, and what it deliberately does not protect agains
 - [x] No vault or upload IDs in logs — request logs record the matched route pattern, never the raw URL
 - [x] Streaming file upload — no full-file memory buffering
 - [x] Path traversal protection on vault IDs
+- [x] A download is taken by `GET` only — the download route registers no `HEAD` handler, so a request for headers cannot use up a download
+- [x] Ciphertext shorter than one encrypted chunk is refused on upload, single-request and chunked alike
+- [x] Admin force-delete acts on known vaults only — an id that is not a vault, the upload staging directory included, gets a 404
+- [x] Startup cleanup removes only what the app itself created — any other directory under `STORAGE_PATH` is left alone and named in a warning
 - [x] File size enforced at frontend, backend, and proxy levels:
   - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
-  - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk; stream truncation + explicit `truncated` check → 413
+  - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk; a file part over the limit ends the upload with 413
   - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + MAX_METADATA_HEADER(768) + calcEncryptionOverhead(…)` in `writeFile` — `MAX_FILE_SIZE` refers to the user's raw file; the 768-byte metadata-header allowance accounts for the encrypted filename + MIME header the frontend prepends; encryption overhead is `ceil(plaintextMax / CRYPTO_CHUNK_SIZE) * 28` (28 bytes per chunk: 12-byte IV + 16-byte GCM tag)
   - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
@@ -84,23 +88,26 @@ from becoming an attack surface:
 - [x] The Turnstile script is requested by the upload form at the moment a challenge is shown, and only when Turnstile is enabled — the page itself references no other origin, so an instance without Turnstile never makes a visitor's browser contact a third party, and one with it does not do so for visitors who only download
 - [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
 - [x] Turnstile API call has a 10-second timeout (`AbortSignal.timeout`) — prevents hung workers on Cloudflare degradation; returns HTTP 504 on timeout
-- [x] Three-tier in-memory per-IP rate limiting:
+- [x] Four-tier in-memory per-IP rate limiting:
   - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
-  - Upload tier: `POST /api/vault` (default 10 req/window) — stricter
-  - Download tier: `GET /api/vault/:id/download` (default 30 req/window) — prevents bulk download exhaustion
+  - Admin tier: failed logins on `/api/admin` (default 10 per window) — once reached, every admin request from that client is refused until the window ends, a correct password included; requests with valid credentials are not counted
+  - Upload tier: `POST /api/vault` and `POST /api/vault/upload/init` (default 10 req/window) — stricter
+  - Download tier: `/api/vault/:id/download`, whatever the method (default 30 req/window) — prevents bulk download exhaustion
 - [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
 - [x] IPv6 clients rate-limited and capped on open upload sessions per /64, not per address — rotating addresses inside one allocation gains no extra quota
 - [x] `TRUST_PROXY` validated at startup: IPs, CIDR ranges with a non-zero prefix, or named private ranges only — hop counts are rejected, because a hop count cannot check who is connecting and lets a client that reaches the port directly spoof its IP (GHSA-3m5p-2c4r-xxw2)
 - [x] Max file size enforcement (413 response)
-- [x] CAPTCHA timeout — frontend enforces a 10-second verification deadline; if the widget does not respond, upload is blocked and the user must reload
+- [x] CAPTCHA gate — with Turnstile on, the upload is blocked until the widget verifies; after 10 seconds without a result the page says so and keeps waiting, and it shows an error only when the widget reports a failure or the challenge expires
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
 - [x] Chunked upload sessions protected by HMAC-SHA256 session token — returned at `POST /api/vault/upload/init`, required on all subsequent `/chunk`, `/complete`, and abort requests (`x-session-token` header); token is signed server-side with a per-process random key and verified in constant time
-- [x] Storage quota enforced atomically — `reservedBytes` counter tracks in-progress chunked upload sessions; quota check uses `totalStorageBytes + reservedBytes` to prevent TOCTOU races where concurrent uploads could collectively exceed `MAX_TOTAL_STORAGE`
+- [x] Storage quota enforced with reservations — a chunked upload holds its declared size for as long as its session is open and writes one chunk at a time; a single-request upload holds the length its request declares while it is written, and is then counted by what it stored. Uploads that overlap cannot together exceed `MAX_TOTAL_STORAGE`
 
 ### Client-Side Defenses
 
-- [x] Filename sanitization — `sanitizeFilename()` strips path separators (`/`, `\`), ASCII control characters (0x00–0x1F, 0x7F), bidirectional text overrides (U+202A–202E, U+2066–2069), zero-width characters (ZWSP, ZWNJ, ZWJ, BOM, LRM, RLM), leading dots, and trailing whitespace; truncates to 255 characters; falls back to `"file"` when the result is empty
+- [x] Filename sanitization — `sanitizeFilename()` replaces path separators (`/`, `\`); strips control characters, line and paragraph separators, every Unicode format character and everything Unicode marks as ignorable by default (bidirectional overrides and isolates, zero-width characters and joiners, fillers, variation selectors, tags), matched by property rather than from a list; strips leading dots together with the whitespace around them, and trailing whitespace; truncates to 255 characters without cutting one in half; falls back to `"file"` when the result is empty
+- [x] No Markdown parser in the browser — the terms of service are converted to HTML on the server, once at startup; raw HTML in them is shown as text, and a link keeps its address only when that plainly is a web or mail address or a path on the site. The page that handles the key carries no parser and none of its dependencies
+- [x] A download with no chunks is reported as corrupted — nothing is saved, where an empty file used to pass for a successful download
 - [x] Filename mismatch detection — on download, the decrypted filename from the encrypted payload is compared to the one encoded in the URL fragment; a visible warning is shown if they differ, indicating possible link tampering
 
 ### Container Security
@@ -131,7 +138,7 @@ from becoming an attack surface:
 ### Admin Panel
 
 - [x] HTTP Basic Auth (env-based, no DB)
-- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct
+- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct; each comparison runs over the whole length of the configured value with no early exit, a difference in length included
 - [x] No encryption key exposure
 - [x] No plaintext exposure
 - [x] No uploader identity exposure

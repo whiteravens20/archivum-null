@@ -8,6 +8,7 @@ import Logo from '../components/Logo.tsx';
 import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
 import { getBranding } from '../branding.ts';
+import { formatBytes } from '../format.ts';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
 const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
@@ -31,12 +32,40 @@ interface RuntimeConfig {
 const DEFAULT_CONFIG: RuntimeConfig = {
   maxFileSize: 100 * 1024 * 1024,
   chunkSize: 10 * 1024 * 1024,
-  cryptoChunkSize: 5 * 1024 * 1024,
+  // 28 bytes under 5 MB, like the server's default: two encrypted chunks fill one request
+  cryptoChunkSize: 5 * 1024 * 1024 - 28,
   defaultTtl: 86400,
   defaultMaxDownloads: 10,
   turnstileSiteKey: '0x0000000000000000000000',
   turnstileEnabled: false,
 };
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * The runtime configuration, when the response really is one. Anything else gives
+ * null, and the built-in defaults stay in force.
+ */
+function parseRuntimeConfig(raw: unknown): RuntimeConfig | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  // Narrowed field by field below: the body is whatever the server sent.
+  const candidate = raw as Record<string, unknown>;
+  const { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled } = candidate;
+  if (
+    !isPositiveInteger(maxFileSize) ||
+    !isPositiveInteger(chunkSize) ||
+    !isPositiveInteger(cryptoChunkSize) ||
+    !isPositiveInteger(defaultTtl) ||
+    !isPositiveInteger(defaultMaxDownloads) ||
+    typeof turnstileSiteKey !== 'string' ||
+    typeof turnstileEnabled !== 'boolean'
+  ) {
+    return null;
+  }
+  return { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled };
+}
 
 type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
@@ -50,8 +79,12 @@ export default function Home() {
 
   useEffect(() => {
     fetch('/api/config')
-      .then((r) => r.json())
-      .then((cfg: RuntimeConfig) => {
+      // An error response carries JSON too ({ error, retryAfter }). Taken for the
+      // configuration, it would leave every limit undefined.
+      .then((r): Promise<unknown> => (r.ok ? r.json() : Promise.resolve(null)))
+      .then((raw) => {
+        const cfg = parseRuntimeConfig(raw);
+        if (!cfg) return; // keep the defaults
         setRuntimeConfig(cfg);
         setTtl(nearestInList(cfg.defaultTtl, TTL_OPTION_VALUES));
         setMaxDownloads(nearestInList(cfg.defaultMaxDownloads, DOWNLOAD_OPTION_VALUES));
@@ -64,40 +97,25 @@ export default function Home() {
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
-  const captchaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The file whose CAPTCHA has been pending for a while. Kept per file, so the hint
+  // it drives goes away by itself when another file is chosen.
+  const [captchaSlowFor, setCaptchaSlowFor] = useState<File | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Start 10s CAPTCHA timeout when file is selected and Turnstile is enabled
+  // Ten seconds after a file is selected with Turnstile on and no result yet, say so.
+  // A hint, not a failure: a challenge a person has to solve takes longer than that.
   useEffect(() => {
-    if (captchaTimerRef.current) {
-      clearTimeout(captchaTimerRef.current);
-      captchaTimerRef.current = null;
-    }
-
-    if (file && runtimeConfig.turnstileEnabled && !captchaVerified) {
-      captchaTimerRef.current = setTimeout(() => {
-        if (!captchaVerified) {
-          setCaptchaError('CAPTCHA verification timed out — please reload and try again');
-        }
-      }, 10_000);
-    }
-
-    return () => {
-      if (captchaTimerRef.current) {
-        clearTimeout(captchaTimerRef.current);
-        captchaTimerRef.current = null;
-      }
-    };
+    if (!file || !runtimeConfig.turnstileEnabled || captchaVerified) return;
+    const timer = setTimeout(() => setCaptchaSlowFor(file), 10_000);
+    return () => clearTimeout(timer);
   }, [file, runtimeConfig.turnstileEnabled, captchaVerified]);
+
+  const captchaSlow = file !== null && captchaSlowFor === file && !captchaVerified && !captchaError;
 
   const handleCaptchaVerify = useCallback((token: string) => {
     setTurnstileToken(token);
     setCaptchaVerified(true);
     setCaptchaError(null);
-    if (captchaTimerRef.current) {
-      clearTimeout(captchaTimerRef.current);
-      captchaTimerRef.current = null;
-    }
   }, []);
 
   const handleCaptchaError = useCallback(() => {
@@ -125,7 +143,7 @@ export default function Home() {
   const handleUpload = useCallback(async () => {
     if (!file) return;
     if (file.size > runtimeConfig.maxFileSize) {
-      setError(`File exceeds maximum size of ${formatSize(runtimeConfig.maxFileSize)}`);
+      setError(`File exceeds maximum size of ${formatBytes(runtimeConfig.maxFileSize)}`);
       return;
     }
 
@@ -257,7 +275,7 @@ export default function Home() {
               <div className="bg-vault-secondary/50 rounded-lg p-4 flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="text-sm text-vault-text truncate">{file.name}</p>
-                  <p className="text-xs text-vault-subtle">{formatSize(file.size)}</p>
+                  <p className="text-xs text-vault-subtle">{formatBytes(file.size)}</p>
                 </div>
                 {stage === 'idle' && (
                   <button
@@ -284,6 +302,13 @@ export default function Home() {
                   onError={handleCaptchaError}
                   onExpire={handleCaptchaExpire}
                 />
+              )}
+
+              {captchaSlow && (
+                <div className="bg-vault-warning-fill/10 border border-vault-warning-fill/20 rounded-lg p-3 text-sm text-vault-warning-soft">
+                  Still waiting for the CAPTCHA. If a challenge is shown above, complete it.
+                  If nothing appears, reload the page.
+                </div>
               )}
 
               {captchaError && (
@@ -362,10 +387,4 @@ export default function Home() {
       )}
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
 }

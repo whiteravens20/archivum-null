@@ -15,7 +15,7 @@ import {
   buildMetadataHeader,
   parseMetadataHeader,
   calculateTotalEncryptedSize,
-  formatBytes,
+  countChunks,
   sanitizeFilename,
   IV_LENGTH,
   PER_CHUNK_OVERHEAD,
@@ -83,6 +83,16 @@ describe('crypto/encrypt', () => {
       const header = buildMetadataHeader('日本語ファイル.txt', 'text/plain');
       const parsed = parseMetadataHeader(header);
       expect(parsed.filename).toBe('日本語ファイル.txt');
+    });
+
+    it('should cut a name that is too long between two characters, never inside one', () => {
+      // 130 four-byte characters are 520 bytes; the limit of 510 falls inside the 128th
+      const header = buildMetadataHeader('😀'.repeat(130), 'text/plain');
+      const parsed = parseMetadataHeader(header);
+
+      expect(parsed.filename).toBe('😀'.repeat(127));
+      expect(parsed.filename).not.toContain('\uFFFD');
+      expect(parsed.mimeType).toBe('text/plain');
     });
 
     it('should sanitize path traversal in filename', () => {
@@ -272,6 +282,27 @@ describe('crypto/encrypt', () => {
     });
   });
 
+  describe('countChunks', () => {
+    it('should count at least one chunk and round up', () => {
+      expect(countChunks(0, 100)).toBe(1);
+      expect(countChunks(100, 100)).toBe(1);
+      expect(countChunks(101, 100)).toBe(2);
+    });
+
+    it('should refuse a chunk size that is not a positive integer', () => {
+      for (const bad of [0, -1, 1.5, NaN, Infinity, undefined as unknown as number]) {
+        expect(() => countChunks(100, bad)).toThrow('Invalid crypto chunk size');
+        expect(() => calculateTotalEncryptedSize(100, bad)).toThrow('Invalid crypto chunk size');
+      }
+    });
+
+    it('should refuse a plaintext size that is not a whole number of bytes', () => {
+      for (const bad of [-1, 1.5, NaN, undefined as unknown as number]) {
+        expect(() => countChunks(bad, 100)).toThrow('Invalid plaintext size');
+      }
+    });
+  });
+
   describe('calculateTotalEncryptedSize', () => {
     it('should calculate size for single chunk', () => {
       const size = calculateTotalEncryptedSize(100, 5242880);
@@ -295,30 +326,6 @@ describe('crypto/encrypt', () => {
       const size = calculateTotalEncryptedSize(0, 5242880);
       // At least 1 chunk
       expect(size).toBe(PER_CHUNK_OVERHEAD);
-    });
-  });
-
-  describe('formatBytes', () => {
-    it('should format 0 bytes', () => {
-      expect(formatBytes(0)).toBe('0 B');
-    });
-
-    it('should format bytes', () => {
-      expect(formatBytes(500)).toBe('500 B');
-    });
-
-    it('should format kilobytes', () => {
-      expect(formatBytes(1024)).toBe('1.0 KB');
-      expect(formatBytes(1536)).toBe('1.5 KB');
-    });
-
-    it('should format megabytes', () => {
-      expect(formatBytes(1048576)).toBe('1.0 MB');
-      expect(formatBytes(5242880)).toBe('5.0 MB');
-    });
-
-    it('should format gigabytes', () => {
-      expect(formatBytes(1073741824)).toBe('1.0 GB');
     });
   });
 
@@ -357,6 +364,31 @@ describe('crypto/encrypt', () => {
       expect(sanitizeFilename('file\u200Ename\u200F.txt')).toBe('filename.txt');
     });
 
+    it('should strip the invisible characters a fixed list would miss', () => {
+      const invisible = [
+        '\u00AD', // soft hyphen
+        '\u061C', // Arabic letter mark
+        '\u180E', // Mongolian vowel separator
+        '\u2028', // line separator
+        '\u2029', // paragraph separator
+        '\u2060', // word joiner
+        '\u2064', // invisible plus
+        '\u3164', // Hangul filler
+        '\uFE0F', // variation selector
+        '\uFFF9', // interlinear annotation anchor
+        '\u{E0041}', // tag character
+      ];
+      for (const character of invisible) {
+        expect(sanitizeFilename(`inv${character}oice.pdf`)).toBe('invoice.pdf');
+      }
+    });
+
+    it('should not let whitespace hide leading dots', () => {
+      expect(sanitizeFilename(' .hidden')).toBe('hidden');
+      expect(sanitizeFilename('. .bashrc')).toBe('bashrc');
+      expect(sanitizeFilename('\u200B.profile')).toBe('profile');
+    });
+
     it('should strip leading dots', () => {
       expect(sanitizeFilename('.hidden')).toBe('hidden');
       expect(sanitizeFilename('...secret')).toBe('secret');
@@ -370,6 +402,14 @@ describe('crypto/encrypt', () => {
     it('should truncate to 255 characters', () => {
       const long = 'x'.repeat(300);
       expect(sanitizeFilename(long)).toHaveLength(255);
+    });
+
+    it('should count the limit in characters and never cut one in half', () => {
+      // Each of these is two UTF-16 units; a cut by units would leave half a character
+      const result = sanitizeFilename('😀'.repeat(300));
+      expect(Array.from(result)).toHaveLength(255);
+      expect(result.isWellFormed()).toBe(true);
+      expect(result).toBe('😀'.repeat(255));
     });
 
     it('should return "file" for empty string', () => {

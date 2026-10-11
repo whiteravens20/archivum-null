@@ -67,15 +67,28 @@ export async function importKey(base64url: string): Promise<CryptoKey> {
 }
 
 /**
+ * UTF-8 bytes of a text, at most `maxBytes` of them. A text that is too long is cut
+ * between two characters, never inside one: half a character would come back as a
+ * replacement character when the header is decoded.
+ */
+function encodeUtf8(text: string, maxBytes: number): Uint8Array {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= maxBytes) return bytes;
+  let end = maxBytes;
+  // Continuation bytes are 10xxxxxx; step back to the byte that starts a character
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+  return bytes.slice(0, end);
+}
+
+/**
  * Build the metadata header that is prepended to the first crypto chunk's plaintext.
  * Format: [uint16 BE: nameLen][filename UTF-8][uint16 BE: mimeLen][MIME UTF-8]
  */
 export function buildMetadataHeader(filename: string, mimeType: string): Uint8Array {
-  const encoder = new TextEncoder();
   const rawName = filename || 'file';
   // Encode first, then truncate by bytes (not characters) to respect MAX_*_BYTES limits
-  const nameBytes = encoder.encode(rawName).slice(0, MAX_NAME_BYTES);
-  const mimeBytes = encoder.encode(mimeType || 'application/octet-stream').slice(0, MAX_MIME_BYTES);
+  const nameBytes = encodeUtf8(rawName, MAX_NAME_BYTES);
+  const mimeBytes = encodeUtf8(mimeType || 'application/octet-stream', MAX_MIME_BYTES);
 
   const header = new Uint8Array(2 + nameBytes.length + 2 + mimeBytes.length);
   const view = new DataView(header.buffer);
@@ -192,6 +205,23 @@ export async function decryptChunk(
 }
 
 /**
+ * How many crypto chunks a plaintext of this size is split into: at least one.
+ *
+ * Throws when either number is unusable. A chunk size that is not a positive integer
+ * turns the count into NaN, and a loop over NaN chunks encrypts nothing: the upload
+ * would go out empty and still be reported as a vault.
+ */
+export function countChunks(plaintextSize: number, chunkPlaintextSize: number): number {
+  if (!Number.isSafeInteger(plaintextSize) || plaintextSize < 0) {
+    throw new Error('Invalid plaintext size');
+  }
+  if (!Number.isSafeInteger(chunkPlaintextSize) || chunkPlaintextSize <= 0) {
+    throw new Error('Invalid crypto chunk size');
+  }
+  return Math.max(1, Math.ceil(plaintextSize / chunkPlaintextSize));
+}
+
+/**
  * Calculate the total encrypted size for a file with metadata header.
  * Useful to determine totalSize before starting upload.
  */
@@ -199,8 +229,7 @@ export function calculateTotalEncryptedSize(
   plaintextSize: number,
   chunkPlaintextSize: number
 ): number {
-  const numChunks = Math.max(1, Math.ceil(plaintextSize / chunkPlaintextSize));
-  return plaintextSize + numChunks * PER_CHUNK_OVERHEAD;
+  return plaintextSize + countChunks(plaintextSize, chunkPlaintextSize) * PER_CHUNK_OVERHEAD;
 }
 
 /**
@@ -208,36 +237,25 @@ export function calculateTotalEncryptedSize(
  * path-traversal or dangerous names when the browser triggers a download.
  * (The filename never leaves the client, but we sanitize defensively.)
  *
- * Also strips Unicode bidi overrides (e.g. U+202E RLO) that can visually
- * reverse filenames to disguise extensions, and zero-width characters that
- * can make two different names appear identical.
+ * What cannot be seen in a name is removed as well: it is how one name is made to read
+ * as another. That covers the bidi overrides and isolates that reverse a name to hide
+ * its extension, and the zero-width characters, joiners, fillers and selectors that make
+ * two different names look identical.
  */
 export function sanitizeFilename(raw: string): string {
-  return (
-    raw
-      // Strip path separators
-      .replace(/[/\\]/g, '_')
-      // Strip control characters (0x00–0x1F, 0x7F) and Unicode bidi overrides
-      // (U+200E–U+200F, U+202A–U+202E, U+2066–U+2069) plus zero-width
-      // characters (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+FEFF BOM)
-      .split('')
-      .filter((c) => {
-        const code = c.charCodeAt(0);
-        if (code <= 31 || code === 127) return false;            // ASCII control
-        if (code >= 0x200B && code <= 0x200F) return false;      // ZWSP, ZWNJ, ZWJ, LRM, RLM
-        if (code >= 0x202A && code <= 0x202E) return false;      // LRE, RLE, PDF, LRO, RLO
-        if (code >= 0x2066 && code <= 0x2069) return false;      // LRI, RLI, FSI, PDI
-        if (code === 0xFEFF) return false;                       // BOM / ZWNBSP
-        return true;
-      })
-      .join('')
-      // Strip leading dots (hidden files on Unix)
-      .replace(/^\.+/, '')
-      // Trim whitespace
-      .trim()
-      // Limit to 255 characters
-      .slice(0, 255) || 'file'
-  );
+  const cleaned = raw
+    // Path separators
+    .replace(/[/\\]/g, '_')
+    // Control characters, line and paragraph separators, every format character and
+    // everything Unicode marks as ignorable by default. Matched by property, not by a
+    // list of code points: a list is always one character short.
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/gu, '')
+    // Leading dots (hidden files on Unix), with whatever whitespace surrounds them
+    .replace(/^[\s.]+/, '')
+    .trimEnd();
+
+  // 255 characters at most, counted in code points so that no surrogate pair is cut
+  return Array.from(cleaned).slice(0, 255).join('') || 'file';
 }
 
 /** ArrayBuffer → base64url (no padding) */
@@ -260,12 +278,4 @@ function base64UrlToArrayBuffer(base64url: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
-}
-
-/** Format bytes for display */
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }

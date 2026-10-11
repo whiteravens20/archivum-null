@@ -12,7 +12,7 @@ export default function Footer() {
         <div className="flex items-center gap-3">
           <span className="tracking-wider uppercase">{name}</span>
           <span className="text-vault-secondary/50">|</span>
-{/* If you like this project please keep "Powered by Archivum Null" or Source link in the footer ❤️ */}
+          {/* If you like this project please keep "Powered by Archivum Null" or Source link in the footer ❤️ */}
           <a
             href="https://github.com/whiteravens20/archivum-null"
             target="_blank"

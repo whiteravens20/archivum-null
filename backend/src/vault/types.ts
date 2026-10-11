@@ -9,19 +9,6 @@ export interface VaultMetadata {
   maxDownloads: number;
 }
 
-export interface CreateVaultRequest {
-  ttl?: number;
-  maxDownloads?: number;
-}
-
-export interface VaultPublicInfo {
-  vaultId: string;
-  ciphertextSize: number;
-  createdAt: number;
-  expiresAt: number;
-  remainingDownloads: number;
-}
-
 /** Tracks an in-progress chunked upload before it is finalized into a vault. */
 export interface ChunkedUploadSession {
   uploadId: string;
@@ -40,4 +27,6 @@ export interface ChunkedUploadSession {
   expiresAt: number;
   /** Client IP that opened the session — used to cap concurrent sessions per IP. */
   clientIp?: string;
+  /** Set while a chunk is being written or the upload is being finalised. */
+  writing?: boolean;
 }

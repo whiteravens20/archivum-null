@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
-import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes, sanitizeFilename } from '../crypto/encrypt.ts';
+import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, sanitizeFilename } from '../crypto/encrypt.ts';
+import { formatBytes } from '../format.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
 import Logo from '../components/Logo.tsx';
 import { getBranding } from '../branding.ts';
@@ -69,8 +70,17 @@ export default function Vault() {
       // chunk at a time instead of the whole file — the accumulating Blob parts are
       // managed by the browser (and may be spilled to disk).
       const chunkPT = info.chunkPlaintextSize;
+      // Both numbers come from the server. With an unusable chunk size, or with no
+      // bytes at all, the loop below would not run once, nothing would be
+      // authenticated, and an empty file would pass for a successful download.
+      if (!Number.isSafeInteger(chunkPT) || chunkPT <= 0) {
+        throw new Error('The vault metadata is corrupted');
+      }
       const chunkCT = chunkPT + PER_CHUNK_OVERHEAD;
       const numChunks = Math.ceil(encryptedBlob.size / chunkCT);
+      if (numChunks < 1) {
+        throw new Error('The vault is empty or has been tampered with');
+      }
       const contentParts: BlobPart[] = [];
       let filename = 'file';
       let mimeType = 'application/octet-stream';
@@ -105,7 +115,9 @@ export default function Vault() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Released later, not here: some browsers begin reading the object URL only after
+      // this handler has returned, and a URL revoked by then downloads nothing.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
 
       setStage('done');
 
@@ -216,7 +228,7 @@ export default function Vault() {
           {!keyFragment && (
             <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
               ⚠ No decryption key found in URL. The key must be in the URL fragment (#).
-              Decryption will fail.
+              Without it the file cannot be decrypted, so the download is disabled.
             </div>
           )}
 
@@ -238,7 +250,7 @@ export default function Vault() {
           {/* Download button */}
           <button
             onClick={handleDownload}
-            disabled={stage !== 'ready' && stage !== 'done'}
+            disabled={(stage !== 'ready' && stage !== 'done') || !keyFragment}
             className="w-full py-3 bg-vault-accent text-vault-on-accent rounded-lg font-medium
                        hover:bg-vault-accent/90 transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed"

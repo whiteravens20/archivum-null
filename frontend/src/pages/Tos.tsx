@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import Markdown from 'react-markdown';
 
 export default function Tos() {
   const [content, setContent] = useState<string | null>(null);
@@ -33,9 +32,14 @@ export default function Tos() {
           prose-strong:text-vault-text-soft
           prose-blockquote:border-vault-warning-fill/50 prose-blockquote:bg-vault-warning-fill/10
           prose-blockquote:text-vault-warning prose-blockquote:rounded-lg prose-blockquote:px-4 prose-blockquote:py-1
-          prose-hr:border-vault-secondary/50">
-          <Markdown>{content}</Markdown>
-        </article>
+          prose-hr:border-vault-secondary/50"
+          // The terms are the operator's own file, converted to HTML by the server at
+          // startup (backend/src/static/terms.ts): raw HTML in it arrives as text, and
+          // links are kept to web and mail addresses. The Content-Security-Policy
+          // would not run a script from it either way. No Markdown parser is shipped
+          // to the browser for this one page.
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
       )}
     </div>
   );

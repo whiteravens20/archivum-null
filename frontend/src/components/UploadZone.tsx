@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { formatBytes } from '../format.ts';
 
 interface UploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -18,7 +19,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
     (file: File) => {
       setError(null);
       if (file.size > maxSize) {
-        setError(`File too large — maximum allowed size is ${formatSize(maxSize)}`);
+        setError(`File too large — maximum allowed size is ${formatBytes(maxSize)}`);
         return;
       }
       if (file.size === 0) {
@@ -127,7 +128,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
           {isDragOver ? 'Drop file here' : 'Drop file or click to select'}
         </p>
         <p className="text-xs text-vault-subtle">
-          Max size: {formatSize(maxSize)} · Encrypted client-side before upload
+          Max size: {formatBytes(maxSize)} · Encrypted client-side before upload
         </p>
       </div>
 
@@ -136,11 +137,4 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
       )}
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
 }

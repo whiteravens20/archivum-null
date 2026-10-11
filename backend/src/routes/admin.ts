@@ -55,6 +55,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // Force delete a vault
   app.delete<{ Params: VaultParams }>('/api/admin/vaults/:vaultId', async (request, reply) => {
     const { vaultId } = request.params;
+    // Only what is a vault. Any other name that passes as an id, the upload staging
+    // directory first of all, is not this route's to remove.
+    if (!vaultManager.hasVault(vaultId)) {
+      return reply.status(404).send({ error: 'Vault not found' });
+    }
     const deleted = await vaultManager.deleteVault(vaultId);
     if (!deleted) {
       return reply.status(404).send({ error: 'Vault not found' });

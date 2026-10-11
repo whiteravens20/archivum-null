@@ -2,12 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import Tos from '../pages/Tos.js';
 
-// Mock react-markdown to avoid ESM/transform issues in tests and keep
-// assertions simple — we only care about the raw text reaching the DOM.
-vi.mock('react-markdown', () => ({
-  default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
-}));
-
 const mockFetch = (body: string, ok = true, status = 200) => {
   vi.stubGlobal(
     'fetch',
@@ -31,23 +25,30 @@ describe('Tos page', () => {
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
-  it('renders markdown content after successful fetch', async () => {
-    mockFetch('# Terms of Service\n\nUse responsibly.');
+  it('shows the terms as the formatted HTML the server sends', async () => {
+    mockFetch('<h1>Terms of Service</h1>\n<p>Use <strong>responsibly</strong>.</p>\n<ul><li>one</li><li>two</li></ul>');
     render(<Tos />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('markdown')).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Terms of Service' })).toBeInTheDocument();
+    expect(screen.getByText('responsibly').tagName).toBe('STRONG');
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
 
-    expect(screen.getByTestId('markdown').textContent).toContain('Terms of Service');
-    expect(screen.getByTestId('markdown').textContent).toContain('Use responsibly.');
+  it('puts the terms into the styled article', async () => {
+    mockFetch('<h2>Privacy</h2>');
+    const { container } = render(<Tos />);
+
+    await screen.findByRole('heading', { level: 2, name: 'Privacy' });
+    const article = container.querySelector('article');
+    expect(article).toHaveClass('prose');
+    expect(article?.querySelector('h2')).not.toBeNull();
   });
 
   it('calls /api/tos endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: () => Promise.resolve('# TOS'),
+      text: () => Promise.resolve('<h1>TOS</h1>'),
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<Tos />);

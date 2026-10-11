@@ -245,6 +245,23 @@ describe('buildApp — static serving does not disclose the running version', ()
     expect(res.headers['content-type']).toMatch(/text\/html/);
   });
 
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)(
+    'answers %s on an unknown path with a 404, not with the page',
+    async (method) => {
+      const res = await app.inject({ method, url: '/some/client/route' });
+
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'Not found' });
+    }
+  );
+
+  it('answers HEAD on an SPA route like GET', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/some/client/route' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+  });
+
   it('still 404s unknown API routes as JSON', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/nope' });
 
