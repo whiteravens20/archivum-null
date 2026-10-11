@@ -5,7 +5,8 @@
  *  - Non-/api/ requests are not rate-limited
  *  - General API limit applies to all /api/ routes
  *  - Upload-specific limit applies to POST /api/vault
- *  - Download-specific limit applies to GET /api/vault/:id/download
+ *  - Download-specific limit applies to /api/vault/:id/download
+ *  - Admin routes are locked after too many failed logins, and only then
  *  - Rate-limit headers are set correctly
  *  - 429 response includes Retry-After header
  */
@@ -16,6 +17,9 @@ import type { FastifyInstance } from 'fastify';
 
 describe('Rate-limit middleware', () => {
   let app: FastifyInstance;
+  let recordAdminAuthFailure: (ip: string) => void;
+  // The address app.inject() connects from
+  const CLIENT = '127.0.0.1';
 
   beforeEach(async () => {
     vi.resetModules();
@@ -29,7 +33,9 @@ describe('Rate-limit middleware', () => {
 
     app = Fastify({ logger: false });
 
-    const { rateLimitPlugin } = await import('../middleware/rateLimit.js');
+    const rateLimit = await import('../middleware/rateLimit.js');
+    const { rateLimitPlugin } = rateLimit;
+    recordAdminAuthFailure = rateLimit.recordAdminAuthFailure;
     // Call the plugin function directly (not via app.register) so the onRequest
     // hook lives in the same scope as the test routes below.
     await rateLimitPlugin(app);
@@ -181,23 +187,55 @@ describe('Rate-limit middleware', () => {
     expect(body.retryAfter).toBeGreaterThan(0);
   });
 
-  it('should enforce admin-specific rate limit on /api/admin/* routes', async () => {
-    // Admin limit is 2
-    for (let i = 0; i < 2; i++) {
+  it('should not count admin requests that are not failed logins', async () => {
+    // Admin limit is 2, general limit is 5. A signed-in panel polls far more often
+    // than twice a minute; only the general limit may stop it.
+    for (let i = 0; i < 5; i++) {
       const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
       expect(res.statusCode).toBe(200);
     }
+  });
 
-    // 3rd admin request should be rate-limited
+  it('should lock admin routes for a client once its failed logins reach the limit', async () => {
+    recordAdminAuthFailure(CLIENT);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(200);
+
+    recordAdminAuthFailure(CLIENT);
     const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
     expect(res.statusCode).toBe(429);
+    expect(res.json().error).toContain('failed login attempts');
+    expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+    expect(res.json().retryAfter).toBeGreaterThan(0);
+  });
+
+  it('should not lock a client out for the failed logins of another', async () => {
+    recordAdminAuthFailure('203.0.113.50');
+    recordAdminAuthFailure('203.0.113.50');
+
+    const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('should lift the lockout when the window ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      recordAdminAuthFailure(CLIENT);
+      recordAdminAuthFailure(CLIENT);
+      expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(429);
+
+      // The window is 60 s
+      vi.setSystemTime(Date.now() + 61_000);
+      expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should not affect non-admin routes with admin rate limit', async () => {
-    // Exhaust admin limit
-    for (let i = 0; i < 2; i++) {
-      await app.inject({ method: 'GET', url: '/api/admin/stats' });
-    }
+    // Lock the admin routes for this client
+    recordAdminAuthFailure(CLIENT);
+    recordAdminAuthFailure(CLIENT);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(429);
 
     // Non-admin API route should still work (general limit not yet exhausted)
     const res = await app.inject({ method: 'GET', url: '/api/health' });

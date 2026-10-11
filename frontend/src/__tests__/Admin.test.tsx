@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 // Mock formatBytes before importing Admin
 vi.mock('../crypto/encrypt.js', () => ({
@@ -160,6 +160,86 @@ describe('Admin page', () => {
  * these tests pin the three states an operator can be in — behind, current, and
  * unable to tell — and that the panel survives the check failing.
  */
+describe('Admin page — rate limited by the server', () => {
+  const stats = {
+    totalVaults: 1,
+    activeVaults: 7,
+    totalStorageBytes: 1000,
+    totalStorageMB: 0.001,
+    storageQuotaBytes: 0,
+  };
+
+  function ok(body: unknown) {
+    return Promise.resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve(body) });
+  }
+
+  function tooMany(error: string, retryAfter: number) {
+    return Promise.resolve({
+      ok: false,
+      status: 429,
+      headers: new Headers({ 'Retry-After': String(retryAfter) }),
+      json: () => Promise.resolve({ error, retryAfter }),
+    });
+  }
+
+  async function login() {
+    const { default: Admin } = await import('../pages/Admin.js');
+    render(<Admin />);
+    fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'pass' } });
+    fireEvent.click(screen.getByText('Login'));
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps the last figures on screen while a poll is refused, and says so', async () => {
+    let limited = false;
+    globalThis.fetch = vi.fn((url: string) => {
+      if (url.startsWith('/api/admin/version')) return Promise.reject(new Error('not needed'));
+      if (limited) return tooMany('Too many requests. Try again later.', 25);
+      return url.startsWith('/api/admin/stats') ? ok(stats) : ok([]);
+    }) as unknown as typeof fetch;
+
+    await login();
+    expect(await screen.findByText('7')).toBeInTheDocument();
+
+    // The next poll, ten seconds later, is refused
+    limited = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+
+    expect(screen.getByText(/rate limiting this panel/)).toBeInTheDocument();
+    expect(screen.getByText(/about 25 s/)).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.queryByText(/Backend unavailable/)).not.toBeInTheDocument();
+
+    // And the one after that goes through again
+    limited = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+
+    expect(screen.queryByText(/rate limiting this panel/)).not.toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+  });
+
+  it('goes back to the login form with the reason when the login itself is locked out', async () => {
+    globalThis.fetch = vi.fn(() =>
+      tooMany('Too many failed login attempts. Try again later.', 42)
+    ) as unknown as typeof fetch;
+
+    await login();
+
+    expect(await screen.findByText('Too many failed login attempts. Try again in 42 s.')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+    expect(screen.queryByText(/Backend unavailable/)).not.toBeInTheDocument();
+  });
+});
+
 describe('Admin page — version and update notice', () => {
   const stats = {
     totalVaults: 1,

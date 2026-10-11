@@ -84,10 +84,11 @@ from becoming an attack surface:
 - [x] The Turnstile script is requested by the upload form at the moment a challenge is shown, and only when Turnstile is enabled — the page itself references no other origin, so an instance without Turnstile never makes a visitor's browser contact a third party, and one with it does not do so for visitors who only download
 - [x] Turnstile hostname validation — token reuse from a different site rejected (`TURNSTILE_HOSTNAME`)
 - [x] Turnstile API call has a 10-second timeout (`AbortSignal.timeout`) — prevents hung workers on Cloudflare degradation; returns HTTP 504 on timeout
-- [x] Three-tier in-memory per-IP rate limiting:
+- [x] Four-tier in-memory per-IP rate limiting:
   - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
-  - Upload tier: `POST /api/vault` (default 10 req/window) — stricter
-  - Download tier: `GET /api/vault/:id/download` (default 30 req/window) — prevents bulk download exhaustion
+  - Admin tier: failed logins on `/api/admin` (default 10 per window) — once reached, every admin request from that client is refused until the window ends, a correct password included; requests with valid credentials are not counted
+  - Upload tier: `POST /api/vault` and `POST /api/vault/upload/init` (default 10 req/window) — stricter
+  - Download tier: `/api/vault/:id/download`, whatever the method (default 30 req/window) — prevents bulk download exhaustion
 - [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
 - [x] IPv6 clients rate-limited and capped on open upload sessions per /64, not per address — rotating addresses inside one allocation gains no extra quota
 - [x] `TRUST_PROXY` validated at startup: IPs, CIDR ranges with a non-zero prefix, or named private ranges only — hop counts are rejected, because a hop count cannot check who is connecting and lets a client that reaches the port directly spoof its IP (GHSA-3m5p-2c4r-xxw2)
@@ -131,7 +132,7 @@ from becoming an attack surface:
 ### Admin Panel
 
 - [x] HTTP Basic Auth (env-based, no DB)
-- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct
+- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct; the values are compared as SHA-256 digests, so their length does not show in the timing either
 - [x] No encryption key exposure
 - [x] No plaintext exposure
 - [x] No uploader identity exposure

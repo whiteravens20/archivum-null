@@ -78,6 +78,34 @@ describe('buildApp wiring — rate limiting is active end-to-end', () => {
     const limited = await app.inject({ method: 'DELETE', url: '/api/admin/vaults/x' });
     expect(limited.statusCode).toBe(429);
   });
+
+  it('refuses even the right password while the client is locked out', async () => {
+    const wrong = { authorization: `Basic ${Buffer.from('admin:guess').toString('base64')}` };
+    const right = { authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}` };
+
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: wrong });
+      expect(res.statusCode).toBe(401);
+    }
+
+    const locked = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
+    expect(locked.statusCode).toBe(429);
+    expect(locked.json().error).toContain('failed login attempts');
+  });
+
+  it('lets a signed-in admin poll past the admin limit', async () => {
+    // Admin limit is 2: the panel alone makes more requests than that in ten seconds.
+    // Only the general limit (5) applies to requests that carry valid credentials.
+    const right = { authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}` };
+
+    for (let i = 0; i < 5; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
+      expect(res.statusCode).toBe(200);
+    }
+    const general = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
+    expect(general.statusCode).toBe(429);
+    expect(general.json().error).toContain('Too many requests');
+  });
 });
 
 /**

@@ -135,6 +135,58 @@ describe('basicAuth', () => {
     }
   });
 
+  describe('failed logins are counted against the client', () => {
+    const recordAdminAuthFailure = vi.fn();
+
+    async function loadAuth() {
+      vi.stubEnv('ADMIN_PASSWORD', 'secret123');
+      vi.stubEnv('ADMIN_USER', 'admin');
+      vi.resetModules();
+      recordAdminAuthFailure.mockClear();
+      vi.doMock('../middleware/rateLimit.js', () => ({ recordAdminAuthFailure }));
+      return (await import('../middleware/basicAuth.js')).basicAuth;
+    }
+
+    it('should count a wrong password', async () => {
+      const auth = await loadAuth();
+      await auth(createMockRequest(encodeBasicAuth('admin', 'wrong')), createMockReply());
+      expect(recordAdminAuthFailure).toHaveBeenCalledExactlyOnceWith('203.0.113.5');
+    });
+
+    it('should count a request that brings no credentials', async () => {
+      const auth = await loadAuth();
+      await auth(createMockRequest(), createMockReply());
+      expect(recordAdminAuthFailure).toHaveBeenCalledExactlyOnceWith('203.0.113.5');
+    });
+
+    it('should count IPv6 clients by their /64, like every other limit', async () => {
+      const auth = await loadAuth();
+      await auth(createMockRequest(encodeBasicAuth('admin', 'wrong'), '2001:db8:1:2:aaaa:bbbb:cccc:dddd'), createMockReply());
+      expect(recordAdminAuthFailure).toHaveBeenCalledExactlyOnceWith('2001:db8:1:2::/64');
+    });
+
+    it('should not count a successful login', async () => {
+      const auth = await loadAuth();
+      const reply = createMockReply();
+      await auth(createMockRequest(encodeBasicAuth('admin', 'secret123')), reply);
+      expect(reply.statusCode).toBe(200);
+      expect(recordAdminAuthFailure).not.toHaveBeenCalled();
+    });
+
+    it('should not count requests while the panel is disabled', async () => {
+      await loadAuth();
+      vi.stubEnv('ADMIN_PASSWORD', '');
+      vi.resetModules();
+      vi.doMock('../middleware/rateLimit.js', () => ({ recordAdminAuthFailure }));
+      const { basicAuth: disabled } = await import('../middleware/basicAuth.js');
+
+      const reply = createMockReply();
+      await disabled(createMockRequest(encodeBasicAuth('admin', 'anything')), reply);
+      expect(reply.statusCode).toBe(403);
+      expect(recordAdminAuthFailure).not.toHaveBeenCalled();
+    });
+  });
+
   it('should reject CHANGE_ME_IMMEDIATELY password', async () => {
     vi.stubEnv('ADMIN_PASSWORD', 'CHANGE_ME_IMMEDIATELY');
     vi.resetModules();

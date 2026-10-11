@@ -1,6 +1,8 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { clientKey } from './clientKey.js';
+import { recordAdminAuthFailure } from './rateLimit.js';
 
 /**
  * Compared as SHA-256 digests. Two digests always have the same length, so the time
@@ -12,7 +14,9 @@ function safeCompare(a: string, b: string): boolean {
   return timingSafeEqual(digestA, digestB);
 }
 
-function refuse(reply: FastifyReply, error: string): void {
+/** A login that failed: counted against the client, then refused. */
+function refuse(request: FastifyRequest, reply: FastifyReply, error: string): void {
+  recordAdminAuthFailure(clientKey(request.ip));
   reply.header('WWW-Authenticate', 'Basic realm="Archivum Null Admin"');
   reply.status(401).send({ error });
 }
@@ -29,7 +33,7 @@ export async function basicAuth(
   }
 
   if (!auth || !auth.startsWith('Basic ')) {
-    refuse(reply, 'Authentication required');
+    refuse(request, reply, 'Authentication required');
     return;
   }
 
@@ -42,6 +46,6 @@ export async function basicAuth(
   const userOk = safeCompare(user, config.ADMIN_USER);
   const passOk = safeCompare(pass, config.ADMIN_PASSWORD);
   if (!userOk || !passOk) {
-    refuse(reply, 'Invalid credentials');
+    refuse(request, reply, 'Invalid credentials');
   }
 }

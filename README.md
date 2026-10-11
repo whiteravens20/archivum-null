@@ -410,7 +410,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 | Passive network observer | TLS in transit; ciphertext at rest — observer sees encrypted bytes only |
 | Legal demand / server seizure | Only ciphertext + metadata available; operator cannot decrypt |
 | Enumeration / brute-force | Vault IDs are 21-character nanoid (128+ bits of entropy) |
-| Abuse / spam | Turnstile CAPTCHA + 3-tier rate limiting per IP |
+| Abuse / spam | Turnstile CAPTCHA + four-tier rate limiting per IP |
 | Filename spoofing / path traversal | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link |
 | Large file DoS | Streaming size enforcement — no full file held in memory |
 | Admin credential theft | Timing-safe comparison; Basic Auth over TLS |

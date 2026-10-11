@@ -51,6 +51,7 @@ IPv4 clients are counted per address, IPv6 clients per /64 — the same applies 
 | `RATE_LIMIT_MAX` | `10` | Max new-upload requests per window per IP — counts `POST /api/vault` and `POST /api/vault/upload/init` (chunked upload start); individual chunk/complete requests are not counted |
 | `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
 | `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
+| `RATE_LIMIT_ADMIN_MAX` | `10` | Max failed admin logins per window per IP. Once reached, every request to `/api/admin` from that client is refused until the window ends, a correct password included. Requests that carry valid credentials are not counted, so the admin panel's own polling never runs into it |
 
 ### Cloudflare Turnstile
 

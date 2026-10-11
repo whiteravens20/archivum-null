@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { formatBytes } from '../crypto/encrypt.ts';
 
 interface VaultMeta {
@@ -56,6 +56,11 @@ export default function Admin() {
   const [password, setPassword] = useState('');
   // vaultId pending inline confirmation, null = none
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // Seconds until the server lifts a rate limit, while one is in force
+  const [rateLimited, setRateLimited] = useState<number | null>(null);
+  // Whether this login has shown data yet. A rate limit before that is the login being
+  // refused; after it, the panel keeps what it has and waits.
+  const signedIn = useRef(false);
 
   const authHeader = useCallback(
     () => ({ Authorization: `Basic ${auth}` }),
@@ -79,6 +84,23 @@ export default function Admin() {
         return true;
       }
 
+      const limited = [statsRes, vaultsRes].find((res) => res.status === 429);
+      if (limited) {
+        const retryAfter = Number(limited.headers.get('Retry-After')) || 60;
+        if (signedIn.current) {
+          setRateLimited(retryAfter);
+          return true;
+        }
+        // The body says which limit it is: failed logins, or requests in general
+        const body: unknown = await limited.json().catch(() => null);
+        const reason =
+          typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
+            ? body.error.replace(/\s*Try again later\.?$/, '')
+            : 'Too many requests.';
+        setError(`${reason} Try again in ${retryAfter} s.`);
+        return false;
+      }
+
       if (!statsRes.ok || !vaultsRes.ok) {
         const status = !statsRes.ok ? statsRes.status : vaultsRes.status;
         setError(`Backend unavailable (${status}). Is the backend container running?`);
@@ -88,6 +110,8 @@ export default function Admin() {
       setStats(await statsRes.json());
       setVaults(await vaultsRes.json());
       setError(null);
+      setRateLimited(null);
+      signedIn.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch');
     } finally {
@@ -119,7 +143,10 @@ export default function Admin() {
     if (!authenticated) return;
     const poll = async () => {
       const ok = await fetchData();
-      if (!ok) setAuthenticated(false);
+      if (!ok) {
+        signedIn.current = false;
+        setAuthenticated(false);
+      }
     };
     void poll();
     const interval = setInterval(() => { void poll(); }, 10_000);
@@ -198,6 +225,14 @@ export default function Admin() {
         </div>
       ) : (
         <>
+          {/* A poll the server refused: the figures stay, with a word on why they are not fresh */}
+          {rateLimited !== null && (
+            <div className="mb-6 rounded-lg border border-vault-warning-fill/30 bg-vault-warning-fill/10 p-4 text-sm text-vault-warning-strong">
+              The server is rate limiting this panel. The figures below are the last it sent.
+              They refresh by themselves once the limit lifts, in about {rateLimited} s.
+            </div>
+          )}
+
           {/* Update notice — only when a newer release actually exists */}
           {version?.updateAvailable && version.latest && (
             <div className="mb-6 rounded-lg border border-vault-warning-fill/30 bg-vault-warning-fill/10 p-4">
