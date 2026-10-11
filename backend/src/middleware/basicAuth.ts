@@ -1,17 +1,22 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config.js';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { clientKey } from './clientKey.js';
 import { recordAdminAuthFailure } from './rateLimit.js';
 
 /**
- * Compared as SHA-256 digests. Two digests always have the same length, so the time
- * the comparison takes says nothing about the expected value, its length included.
+ * Compare a supplied credential with the configured one. timingSafeEqual needs two
+ * buffers of one length, so the supplied value is first cut or zero-padded to the
+ * length of the configured one: the comparison always runs over that whole length,
+ * with no early exit, and a difference in length is settled after it has run.
  */
-function safeCompare(a: string, b: string): boolean {
-  const digestA = createHash('sha256').update(a).digest();
-  const digestB = createHash('sha256').update(b).digest();
-  return timingSafeEqual(digestA, digestB);
+function safeCompare(supplied: string, expected: string): boolean {
+  const expectedBytes = Buffer.from(expected);
+  const suppliedBytes = Buffer.from(supplied);
+  const fitted = Buffer.alloc(expectedBytes.length);
+  suppliedBytes.copy(fitted);
+  const sameBytes = timingSafeEqual(fitted, expectedBytes);
+  return sameBytes && suppliedBytes.length === expectedBytes.length;
 }
 
 /** A login that failed: counted against the client, then refused. */

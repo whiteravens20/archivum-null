@@ -128,9 +128,41 @@ describe('basicAuth', () => {
     vi.resetModules();
     const { basicAuth: freshAuth } = await import('../middleware/basicAuth.js');
 
-    for (const [user, pass] of [['admin', 'secret12'], ['admin', 'secret1234'], ['admi', 'secret123'], ['admin', '']]) {
+    for (const [user, pass] of [
+      ['admin', 'secret12'],
+      ['admin', 'secret1234'],
+      ['admi', 'secret123'],
+      ['admin', ''],
+      ['adminadmin', 'secret123'],
+      // The comparison pads a short value with zero bytes; sending them must not help
+      ['admin', 'secret12\0'],
+      ['admin', 'secret123\0'],
+      ['admin\0', 'secret123'],
+    ]) {
       const reply = createMockReply();
       await freshAuth(createMockRequest(encodeBasicAuth(user, pass)), reply);
+      expect(reply.statusCode).toBe(401);
+    }
+  });
+
+  it('should compare credentials outside ASCII byte for byte', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'zażółć gęślą jaźń');
+    vi.stubEnv('ADMIN_USER', 'admin');
+    vi.resetModules();
+    const { basicAuth: freshAuth } = await import('../middleware/basicAuth.js');
+
+    const ok = createMockReply();
+    await freshAuth(createMockRequest(encodeBasicAuth('admin', 'zażółć gęślą jaźń')), ok);
+    expect(ok.statusCode).toBe(200);
+
+    // As many characters, fewer bytes; and the same bytes cut short inside a character
+    const cut = Buffer.from('zażółć gęślą jaźń').subarray(0, -1);
+    for (const header of [
+      encodeBasicAuth('admin', 'zazolc gesla jazn'),
+      'Basic ' + Buffer.concat([Buffer.from('admin:'), cut]).toString('base64'),
+    ]) {
+      const reply = createMockReply();
+      await freshAuth(createMockRequest(header), reply);
       expect(reply.statusCode).toBe(401);
     }
   });

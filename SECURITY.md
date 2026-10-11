@@ -138,7 +138,7 @@ from becoming an attack surface:
 ### Admin Panel
 
 - [x] HTTP Basic Auth (env-based, no DB)
-- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct; the values are compared as SHA-256 digests, so their length does not show in the timing either
+- [x] Timing-safe credential comparison — both username and password comparisons are always executed unconditionally before the result is checked, preventing timing side-channels that could reveal whether the username alone was correct; each comparison runs over the whole length of the configured value with no early exit, a difference in length included
 - [x] No encryption key exposure
 - [x] No plaintext exposure
 - [x] No uploader identity exposure
