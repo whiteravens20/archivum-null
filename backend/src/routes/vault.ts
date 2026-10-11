@@ -32,7 +32,11 @@ function sendUploadError(request: FastifyRequest, reply: FastifyReply, err: unkn
   return reply.status(500).send({ error: 'Internal server error' });
 }
 
-/** The most one upload request may carry: a chunk, plus room for the multipart framing. */
+/**
+ * The most one upload request may add to storage: the size limit of its file part,
+ * which the multipart parser enforces (app.ts). Fastify's own bodyLimit does not apply
+ * to multipart bodies, so there is no point in setting one on the upload routes.
+ */
 const UPLOAD_REQUEST_LIMIT = config.CHUNK_SIZE + 1024 * 64;
 
 /**
@@ -60,9 +64,10 @@ function refuseTruncated(file: Readable & { truncated: boolean }): Readable {
 
 export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   // Upload (create vault)
+  // A single-request upload carries what fits into one chunk; anything larger is
+  // sent through the chunked endpoints below.
   app.post('/api/vault', {
     preHandler: verifyTurnstile,
-    bodyLimit: UPLOAD_REQUEST_LIMIT, // with streaming encryption, single uploads also fit in one CHUNK_SIZE
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const data = await request.file();
     if (!data) {
@@ -207,9 +212,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // 2. Upload a single chunk
-  app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/chunk', {
-    bodyLimit: UPLOAD_REQUEST_LIMIT,
-  }, async (request, reply) => {
+  app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/chunk', async (request, reply) => {
     const { uploadId } = request.params;
 
     // Verify session HMAC token
