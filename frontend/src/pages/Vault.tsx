@@ -115,7 +115,9 @@ export default function Vault() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Released later, not here: some browsers begin reading the object URL only after
+      // this handler has returned, and a URL revoked by then downloads nothing.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
 
       setStage('done');
 
@@ -226,7 +228,7 @@ export default function Vault() {
           {!keyFragment && (
             <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
               ⚠ No decryption key found in URL. The key must be in the URL fragment (#).
-              Decryption will fail.
+              Without it the file cannot be decrypted, so the download is disabled.
             </div>
           )}
 
@@ -248,7 +250,7 @@ export default function Vault() {
           {/* Download button */}
           <button
             onClick={handleDownload}
-            disabled={stage !== 'ready' && stage !== 'done'}
+            disabled={(stage !== 'ready' && stage !== 'done') || !keyFragment}
             className="w-full py-3 bg-vault-accent text-vault-on-accent rounded-lg font-medium
                        hover:bg-vault-accent/90 transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed"

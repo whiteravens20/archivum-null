@@ -81,7 +81,7 @@ describe('Vault page', () => {
       expect(screen.getByText('2048 B')).toBeInTheDocument();
     });
     expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('Decrypt & Download')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decrypt & Download' })).toBeEnabled();
   });
 
   it('should show key warning when no key in fragment', async () => {
@@ -100,6 +100,8 @@ describe('Vault page', () => {
         screen.getByText(/No decryption key found in URL/)
       ).toBeInTheDocument();
     });
+    // Nothing to decrypt with: the button must not start a download that takes a slot
+    expect(screen.getByRole('button', { name: 'Decrypt & Download' })).toBeDisabled();
   });
 
   it('should render the branding', () => {
@@ -224,6 +226,31 @@ describe('Vault page', () => {
         expect(screen.getByText(/Filename mismatch detected/)).toBeInTheDocument();
       });
       expect(screen.getByText(/malicious\.exe/)).toBeInTheDocument();
+    });
+
+    it('should keep the object URL alive after handing the file to the browser', async () => {
+      mockGetVaultInfo.mockResolvedValue({
+        vaultId: 'abc',
+        ciphertextSize: 128,
+        chunkPlaintextSize: 100,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 3600_000,
+        remainingDownloads: 3,
+      });
+      renderVault('abc', `#${fakeKey}`);
+      await waitFor(() => {
+        expect(screen.getByText('Decrypt & Download')).toBeInTheDocument();
+      });
+
+      mockDownloadFlow('report.pdf');
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/decrypted and downloaded successfully/)).toBeInTheDocument();
+      });
+      expect(URL.createObjectURL).toHaveBeenCalledOnce();
+      // Revoking it in the same turn makes some browsers save an empty file
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
     });
 
     it('should not show warning when filenames match', async () => {
