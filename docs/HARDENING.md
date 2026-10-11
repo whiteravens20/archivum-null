@@ -305,6 +305,8 @@ docker inspect <container> \
   --format '{{index .Config.Labels "com.centurylinklabs.watchtower.enable"}}'
 ```
 
+Know what an updater of that kind is given. It needs the Docker socket, and the socket is root on the host: whoever controls the updater, or an image it pulls, controls the machine. It also deploys whatever the tag points at, without checking where the image came from. Two ways to take less on trust: pin the image by digest after verifying it ([README → Upgrading](../README.md#upgrading)) and move the pin yourself, or let the host's own scheduler run `docker compose pull && docker compose up -d`, which puts no socket into any container.
+
 Without an updater, `docker compose up -d` alone will **not** pick up a new release —
 it reuses the local image. Pull first:
 

@@ -290,6 +290,20 @@ docker compose up -d --build
 
 The `vault-data` volume is preserved across both modes. Check the release notes for breaking changes before upgrading.
 
+**Checking what you deploy.** Every release image carries a signed build provenance. On any machine with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify oci://ghcr.io/whiteravens20/archivum-null:1.2.3 --repo whiteravens20/archivum-null
+```
+
+It exits with an error for an image that this repository's release workflow did not build. A tag can be moved after you checked it; a digest cannot. To run exactly the image you verified, put its digest behind the tag in `.env`:
+
+```bash
+docker buildx imagetools inspect ghcr.io/whiteravens20/archivum-null:1.2.3 --format '{{json .Manifest.Digest}}'
+# .env
+IMAGE_TAG=1.2.3@sha256:<the digest printed above>
+```
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
