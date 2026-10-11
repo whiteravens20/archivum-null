@@ -359,6 +359,8 @@ To enable:
 
 When secrets are default/missing, Turnstile verification is skipped, and the page never contacts Cloudflare. With Turnstile enabled, the visitor's browser requests the Turnstile script only on the upload form, once a file is selected; opening a vault link, the terms or any other page does not.
 
+When the server verifies a token, it sends Cloudflare the visitor's address with it, which ties the token to the address that solved the challenge. Cloudflare receives the same address from the visitor's browser when the challenge is shown.
+
 When Turnstile is enabled, the upload stays blocked until the widget verifies. If it has not done so within 10 seconds of file selection, the page says so and keeps waiting: an interactive challenge can take longer. An error is shown only when the widget itself reports a failure or the challenge expires.
 
 ## Branding
@@ -409,7 +411,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 |---|---|
 | Passive network observer | TLS in transit; ciphertext at rest — observer sees encrypted bytes only |
 | Legal demand / server seizure | Only ciphertext + metadata available; operator cannot decrypt |
-| Enumeration / brute-force | Vault IDs are 21-character nanoid (128+ bits of entropy) |
+| Enumeration / brute-force | Vault IDs are 24-character nanoid (144 bits of entropy) |
 | Abuse / spam | Turnstile CAPTCHA + four-tier rate limiting per IP |
 | Filename spoofing / path traversal | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link |
 | Large file DoS | Streaming size enforcement — no full file held in memory |

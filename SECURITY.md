@@ -19,7 +19,7 @@ What the code guarantees today, and what it deliberately does not protect agains
 - [x] AES-256-GCM (authenticated encryption)
 - [x] 256-bit key from `crypto.getRandomValues()`
 - [x] Unique IV (96-bit) per **chunk** (not per file)
-- [x] Additional Authenticated Data (AAD) = chunk index (uint32 BE) — prevents chunk reordering attacks
+- [x] Additional Authenticated Data (AAD) = chunk index (uint32 BE) followed by a last-chunk marker (uint8) — reordering, dropping or appending chunks makes decryption fail
 - [x] WebCrypto API (hardware-accelerated, constant-time)
 - [x] Key stored exclusively in URL fragment (`#`) — never sent to server
 - [x] Server receives only ciphertext — zero-knowledge
@@ -35,6 +35,10 @@ What the code guarantees today, and what it deliberately does not protect agains
 - [x] No vault or upload IDs in logs — request logs record the matched route pattern, never the raw URL
 - [x] Streaming file upload — no full-file memory buffering
 - [x] Path traversal protection on vault IDs
+- [x] A download is taken by `GET` only — the download route registers no `HEAD` handler, so a request for headers cannot use up a download
+- [x] Ciphertext shorter than one encrypted chunk is refused on upload, single-request and chunked alike
+- [x] Admin force-delete acts on known vaults only — an id that is not a vault, the upload staging directory included, gets a 404
+- [x] Startup cleanup removes only what the app itself created — any other directory under `STORAGE_PATH` is left alone and named in a warning
 - [x] File size enforced at frontend, backend, and proxy levels:
   - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
   - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk; a file part over the limit ends the upload with 413
@@ -101,7 +105,9 @@ from becoming an attack surface:
 
 ### Client-Side Defenses
 
-- [x] Filename sanitization — `sanitizeFilename()` strips path separators (`/`, `\`), ASCII control characters (0x00–0x1F, 0x7F), bidirectional text overrides (U+202A–202E, U+2066–2069), zero-width characters (ZWSP, ZWNJ, ZWJ, BOM, LRM, RLM), leading dots, and trailing whitespace; truncates to 255 characters; falls back to `"file"` when the result is empty
+- [x] Filename sanitization — `sanitizeFilename()` replaces path separators (`/`, `\`); strips control characters, line and paragraph separators, every Unicode format character and everything Unicode marks as ignorable by default (bidirectional overrides and isolates, zero-width characters and joiners, fillers, variation selectors, tags), matched by property rather than from a list; strips leading dots together with the whitespace around them, and trailing whitespace; truncates to 255 characters without cutting one in half; falls back to `"file"` when the result is empty
+- [x] No Markdown parser in the browser — the terms of service are converted to HTML on the server, once at startup; raw HTML in them is shown as text, and a link keeps its address only when that plainly is a web or mail address or a path on the site. The page that handles the key carries no parser and none of its dependencies
+- [x] A download with no chunks is reported as corrupted — nothing is saved, where an empty file used to pass for a successful download
 - [x] Filename mismatch detection — on download, the decrypted filename from the encrypted payload is compared to the one encoded in the URL fragment; a visible warning is shown if they differ, indicating possible link tampering
 
 ### Container Security
