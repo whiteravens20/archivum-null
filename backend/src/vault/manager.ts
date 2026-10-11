@@ -1,5 +1,5 @@
 import type { VaultMetadata, ChunkedUploadSession } from './types.js';
-import { config, calcEncryptionOverhead } from '../config.js';
+import { config, calcEncryptionOverhead, MIN_TTL_SECONDS, MAX_DOWNLOADS_PER_VAULT } from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -196,8 +196,8 @@ export class VaultManager {
       const vaultId = nanoid(ID_LENGTH);
       const now = Date.now();
 
-      const clampedTtl = Math.min(Math.max(ttl, 60), config.MAX_TTL);
-      const clampedDownloads = Math.min(Math.max(maxDownloads, 1), 1000);
+      const clampedTtl = Math.min(Math.max(ttl, MIN_TTL_SECONDS), config.MAX_TTL);
+      const clampedDownloads = Math.min(Math.max(maxDownloads, 1), MAX_DOWNLOADS_PER_VAULT);
 
       let size: number;
       try {
@@ -289,8 +289,8 @@ export class VaultManager {
       totalSize,
       receivedBytes: 0,
       nextChunkIndex: 0,
-      ttl: Math.min(Math.max(ttl, 60), config.MAX_TTL),
-      maxDownloads: Math.min(Math.max(maxDownloads, 1), 1000),
+      ttl: Math.min(Math.max(ttl, MIN_TTL_SECONDS), config.MAX_TTL),
+      maxDownloads: Math.min(Math.max(maxDownloads, 1), MAX_DOWNLOADS_PER_VAULT),
       chunkPlaintextSize,
       expiresAt: Date.now() + config.UPLOAD_SESSION_TTL * 1000,
       clientIp,
