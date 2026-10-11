@@ -96,7 +96,7 @@ from becoming an attack surface:
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
 - [x] Chunked upload sessions protected by HMAC-SHA256 session token — returned at `POST /api/vault/upload/init`, required on all subsequent `/chunk`, `/complete`, and abort requests (`x-session-token` header); token is signed server-side with a per-process random key and verified in constant time
-- [x] Storage quota enforced atomically — `reservedBytes` counter tracks in-progress chunked upload sessions; quota check uses `totalStorageBytes + reservedBytes` to prevent TOCTOU races where concurrent uploads could collectively exceed `MAX_TOTAL_STORAGE`
+- [x] Storage quota enforced with reservations — a chunked upload holds its declared size for as long as its session is open and writes one chunk at a time; a single-request upload holds the length its request declares while it is written, and is then counted by what it stored. Uploads that overlap cannot together exceed `MAX_TOTAL_STORAGE`
 
 ### Client-Side Defenses
 

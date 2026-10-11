@@ -156,13 +156,113 @@ describe('VaultManager — download counter atomicity', () => {
     const quotaManager = new mod.VaultManager();
     await quotaManager.init();
 
-    // First upload: 40 bytes — exceeds the 30-byte quota check on next upload
-    await quotaManager.createVault(makeStream('a'.repeat(40)), 3600, 5);
+    // First upload: 20 bytes, within the 30-byte quota
+    const first = await quotaManager.createVault(makeStream('a'.repeat(20)), 3600, 5);
 
-    // Second upload: total is now 40 >= 30 quota, so this must be rejected
+    // Second upload: 20 more would make 40. Nothing announced its size, so it is
+    // refused once it has been written, and nothing of it is left on disk.
     await expect(
-      quotaManager.createVault(makeStream('b'.repeat(10)), 3600, 5)
-    ).rejects.toThrow(/Storage quota exceeded/);
+      quotaManager.createVault(makeStream('b'.repeat(20)), 3600, 5)
+    ).rejects.toMatchObject({ statusCode: 507, message: expect.stringMatching(/Storage quota exceeded/) });
+    expect(await fsp.readdir(tempDir)).toEqual([first.vaultId]);
+
+    await quotaManager.shutdown();
+  });
+
+  it('refuses an upload that declares more than the quota has left, before reading it', async () => {
+    vi.resetModules();
+    vi.stubEnv('MAX_TOTAL_STORAGE', '100');
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    const quotaManager = new mod.VaultManager();
+    await quotaManager.init();
+
+    const stream = makeStream('c'.repeat(200));
+    await expect(
+      quotaManager.createVault(stream, 3600, 5, undefined, 200)
+    ).rejects.toMatchObject({ statusCode: 507 });
+
+    expect(stream.readableEnded).toBe(false);
+    expect(await fsp.readdir(tempDir)).toEqual([]);
+
+    await quotaManager.shutdown();
+  });
+
+  it('holds the declared size of an upload while it is being written', async () => {
+    vi.resetModules();
+    vi.stubEnv('MAX_TOTAL_STORAGE', '100');
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    const quotaManager = new mod.VaultManager();
+    await quotaManager.init();
+
+    // An upload that declared 80 bytes and has not finished...
+    const slow = new Readable({ read() {} });
+    slow.push(Buffer.alloc(10, 'a'));
+    const writing = quotaManager.createVault(slow, 3600, 5, undefined, 80);
+
+    // ...leaves room for 20. One that declares 80 as well does not fit beside it.
+    await expect(
+      quotaManager.createVault(makeStream('b'.repeat(80)), 3600, 5, undefined, 80)
+    ).rejects.toMatchObject({ statusCode: 507 });
+    // Neither does a chunked upload of that size.
+    expect(() => quotaManager.initChunkedUpload(80, 3600, 5)).toThrow(/Storage quota exceeded/);
+
+    slow.push(null);
+    const stored = await writing;
+    expect(stored.ciphertextSize).toBe(10);
+
+    // Once it is stored, only its real 10 bytes count
+    await expect(
+      quotaManager.createVault(makeStream('c'.repeat(80)), 3600, 5, undefined, 80)
+    ).resolves.toMatchObject({ ciphertextSize: 80 });
+
+    await quotaManager.shutdown();
+  });
+
+  it('accepts an upload that fills the quota exactly, and nothing after it', async () => {
+    vi.resetModules();
+    vi.stubEnv('MAX_TOTAL_STORAGE', '100');
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    const quotaManager = new mod.VaultManager();
+    await quotaManager.init();
+
+    await expect(
+      quotaManager.createVault(makeStream('d'.repeat(100)), 3600, 5, undefined, 100)
+    ).resolves.toMatchObject({ ciphertextSize: 100 });
+    await expect(
+      quotaManager.createVault(makeStream('e'), 3600, 5)
+    ).rejects.toMatchObject({ statusCode: 507 });
+
+    await quotaManager.shutdown();
+  });
+
+  it('lets two uploads that finish together fit only if both do', async () => {
+    vi.resetModules();
+    vi.stubEnv('MAX_TOTAL_STORAGE', '100');
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+    vi.stubEnv('MAX_TTL', '604800');
+    const mod = await import('../vault/manager.js');
+    const quotaManager = new mod.VaultManager();
+    await quotaManager.init();
+
+    // Neither announces a size, so both are judged on what they stored
+    const results = await Promise.allSettled([
+      quotaManager.createVault(makeStream('f'.repeat(60)), 3600, 5),
+      quotaManager.createVault(makeStream('g'.repeat(60)), 3600, 5),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(quotaManager.getStats().totalStorageBytes).toBe(60);
+    expect(await fsp.readdir(tempDir)).toHaveLength(1);
 
     await quotaManager.shutdown();
   });

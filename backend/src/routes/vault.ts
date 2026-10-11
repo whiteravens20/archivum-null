@@ -26,11 +26,14 @@ function sendUploadError(request: FastifyRequest, reply: FastifyReply, err: unkn
   return reply.status(500).send({ error: 'Internal server error' });
 }
 
+/** The most one upload request may carry: a chunk, plus room for the multipart framing. */
+const UPLOAD_REQUEST_LIMIT = config.CHUNK_SIZE + 1024 * 64;
+
 export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   // Upload (create vault)
   app.post('/api/vault', {
     preHandler: verifyTurnstile,
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64, // with streaming encryption, single uploads also fit in one CHUNK_SIZE
+    bodyLimit: UPLOAD_REQUEST_LIMIT, // with streaming encryption, single uploads also fit in one CHUNK_SIZE
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const data = await request.file();
     if (!data) {
@@ -54,12 +57,20 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       ? rawCPS
       : config.CRYPTO_CHUNK_SIZE;
 
+    // The request's own length bounds what this upload can add to storage. Handing it
+    // over lets the quota refuse an upload before any of it is read.
+    const contentLength = Number(request.headers['content-length']);
+    const declaredSize = Number.isSafeInteger(contentLength) && contentLength > 0
+      ? Math.min(contentLength, UPLOAD_REQUEST_LIMIT)
+      : undefined;
+
     try {
       const meta = await vaultManager.createVault(
         data.file,
         ttl,
         maxDownloads,
-        chunkPlaintextSize
+        chunkPlaintextSize,
+        declaredSize
       );
 
       return reply.status(201).send({
@@ -69,6 +80,8 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         ciphertextSize: meta.ciphertextSize,
       });
     } catch (err: unknown) {
+      // An upload refused before it was read still has its body waiting. Drain it.
+      data.file.resume();
       // Narrow unknown error to Error with an optional statusCode set by the vault manager.
       const error = err as Error & { statusCode?: number };
       if (error.statusCode === 413) {
@@ -165,7 +178,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
 
   // 2. Upload a single chunk
   app.post<{ Params: UploadParams }>('/api/vault/upload/:uploadId/chunk', {
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64, // chunk + multipart overhead
+    bodyLimit: UPLOAD_REQUEST_LIMIT,
   }, async (request, reply) => {
     const { uploadId } = request.params;
 

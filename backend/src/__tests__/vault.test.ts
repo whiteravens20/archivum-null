@@ -15,7 +15,7 @@ import { Readable } from 'node:stream';
 
 function makeMockVaultManager() {
   return {
-    createVault: vi.fn(async () => ({
+    createVault: vi.fn(async (_stream?: Readable) => ({
       vaultId: 'abc123',
       expiresAt: 9999999999,
       maxDownloads: 5,
@@ -194,6 +194,32 @@ describe('Vault routes', () => {
     expect(res.json().error).toContain('quota');
   });
 
+  it('POST /api/vault hands the request length to the quota and drains an upload it refuses', async () => {
+    let part: Readable | undefined;
+    mockManager.createVault.mockImplementationOnce(async (stream: Readable) => {
+      part = stream;
+      throw Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 });
+    });
+
+    const payload = buildMultipart(boundary, {},
+      { name: 'data.bin', content: Buffer.alloc(256 * 1024) }
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(507);
+    expect(mockManager.createVault).toHaveBeenCalledWith(
+      expect.anything(), 86400, 10, 5242880, payload.length
+    );
+    // The manager refused without reading the part; the route must not leave it unread
+    expect(part?.readableFlowing).toBe(true);
+  });
+
   it('POST /api/vault returns 500 on unexpected error', async () => {
     mockManager.createVault.mockRejectedValueOnce(new Error('disk failure'));
 
@@ -228,9 +254,10 @@ describe('Vault routes', () => {
     // createVault should be called with default config values
     expect(mockManager.createVault).toHaveBeenCalledWith(
       expect.anything(),
-      86400,  // DEFAULT_TTL
-      10,     // DEFAULT_MAX_DOWNLOADS
-      5242880 // CRYPTO_CHUNK_SIZE default
+      86400,   // DEFAULT_TTL
+      10,      // DEFAULT_MAX_DOWNLOADS
+      5242880, // CRYPTO_CHUNK_SIZE default
+      payload.length // the request's Content-Length
     );
   });
 

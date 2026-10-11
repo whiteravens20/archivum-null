@@ -10,9 +10,10 @@ const vaults = new Map<string, VaultMetadata>();
 const uploadSessions = new Map<string, ChunkedUploadSession>();
 
 /**
- * Bytes reserved by active chunked upload sessions that haven't completed yet.
- * Prevents TOCTOU race where concurrent initChunkedUpload calls can each pass
- * the quota check independently, collectively exceeding MAX_TOTAL_STORAGE.
+ * Bytes held for uploads that are not vaults yet: the declared size of every open
+ * chunked session, and of every single-request upload while it is being written.
+ * Without it, uploads that overlap would each pass the quota check on their own and
+ * together exceed MAX_TOTAL_STORAGE.
  */
 let reservedBytes = 0;
 
@@ -32,6 +33,14 @@ const MAX_METADATA_HEADER = 768;
 
 // Cleanup interval — every 60 seconds, purge expired vaults
 const CLEANUP_INTERVAL = 60_000;
+
+/** Storage is full, or the upload would take it over MAX_TOTAL_STORAGE. */
+function quotaExceeded(): Error {
+  return Object.assign(
+    new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
+    { statusCode: 507 }
+  );
+}
 
 /** A second request for an upload session whose data file is being written to. */
 function sessionBusy(): Error {
@@ -119,54 +128,82 @@ export class VaultManager {
     stream: Readable,
     ttl: number,
     maxDownloads: number,
-    chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE
+    chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE,
+    declaredSize?: number
   ): Promise<VaultMetadata> {
-    // Enforce global storage quota before accepting a new upload.
-    // Include reservedBytes from in-progress chunked uploads to prevent TOCTOU.
-    if (config.MAX_TOTAL_STORAGE > 0) {
-      const { totalStorageBytes } = this.getStats();
-      if (totalStorageBytes + reservedBytes >= config.MAX_TOTAL_STORAGE) {
-        const err = Object.assign(
-          new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
-          { statusCode: 507 }
-        );
-        throw err;
-      }
-    }
-
-    const vaultId = nanoid(24);
-    const now = Date.now();
-
-    const clampedTtl = Math.min(Math.max(ttl, 60), config.MAX_TTL);
-    const clampedDownloads = Math.min(Math.max(maxDownloads, 1), 1000);
-
     // MAX_FILE_SIZE refers to the user's raw file — account for the encrypted
     // metadata header (filename + MIME) that the frontend prepends before encryption.
     const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
     const maxSize = plaintextMax + calcEncryptionOverhead(plaintextMax);
-    let size: number;
-    try {
-      size = await storage.writeFile(vaultId, stream, maxSize);
-    } catch (err) {
-      // Ensure the vault directory is fully removed on any write failure
-      await storage.deleteVault(vaultId).catch(() => {});
-      throw err;
+
+    // What the request says it carries, when it says anything usable. The upload cannot
+    // store more than that, so it is what the quota holds for it while it is written.
+    const declared =
+      declaredSize !== undefined && Number.isSafeInteger(declaredSize) && declaredSize > 0
+        ? Math.min(declaredSize, maxSize)
+        : 0;
+
+    // Enforce the global storage quota before reading the upload. Reservations of
+    // uploads still in progress count, chunked and single-request alike, so uploads
+    // that overlap cannot each pass the same check.
+    if (config.MAX_TOTAL_STORAGE > 0) {
+      const projected = this.getStats().totalStorageBytes + reservedBytes + declared;
+      // With nothing declared, only a quota that is already full shows here. The real
+      // size is checked below, once it is known.
+      const over = declared > 0
+        ? projected > config.MAX_TOTAL_STORAGE
+        : projected >= config.MAX_TOTAL_STORAGE;
+      if (over) throw quotaExceeded();
     }
 
-    const meta: VaultMetadata = {
-      vaultId,
-      ciphertextSize: size,
-      chunkPlaintextSize,
-      createdAt: now,
-      expiresAt: now + clampedTtl * 1000,
-      remainingDownloads: clampedDownloads,
-      maxDownloads: clampedDownloads,
-    };
+    let held = declared;
+    reservedBytes += held;
+    try {
+      const vaultId = nanoid(24);
+      const now = Date.now();
 
-    await storage.writeMetadata(vaultId, meta);
-    vaults.set(vaultId, meta);
+      const clampedTtl = Math.min(Math.max(ttl, 60), config.MAX_TTL);
+      const clampedDownloads = Math.min(Math.max(maxDownloads, 1), 1000);
 
-    return meta;
+      let size: number;
+      try {
+        size = await storage.writeFile(vaultId, stream, maxSize);
+      } catch (err) {
+        // Ensure the vault directory is fully removed on any write failure
+        await storage.deleteVault(vaultId).catch(() => {});
+        throw err;
+      }
+
+      // What was stored takes the place of what was declared: the declared length
+      // includes the request's framing, and some requests declare none. Held until the
+      // vault is in the map, so two uploads finishing together cannot both fit.
+      reservedBytes += size - held;
+      held = size;
+      if (
+        config.MAX_TOTAL_STORAGE > 0 &&
+        this.getStats().totalStorageBytes + reservedBytes > config.MAX_TOTAL_STORAGE
+      ) {
+        await storage.deleteVault(vaultId).catch(() => {});
+        throw quotaExceeded();
+      }
+
+      const meta: VaultMetadata = {
+        vaultId,
+        ciphertextSize: size,
+        chunkPlaintextSize,
+        createdAt: now,
+        expiresAt: now + clampedTtl * 1000,
+        remainingDownloads: clampedDownloads,
+        maxDownloads: clampedDownloads,
+      };
+
+      await storage.writeMetadata(vaultId, meta);
+      vaults.set(vaultId, meta);
+
+      return meta;
+    } finally {
+      reservedBytes = Math.max(0, reservedBytes - held);
+    }
   }
 
   // ── Chunked upload ────────────────────────────────────────────────────────
@@ -196,10 +233,7 @@ export class VaultManager {
     if (config.MAX_TOTAL_STORAGE > 0) {
       const { totalStorageBytes } = this.getStats();
       if (totalStorageBytes + reservedBytes + totalSize > config.MAX_TOTAL_STORAGE) {
-        throw Object.assign(
-          new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
-          { statusCode: 507 }
-        );
+        throw quotaExceeded();
       }
     }
 
