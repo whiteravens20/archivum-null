@@ -118,8 +118,12 @@ from becoming an attack surface:
 - [x] `no-new-privileges: true`
 - [x] No docker.sock mount
 - [x] tmpfs for /tmp (noexec, nosuid)
-- [x] Resource limits (memory, CPU)
+- [x] Resource limits (memory, CPU, number of processes)
 - [x] Health checks
+- [x] No package manager in the runtime image — npm, corepack, yarn and apk are removed, together with the libraries only apk needed (OpenSSL, zlib); the package database stays for image scanners
+- [x] Node's permission model — the server is started with `--permission`, so the process cannot run a child process or a worker thread, load a native addon, use WASI or open the inspector
+- [x] The quick-start Compose file carries the same hardening and limits as the production one
+- [x] Proxmox LXC installs run the app as its own user under a sandboxed systemd unit: no capabilities, a read-only filesystem except the vault directory, a system-call filter, the same permission model. The build runs as a throwaway unprivileged user
 
 ### Network Security
 
@@ -127,11 +131,11 @@ from becoming an attack surface:
 - [x] App inside container binds to `0.0.0.0` of its own network namespace — Docker port mapping is the enforcement boundary
 - [x] Dedicated Docker bridge network (container isolated from default `docker0` and unrelated containers)
 - [x] Tunnel/private-interface-only access in production
-- [x] Example firewall rules provided (iptables + nftables, whitelist-first order)
+- [x] Firewall rules that contain the app, applied and removed by `scripts/setup-firewall.sh` (iptables or nftables, IPv4 and IPv6): connections the app opens are dropped, the Docker host is out of the container's reach, and only the tunnel interface reaches the app port
 - [x] VPS hardening documented (UFW + nftables — port 3000 never public, only 80/443)
 - [x] WireGuard `AllowedIPs = <tunnel-ip>/32` documented to prevent lateral LAN movement
-- [x] Deployment validation script (`scripts/check-deployment.sh`) to verify posture on the running host
-- [x] No LAN exposure in production mode
+- [x] Deployment validation script (`scripts/check-deployment.sh`) to verify posture on the running host: it reads the container's confinement and has the container try to connect out
+- [x] No LAN exposure in production mode, by different means on each path. Docker: the port is published on the tunnel address and the inbound guard drops what does not arrive on the tunnel interface. Proxmox LXC: the container's firewall lets the reverse proxy in and nothing else, for as long as the datacenter firewall is enabled
 - [x] CORS restricted in production
 - [x] Reverse-proxy trust by address (`TRUST_PROXY`, default `loopback`) — `X-Forwarded-For` is honoured only when the connection comes from a listed proxy, so a direct client cannot spoof its IP
 

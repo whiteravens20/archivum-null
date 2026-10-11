@@ -1,20 +1,28 @@
 #!/usr/bin/env bash
 # ── Archivum Null — Deployment Posture Check ──────────────────────────────────
 # Run this on the HOMELAB HOST (not the VPS) after bringing up the production
-# container.  It validates that the network exposure matches the expected secure
-# posture: port 3000 reachable only via the tunnel interface, not from LAN.
+# container. It checks that the container is confined the way docker-compose.yml
+# intends, that the port is published where you meant it to be, and that the
+# container cannot open connections of its own.
+#
+# The last part is tested, not read off the rules: the script makes the container
+# try a connection to a public address and one to this host. With the egress rules
+# in place neither leaves the container's bridge.
 #
 # Usage:
-#   ./scripts/check-deployment.sh [--tunnel-iface wg0] [--port 3000]
+#   sudo ./scripts/check-deployment.sh [--tunnel-iface wg0] [--port 3000]
 #
 # Requirements:
-#   - ss  (iproute2, default on all Debian/Ubuntu/Fedora/Arch systems)
-#   - iptables or nft  (at least one must be present for firewall checks)
-#   - docker  (for container status)
-#   - curl or nc  (for connectivity tests)
+#   - docker
+#   - ss  (iproute2)
+#   - root, to read the firewall rules; without it those checks are skipped
+#   - nc or curl, for the LAN reachability test
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
+
+# iptables and nft live in sbin, which a plain user's PATH often leaves out.
+PATH="$PATH:/usr/sbin:/sbin"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 TUNNEL_IFACE=""
@@ -36,6 +44,8 @@ pass()  { green  "$*"; PASS=$(( PASS + 1 ));  }
 fail()  { red    "$*"; FAIL=$(( FAIL + 1 ));  }
 warn()  { yellow "$*"; WARN=$(( WARN + 1 ));  }
 
+inspect() { docker inspect --format "$1" "$CONTAINER_NAME" 2>/dev/null || true; }
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,7 +58,7 @@ done
 # Try to auto-detect tunnel interface if not provided
 if [[ -z "$TUNNEL_IFACE" ]]; then
   for iface in wg0 wg1 tun0 tun1 tailscale0; do
-    if ip link show "$iface" &>/dev/null 2>&1; then
+    if ip link show "$iface" &>/dev/null; then
       TUNNEL_IFACE="$iface"
       break
     fi
@@ -64,9 +74,11 @@ HOST_BIND_ADDRESS="${HOST_BIND_ADDRESS:-}"
 
 # ── Check 1: Container is running ─────────────────────────────────────────────
 header "1. Container status"
-if docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q 'true'; then
+RUNNING=false
+if [[ "$(inspect '{{.State.Running}}')" == "true" ]]; then
+  RUNNING=true
   pass "Container '$CONTAINER_NAME' is running"
-  HEALTHY=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$CONTAINER_NAME")
+  HEALTHY=$(inspect '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}')
   if [[ "$HEALTHY" == "healthy" ]]; then
     pass "Health check: $HEALTHY"
   elif [[ "$HEALTHY" == "no-healthcheck" ]]; then
@@ -83,18 +95,25 @@ header "2. Port binding (ss)"
 if ! command -v ss &>/dev/null; then
   warn "ss not found — skipping port binding check (install iproute2)"
 else
-  BINDINGS=$(ss -tlnp 2>/dev/null | grep ":${APP_PORT} " || true)
-  if [[ -z "$BINDINGS" ]]; then
+  # Fourth column of "ss -tlnH": the local address and port
+  mapfile -t LISTENERS < <(ss -tlnH 2>/dev/null | awk -v p=":${APP_PORT}" '$4 ~ p"$" { print $4 }' | sort -u)
+  if [[ ${#LISTENERS[@]} -eq 0 ]]; then
     fail "Nothing is listening on port $APP_PORT"
   else
-    echo "  Listening: $BINDINGS"
-    if echo "$BINDINGS" | grep -qE "^LISTEN\s+\S+\s+\S+\s+0\.0\.0\.0:${APP_PORT}|^\*:${APP_PORT}"; then
-      fail "Port $APP_PORT is bound to 0.0.0.0 — exposed on ALL host interfaces (set HOST_BIND_ADDRESS in .env)"
+    echo "  Listening on: ${LISTENERS[*]}"
+    WILDCARD=false
+    for listener in "${LISTENERS[@]}"; do
+      # 0.0.0.0, the IPv6 wildcard, and the dual-stack "*" all mean every interface
+      case "${listener%:*}" in
+        0.0.0.0|'*'|'[::]') WILDCARD=true ;;
+      esac
+    done
+    if [[ "$WILDCARD" == "true" ]]; then
+      fail "Port $APP_PORT is bound to every interface of this host (set HOST_BIND_ADDRESS in .env)"
     else
-      BOUND_IP=$(echo "$BINDINGS" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-      pass "Port $APP_PORT is bound to $BOUND_IP (not 0.0.0.0)"
-      if [[ -n "$HOST_BIND_ADDRESS" && "$BOUND_IP" != "$HOST_BIND_ADDRESS" ]]; then
-        warn "Bound address ($BOUND_IP) does not match HOST_BIND_ADDRESS ($HOST_BIND_ADDRESS) in .env"
+      pass "Port $APP_PORT is bound to ${LISTENERS[*]} only"
+      if [[ -n "$HOST_BIND_ADDRESS" && " ${LISTENERS[*]} " != *" ${HOST_BIND_ADDRESS}:${APP_PORT} "* ]]; then
+        warn "The bound address does not match HOST_BIND_ADDRESS ($HOST_BIND_ADDRESS) in .env"
       fi
     fi
   fi
@@ -102,34 +121,71 @@ fi
 
 # ── Check 3: Container user is non-root ───────────────────────────────────────
 header "3. Container user"
-CUSER=$(docker inspect --format '{{.Config.User}}' "$CONTAINER_NAME" 2>/dev/null || true)
-if [[ -z "$CUSER" || "$CUSER" == "root" || "$CUSER" == "0" ]]; then
+CUSER=$(inspect '{{.Config.User}}')
+if [[ -z "$CUSER" || "$CUSER" == "root" || "$CUSER" == "0" || "$CUSER" == 0:* ]]; then
   fail "Container is running as root — check USER in Dockerfile"
 else
   pass "Container running as user: $CUSER"
 fi
 
-# ── Check 4: Capabilities and security options ────────────────────────────────
+# ── Check 4: Capabilities, confinement and limits ─────────────────────────────
 header "4. Container security options"
-CAPS=$(docker inspect --format '{{len .HostConfig.CapAdd}}' "$CONTAINER_NAME" 2>/dev/null || echo 0)
-if [[ "$CAPS" -eq 0 ]]; then
-  pass "No capabilities added (cap_drop: ALL in effect)"
+if [[ "$(inspect '{{.HostConfig.Privileged}}')" == "true" ]]; then
+  fail "Container is privileged — every other restriction is void"
 else
-  fail "Container has $CAPS added capabilities — review docker-compose.yml"
+  pass "Container is not privileged"
 fi
 
-NO_NEW_PRIV=$(docker inspect --format '{{.HostConfig.SecurityOpt}}' "$CONTAINER_NAME" 2>/dev/null || true)
-if echo "$NO_NEW_PRIV" | grep -q 'no-new-privileges'; then
+CAP_DROP=$(inspect '{{range .HostConfig.CapDrop}}{{.}} {{end}}')
+CAP_ADD=$(inspect '{{range .HostConfig.CapAdd}}{{.}} {{end}}')
+if [[ " ${CAP_DROP^^} " != *" ALL "* ]]; then
+  fail "Capabilities are not dropped — set cap_drop: [ALL] in docker-compose.yml"
+elif [[ -n "${CAP_ADD// /}" ]]; then
+  fail "Capabilities added back: ${CAP_ADD% } — review docker-compose.yml"
+else
+  pass "All capabilities dropped, none added"
+fi
+
+SECURITY_OPT=$(inspect '{{.HostConfig.SecurityOpt}}')
+if echo "$SECURITY_OPT" | grep -q 'no-new-privileges'; then
   pass "no-new-privileges enabled"
 else
   fail "no-new-privileges is NOT enabled"
 fi
+for profile in seccomp apparmor; do
+  if echo "$SECURITY_OPT" | grep -qE "${profile}[=:]unconfined"; then
+    fail "The ${profile} profile is switched off (${profile}=unconfined)"
+  fi
+done
 
-READONLY=$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$CONTAINER_NAME" 2>/dev/null || echo false)
-if [[ "$READONLY" == "true" ]]; then
+if [[ "$(inspect '{{.HostConfig.ReadonlyRootfs}}')" == "true" ]]; then
   pass "Root filesystem is read-only"
 else
   fail "Root filesystem is writable — set read_only: true in docker-compose.yml"
+fi
+
+SHARED=()
+[[ "$(inspect '{{.HostConfig.NetworkMode}}')" == "host" ]] && SHARED+=("network")
+[[ "$(inspect '{{.HostConfig.PidMode}}')" == "host" ]] && SHARED+=("process")
+[[ "$(inspect '{{.HostConfig.IpcMode}}')" == "host" ]] && SHARED+=("IPC")
+[[ "$(inspect '{{.HostConfig.UsernsMode}}')" == "host" ]] && SHARED+=("user")
+if [[ ${#SHARED[@]} -gt 0 ]]; then
+  fail "Container shares the host's namespaces: ${SHARED[*]}"
+else
+  pass "No host namespace is shared with the container"
+fi
+
+PIDS_LIMIT=$(inspect '{{.HostConfig.PidsLimit}}')
+if [[ "$PIDS_LIMIT" =~ ^[0-9]+$ && "$PIDS_LIMIT" -gt 0 ]]; then
+  pass "Process limit: $PIDS_LIMIT"
+else
+  fail "No process limit — set deploy.resources.limits.pids in docker-compose.yml"
+fi
+MEMORY_LIMIT=$(inspect '{{.HostConfig.Memory}}')
+if [[ "$MEMORY_LIMIT" =~ ^[0-9]+$ && "$MEMORY_LIMIT" -gt 0 ]]; then
+  pass "Memory limit: $(( MEMORY_LIMIT / 1024 / 1024 )) MiB"
+else
+  warn "No memory limit — set deploy.resources.limits.memory in docker-compose.yml"
 fi
 
 # ── Check 5: Tunnel interface ─────────────────────────────────────────────────
@@ -154,39 +210,99 @@ else
 fi
 
 # ── Check 6: Firewall rules ────────────────────────────────────────────────────
-header "6. Firewall rules (port $APP_PORT)"
-FIREWALL_CHECKED=false
-if command -v nft &>/dev/null; then
-  FIREWALL_CHECKED=true
-  NFT_RULES=$(nft list ruleset 2>/dev/null | grep -E "dport\s+$APP_PORT|dport\s+\{[^}]*$APP_PORT" || true)
-  if [[ -n "$NFT_RULES" ]]; then
-    pass "nftables has rules for port $APP_PORT:"
-    echo "$NFT_RULES" | sed 's/^/    /'
-  else
-    warn "No nftables rules found for port $APP_PORT (may be fine if iptables is in use)"
+# Rules made by setup-firewall.sh: the nftables table "inet archivum_null", or the
+# iptables chain ARCHIVUM-EGRESS entered from DOCKER-USER.
+header "6. Firewall rules"
+# The $name below belongs to Docker's template, not to the shell.
+# shellcheck disable=SC2016
+NETWORK=$(inspect '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}{{end}}')
+BRIDGE=$(docker network inspect "$NETWORK" --format '{{index .Options "com.docker.network.bridge.name"}}' 2>/dev/null || true)
+BRIDGE="${BRIDGE:-br-archivum}"
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  warn "Not root — cannot read the firewall rules. Run with sudo for this check."
+else
+  RULES_FOUND=false
+  GUARD_FOUND=false
+  if command -v nft &>/dev/null && nft list table inet archivum_null &>/dev/null; then
+    RULES_FOUND=true
+    pass "nftables: table inet archivum_null is loaded"
+    nft list table inet archivum_null 2>/dev/null | grep -q 'chain ingress' && GUARD_FOUND=true
   fi
-fi
-if command -v iptables &>/dev/null; then
-  FIREWALL_CHECKED=true
-  IPT_RULES=$(iptables -S INPUT 2>/dev/null | grep -- "--dport $APP_PORT" || true)
-  if [[ -n "$IPT_RULES" ]]; then
-    pass "iptables has rules for port $APP_PORT:"
-    echo "$IPT_RULES" | sed 's/^/    /'
-    # Check for the critical order mistake: DROP before ACCEPT
-    FIRST_RELEVANT=$(echo "$IPT_RULES" | head -1)
-    if echo "$FIRST_RELEVANT" | grep -q "\-j DROP"; then
-      fail "First firewall rule for port $APP_PORT is a DROP — tunnel traffic may be blocked before ACCEPT. See README for correct whitelist-first ordering."
+  if command -v iptables &>/dev/null && iptables -S ARCHIVUM-EGRESS &>/dev/null; then
+    RULES_FOUND=true
+    FIRST_RULE=$(iptables -S DOCKER-USER 2>/dev/null | grep '^-A ' | head -1 || true)
+    if iptables -C DOCKER-USER -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null \
+       || iptables -C FORWARD -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null; then
+      pass "iptables: ARCHIVUM-EGRESS is entered for traffic from $BRIDGE"
+    else
+      fail "iptables: the chain ARCHIVUM-EGRESS exists, but nothing sends traffic from $BRIDGE into it — run setup-firewall.sh again"
     fi
-  else
-    warn "No iptables rules found for port $APP_PORT"
+    if [[ "$FIRST_RULE" == *"-j ACCEPT"* ]]; then
+      fail "iptables: DOCKER-USER starts with an ACCEPT ($FIRST_RULE) — traffic it matches skips the rules after it"
+    fi
+    iptables -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
   fi
-fi
-if [[ "$FIREWALL_CHECKED" == "false" ]]; then
-  warn "Neither nft nor iptables found — cannot verify firewall posture"
+  if [[ "$RULES_FOUND" == "false" ]]; then
+    fail "No egress rules found — run: sudo bash scripts/setup-firewall.sh --mode docker"
+  elif [[ "$GUARD_FOUND" == "true" ]]; then
+    pass "Inbound guard is in place: one interface may reach the container"
+  else
+    warn "No inbound guard: anything that can route to the published address reaches port $APP_PORT. Run setup-firewall.sh with --tunnel-iface."
+  fi
+
+  # What the earlier version of setup-firewall.sh left behind
+  if command -v iptables &>/dev/null; then
+    if iptables -S FORWARD 2>/dev/null | grep -qE -- "^-A FORWARD .*-i ${BRIDGE} .*-j (DROP|ACCEPT)"; then
+      warn "Old rules in FORWARD for $BRIDGE: they sit behind Docker's own accept and never run. Run setup-firewall.sh again; it removes them."
+    fi
+    if iptables -S DOCKER-USER 2>/dev/null | grep -qE -- '^-A DOCKER-USER -i [^ ]+ -j ACCEPT$'; then
+      fail "DOCKER-USER accepts everything from an interface: this host forwards that interface's packets to any network it routes to. Run setup-firewall.sh again; it removes the rule."
+    fi
+  fi
 fi
 
-# ── Check 7: LAN reachability test ────────────────────────────────────────────
-header "7. LAN reachability test"
+# ── Check 7: Egress, tested from inside the container ─────────────────────────
+header "7. Container egress (tested)"
+if [[ "$RUNNING" != "true" ]]; then
+  warn "Container is not running — skipping the egress test"
+else
+  # try <host> <port> — open / timeout / an error code, as seen from the container
+  try() {
+    docker exec "$CONTAINER_NAME" node -e '
+      const [host, port] = process.argv.slice(1);
+      const socket = require("net").connect({ host, port: Number(port) });
+      const timer = setTimeout(() => { console.log("timeout"); socket.destroy(); }, 4000);
+      socket.on("connect", () => { clearTimeout(timer); console.log("open"); socket.destroy(); });
+      socket.on("error", (e) => { clearTimeout(timer); console.log(e.code); });' "$1" "$2" 2>/dev/null | tail -1
+  }
+  # A refused connection counts as reachable: the answer came from the other end.
+  blocked() { [[ "$1" == "timeout" || "$1" == "EHOSTUNREACH" || "$1" == "ENETUNREACH" ]]; }
+
+  # 1.1.1.1 is outside the ranges the Turnstile allowance opens.
+  INTERNET=$(try 1.1.1.1 443)
+  if blocked "$INTERNET"; then
+    pass "The container cannot open a connection to the internet (1.1.1.1:443: $INTERNET)"
+  else
+    fail "The container can reach the internet (1.1.1.1:443: $INTERNET) — egress is not contained"
+  fi
+
+  GATEWAY=$(inspect '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}')
+  if [[ -n "$GATEWAY" ]]; then
+    HOST_RESULT=$(try "$GATEWAY" 22)
+    if blocked "$HOST_RESULT"; then
+      pass "The container cannot open a connection to this host ($GATEWAY:22: $HOST_RESULT)"
+    else
+      fail "The container can reach this host ($GATEWAY:22: $HOST_RESULT) — whatever the host listens on is exposed to it"
+    fi
+  fi
+fi
+
+# ── Check 8: LAN reachability test ────────────────────────────────────────────
+# From this host to its own LAN address. It shows where the port is published; it
+# cannot show what another machine on the LAN reaches by routing to the published
+# address. That is what the inbound guard of check 6 is for.
+header "8. LAN reachability test"
 LAN_IF=$(ip route | awk '/^default/ {print $5}' | head -1)
 if [[ -n "$LAN_IF" ]]; then
   LAN_IP=$(ip -4 addr show "$LAN_IF" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
@@ -195,15 +311,15 @@ if [[ -n "$LAN_IF" ]]; then
     if [[ "$LAN_IP" != "$HOST_BIND_ADDRESS" ]]; then
       if command -v nc &>/dev/null; then
         if nc -z -w2 "$LAN_IP" "$APP_PORT" 2>/dev/null; then
-          fail "Port $APP_PORT is REACHABLE via LAN interface $LAN_IF ($LAN_IP) — firewall rules are missing or wrong"
+          fail "Port $APP_PORT is REACHABLE on the LAN address of $LAN_IF ($LAN_IP)"
         else
-          pass "Port $APP_PORT is NOT reachable via LAN interface $LAN_IF ($LAN_IP)"
+          pass "Port $APP_PORT is NOT published on the LAN address of $LAN_IF ($LAN_IP)"
         fi
       elif command -v curl &>/dev/null; then
         if curl -s --max-time 2 "http://$LAN_IP:$APP_PORT/api/health" &>/dev/null; then
-          fail "Port $APP_PORT is REACHABLE via LAN ($LAN_IP) — firewall rules are missing or wrong"
+          fail "Port $APP_PORT is REACHABLE on the LAN address ($LAN_IP)"
         else
-          pass "Port $APP_PORT is NOT reachable via LAN ($LAN_IP)"
+          pass "Port $APP_PORT is NOT published on the LAN address ($LAN_IP)"
         fi
       else
         warn "Neither nc nor curl found — skipping LAN reachability test"
@@ -214,9 +330,9 @@ if [[ -n "$LAN_IF" ]]; then
   fi
 fi
 
-# ── Check 8: docker.sock mount ────────────────────────────────────────────────
-header "8. docker.sock mount"
-SOCK_MOUNTS=$(docker inspect --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' "$CONTAINER_NAME" 2>/dev/null | grep docker.sock || true)
+# ── Check 9: docker.sock mount ────────────────────────────────────────────────
+header "9. docker.sock mount"
+SOCK_MOUNTS=$(inspect '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' | grep docker.sock || true)
 if [[ -n "$SOCK_MOUNTS" ]]; then
   fail "docker.sock is mounted inside the container — container escape risk"
 else

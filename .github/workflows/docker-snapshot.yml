@@ -70,18 +70,11 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.tag.outputs.value }}
-          # VITE_ vars are public build-time constants. Fallback defaults are used
-          # when repository variables are not configured.
+          # APP_VERSION is not a release tag here: the panel shows it verbatim and
+          # skips the release comparison rather than pretending a snapshot is a version.
           build-args: |
             CACHE_BUST_APK=${{ github.run_id }}
-            # Not a release tag — the panel shows it verbatim and skips the
-            # release comparison rather than pretending a snapshot is a version.
             APP_VERSION=edge-${{ github.sha }}
-            VITE_MAX_FILE_SIZE=${{ vars.VITE_MAX_FILE_SIZE || '104857600' }}
-            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY || '0x0000000000000000000000' }}
-            VITE_DEFAULT_TTL=${{ vars.VITE_DEFAULT_TTL || '86400' }}
-            VITE_DEFAULT_MAX_DOWNLOADS=${{ vars.VITE_DEFAULT_MAX_DOWNLOADS || '10' }}
-            VITE_CHUNK_SIZE=${{ vars.VITE_CHUNK_SIZE || '52428800' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

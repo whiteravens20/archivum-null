@@ -29,7 +29,7 @@ The README covers the variables you usually touch. This page is the complete ref
 | `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
 | `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
 | `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
+| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check, and the server warns about it at startup. `.env.example` sets 10 GiB and the quick-start Compose file 1 GiB. Size it to the disk the vaults are on: a named Docker volume lives on the host's filesystem, and a full one stops Docker and everything else that uses it. |
 | `STORAGE_PATH` | `/data/vaults` | File storage path inside container. Give the app a directory of its own: it creates, expires and removes what is inside. A directory it does not recognise as a vault is left alone and named in a warning at startup |
 
 ### Chunked upload internals
