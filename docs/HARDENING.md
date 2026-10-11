@@ -87,8 +87,9 @@ Both iptables and nftables evaluate rules **top-to-bottom and stop at the first 
 
 - Replies come first. A rule that accepts established connections has to precede every drop, or the app stops answering the very proxy it serves: the reply to a proxy on `10.8.0.1` is a packet to a private address.
 - **With Docker, where a rule sits matters as much as its order.** Docker's own rules accept everything a container sends, and they are reached from `FORWARD` before anything you append to that chain. A drop appended to `FORWARD` is never evaluated. The one chain Docker evaluates before its own rules is `DOCKER-USER`.
+- **Docker is not the only program with accept rules of its own.** A VPN client or a second firewall keeps them in the same `filter` table and puts them first when it starts. Tailscale's chain accepts everything that leaves through `tailscale0`: once it is evaluated first, a drop in `FORWARD` or in `DOCKER-USER` no longer keeps a container out of the tailnet. An `ACCEPT` ends the say of the table it is in and of no other. A drop that has to hold whatever else runs on the host therefore goes into a table that is evaluated earlier or beside: with iptables the `mangle` table, with nftables a table of its own.
 - Traffic to a published port is forwarded, not delivered to the host. Rules in `INPUT` do not see it.
-- A container that connects to the Docker host itself is not forwarded. That traffic passes `INPUT`, not `DOCKER-USER`.
+- A container that connects to the Docker host itself is not forwarded. That traffic passes `INPUT`.
 - Do not put an `ACCEPT` into `DOCKER-USER`. It ends the evaluation for the packets it matches, Docker's own filtering included. An accept for a tunnel interface there makes the host forward that interface's packets to every network it has a route to.
 - nftables rules in a table of their own are evaluated beside Docker's rules, whatever their order: a packet has to pass every table.
 
@@ -130,8 +131,8 @@ What it sets up differs between the two ways of running the app, because the tra
 
 | | Path of a connection to the app | Where the guard sits |
 |---|---|---|
-| **Docker** | Forwarded to the container. `INPUT` never sees it | With iptables, a chain entered from `DOCKER-USER` for traffic going out to the app's bridge; with nftables, a chain on the forward hook |
-| **Bare-metal** | Delivered to the Node process on the host | A chain entered from `INPUT` for the app port. Connections from the host itself stay allowed, so a proxy or tunnel daemon on the same machine keeps working |
+| **Docker** | Forwarded to the container. `INPUT` never sees it | A chain on the forward path for traffic going out to the app's bridge: with iptables in the `mangle` table, with nftables in the script's own table |
+| **Bare-metal** | Delivered to the Node process on the host | A chain on the input path for the app port, in the same two places. Connections from the host itself stay allowed, so a proxy or tunnel daemon on the same machine keeps working |
 
 Add `--dry-run` to print the rules without applying them.
 
@@ -683,32 +684,33 @@ Do **not** use `internal: true` on the Compose network for this. Docker publishe
 **The same by hand.** `--dry-run` prints exactly what the script would apply for your options. As iptables commands, for Turnstile on and a tunnel on `wg0`:
 
 ```bash
-# Chains of our own. Allowed traffic leaves them with RETURN, so Docker's own
-# rules and yours still apply to it.
-iptables -N ARCHIVUM-EGRESS
-iptables -A ARCHIVUM-EGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-iptables -A ARCHIVUM-EGRESS -d 104.16.0.0/13 -p tcp --dport 443 -j RETURN   # Turnstile only
-iptables -A ARCHIVUM-EGRESS -d 104.24.0.0/14 -p tcp --dport 443 -j RETURN   # Turnstile only
-iptables -A ARCHIVUM-EGRESS -j DROP
+# Chains of our own, in the mangle table: a packet passes it before the filter
+# table, where Docker and other programs keep their accepts, so none of those can
+# let a packet pass these chains by. Allowed traffic leaves them with RETURN, so
+# Docker's own rules and yours still apply to it.
+iptables -t mangle -N ARCHIVUM-EGRESS
+iptables -t mangle -A ARCHIVUM-EGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -t mangle -A ARCHIVUM-EGRESS -d 104.16.0.0/13 -p tcp --dport 443 -j RETURN   # Turnstile only
+iptables -t mangle -A ARCHIVUM-EGRESS -d 104.24.0.0/14 -p tcp --dport 443 -j RETURN   # Turnstile only
+iptables -t mangle -A ARCHIVUM-EGRESS -j DROP
 
-iptables -N ARCHIVUM-HOST
-iptables -A ARCHIVUM-HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-iptables -A ARCHIVUM-HOST -j DROP
+iptables -t mangle -N ARCHIVUM-HOST
+iptables -t mangle -A ARCHIVUM-HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -t mangle -A ARCHIVUM-HOST -j DROP
 
-iptables -N ARCHIVUM-INGRESS
-iptables -A ARCHIVUM-INGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-iptables -A ARCHIVUM-INGRESS -i wg0 -j RETURN
-iptables -A ARCHIVUM-INGRESS -j DROP
+iptables -t mangle -N ARCHIVUM-INGRESS
+iptables -t mangle -A ARCHIVUM-INGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -t mangle -A ARCHIVUM-INGRESS -i wg0 -j RETURN
+iptables -t mangle -A ARCHIVUM-INGRESS -j DROP
 
-# Forwarded traffic of the app's bridge: DOCKER-USER, the chain Docker evaluates
-# before its own accept. Not FORWARD, where a rule comes after that accept.
-iptables -I DOCKER-USER 1 -i br-archivum -j ARCHIVUM-EGRESS
-iptables -I DOCKER-USER 1 -o br-archivum -j ARCHIVUM-INGRESS
+# Forwarded traffic of the app's bridge, out of it and into it
+iptables -t mangle -I FORWARD 1 -i br-archivum -j ARCHIVUM-EGRESS
+iptables -t mangle -I FORWARD 1 -o br-archivum -j ARCHIVUM-INGRESS
 # From the container to the host itself
-iptables -I INPUT 1 -i br-archivum -j ARCHIVUM-HOST
+iptables -t mangle -I INPUT 1 -i br-archivum -j ARCHIVUM-HOST
 ```
 
-The script adds two things this listing leaves out: the same jumps in `FORWARD`, for a Docker that keeps its rules in nftables and never enters `DOCKER-USER`, and the `ip6tables` counterparts.
+The script adds one thing this listing leaves out: the `ip6tables` counterparts.
 
 As one nftables table, which covers IPv4 and IPv6 and needs no chain of Docker's:
 

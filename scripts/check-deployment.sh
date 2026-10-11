@@ -211,7 +211,7 @@ fi
 
 # ── Check 6: Firewall rules ────────────────────────────────────────────────────
 # Rules made by setup-firewall.sh: the nftables table "inet archivum_null", or the
-# iptables chain ARCHIVUM-EGRESS entered from DOCKER-USER.
+# iptables chain ARCHIVUM-EGRESS in the mangle table, entered from FORWARD there.
 header "6. Firewall rules"
 # The $name below belongs to Docker's template, not to the shell.
 # shellcheck disable=SC2016
@@ -229,19 +229,24 @@ else
     pass "nftables: table inet archivum_null is loaded"
     nft list table inet archivum_null 2>/dev/null | grep -q 'chain ingress' && GUARD_FOUND=true
   fi
-  if command -v iptables &>/dev/null && iptables -S ARCHIVUM-EGRESS &>/dev/null; then
+  if command -v iptables &>/dev/null && iptables -t mangle -S ARCHIVUM-EGRESS &>/dev/null; then
     RULES_FOUND=true
-    FIRST_RULE=$(iptables -S DOCKER-USER 2>/dev/null | grep '^-A ' | head -1 || true)
-    if iptables -C DOCKER-USER -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null \
-       || iptables -C FORWARD -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null; then
-      pass "iptables: ARCHIVUM-EGRESS is entered for traffic from $BRIDGE"
+    if iptables -t mangle -C FORWARD -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null; then
+      pass "iptables: ARCHIVUM-EGRESS in the mangle table is entered for traffic from $BRIDGE"
     else
       fail "iptables: the chain ARCHIVUM-EGRESS exists, but nothing sends traffic from $BRIDGE into it — run setup-firewall.sh again"
     fi
+    iptables -t mangle -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
+  fi
+  # Version 3.2.0 of setup-firewall.sh kept the same chains in the filter table.
+  if command -v iptables &>/dev/null && iptables -S ARCHIVUM-EGRESS &>/dev/null; then
+    RULES_FOUND=true
+    iptables -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
+    warn "iptables: the rules are in the filter table, where version 3.2.0 put them. An ACCEPT that another program (a VPN client, a second firewall) places ahead of them lets traffic pass them by. Run setup-firewall.sh again; it moves them."
+    FIRST_RULE=$(iptables -S DOCKER-USER 2>/dev/null | grep '^-A ' | head -1 || true)
     if [[ "$FIRST_RULE" == *"-j ACCEPT"* ]]; then
       fail "iptables: DOCKER-USER starts with an ACCEPT ($FIRST_RULE) — traffic it matches skips the rules after it"
     fi
-    iptables -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
   fi
   if [[ "$RULES_FOUND" == "false" ]]; then
     fail "No egress rules found — run: sudo bash scripts/setup-firewall.sh --mode docker"

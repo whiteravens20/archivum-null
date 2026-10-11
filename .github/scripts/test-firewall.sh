@@ -8,6 +8,8 @@
 #
 # The live part builds the deployment in small: a "proxy" in one network namespace, reaching the app over a veth pair
 # that stands for the tunnel, and a "LAN neighbour" in another. Every expectation below is one the rules exist for.
+# It also plays the other programs a real host has: one that accepts everything ahead of every other rule, the way a
+# VPN client or a second firewall does for its own traffic, and the rules earlier versions of the script left behind.
 #
 # Usage: .github/scripts/test-firewall.sh dry-run | live
 set -uo pipefail
@@ -34,15 +36,18 @@ dry_run() {
   group "docker, iptables, Turnstile on, tunnel interface"
   out=$(bash "$SCRIPT" --mode docker --backend iptables --turnstile yes --tunnel-iface wg0 --dry-run 2>&1)
   has   "egress rules live in a chain of their own"         "$out" "-A ARCHIVUM-EGRESS -j DROP"
-  has   "the chain is entered from DOCKER-USER"             "$out" "iptables -I DOCKER-USER 1 -i br-archivum -j ARCHIVUM-EGRESS"
-  has   "and from FORWARD, for a Docker without that chain" "$out" "iptables -I FORWARD 1 -i br-archivum -j ARCHIVUM-EGRESS"
+  has   "the chains are in the mangle table"                "$out" "*mangle"
+  lacks "and not in the filter table"                       "$out" "*filter"
+  has   "the chain is entered first in FORWARD there"       "$out" "iptables -t mangle -I FORWARD 1 -i br-archivum -j ARCHIVUM-EGRESS"
+  lacks "nothing depends on a chain of Docker's"            "$out" "DOCKER-USER"
   lacks "no rule is appended to FORWARD"                    "$out" "-A FORWARD"
   lacks "nothing is accepted, only returned or dropped"     "$out" "-j ACCEPT"
-  has   "traffic to the host itself has its own chain"      "$out" "iptables -I INPUT 1 -i br-archivum -j ARCHIVUM-HOST"
+  has   "traffic to the host itself has its own chain"      "$out" "iptables -t mangle -I INPUT 1 -i br-archivum -j ARCHIVUM-HOST"
   has   "Cloudflare is allowed on 443"                      "$out" "-A ARCHIVUM-EGRESS -d 104.16.0.0/13 -p tcp --dport 443 -j RETURN"
   has   "the inbound guard lets the tunnel interface in"    "$out" "-A ARCHIVUM-INGRESS -i wg0 -j RETURN"
   has   "and drops the rest"                                "$out" "-A ARCHIVUM-INGRESS -j DROP"
-  has   "IPv6 is covered"                                   "$out" "ip6tables -I DOCKER-USER 1 -i br-archivum -j ARCHIVUM-EGRESS"
+  has   "the guard is entered for traffic to the bridge"    "$out" "iptables -t mangle -I FORWARD 1 -o br-archivum -j ARCHIVUM-INGRESS"
+  has   "IPv6 is covered"                                   "$out" "ip6tables -t mangle -I FORWARD 1 -i br-archivum -j ARCHIVUM-EGRESS"
   lacks "no resolver is allowed unless one is given"        "$out" "--dport 53"
   # Replies have to pass before anything is dropped, in every chain.
   for chain in ARCHIVUM-EGRESS ARCHIVUM-HOST ARCHIVUM-INGRESS; do
@@ -82,7 +87,7 @@ dry_run() {
 
   group "bare-metal, iptables, Turnstile off"
   out=$(bash "$SCRIPT" --mode bare-metal --backend iptables --turnstile no --app-uid 1001 --dry-run 2>&1)
-  has   "the jump matches the user"   "$out" "iptables -I OUTPUT 1 -m owner --uid-owner 1001 -j ARCHIVUM-EGRESS"
+  has   "the jump matches the user"   "$out" "iptables -t mangle -I OUTPUT 1 -m owner --uid-owner 1001 -j ARCHIVUM-EGRESS"
   lacks "nothing is accepted"         "$out" "-j ACCEPT"
   lacks "no resolver without anywhere to connect to" "$out" "--dport 53"
 
@@ -112,6 +117,7 @@ WEBROOT=""
 cleanup() {
   set +e
   bash "$SCRIPT" --remove --yes >/dev/null 2>&1
+  other_program_gone
   for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null; done
   pkill -u "$TEST_USER" 2>/dev/null
   docker rm -f "$APP" >/dev/null 2>&1
@@ -164,6 +170,36 @@ without() {
   status=$?
   rm -rf "$shadow"
   return "$status"
+}
+# other_program <chain...> — a chain that accepts everything, entered first in each of the given filter chains.
+# Tailscale keeps one like it in FORWARD for what leaves through its interface; this one is the worst case.
+OTHER=AN-FWTEST-OTHER
+other_program() {
+  local parent
+  iptables -N "$OTHER" 2>/dev/null; iptables -F "$OTHER"; iptables -A "$OTHER" -j ACCEPT
+  for parent in "$@"; do iptables -I "$parent" 1 -j "$OTHER"; done
+}
+other_program_gone() {
+  local parent
+  for parent in INPUT FORWARD OUTPUT; do
+    while iptables -D "$parent" -j "$OTHER" 2>/dev/null; do :; done
+  done
+  iptables -F "$OTHER" 2>/dev/null; iptables -X "$OTHER" 2>/dev/null
+  return 0
+}
+# What version 3.2.0 of the script kept in the filter table, with the jumps where it put them.
+layout_of_3_2_0() {
+  local chain
+  for chain in ARCHIVUM-EGRESS ARCHIVUM-HOST ARCHIVUM-INGRESS; do
+    iptables -N "$chain"
+    iptables -A "$chain" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+    iptables -A "$chain" -j DROP
+  done
+  iptables -I DOCKER-USER 1 -i br-archivum -j ARCHIVUM-EGRESS
+  iptables -I DOCKER-USER 1 -o br-archivum -j ARCHIVUM-INGRESS
+  iptables -I FORWARD 1 -i br-archivum -j ARCHIVUM-EGRESS
+  iptables -I FORWARD 1 -o br-archivum -j ARCHIVUM-INGRESS
+  iptables -I INPUT 1 -i br-archivum -j ARCHIVUM-HOST
 }
 # Every rule on this machine. Chains and tables without a rule do not count: asking
 # ip6tables a question is enough to create its empty table on a machine that had none.
@@ -230,6 +266,16 @@ live() {
     expect "container cannot reach the proxy on its own" "timeout" "$(from_app "$PROXY_IP" 8080)"
     expect "container cannot reach the host"             "timeout" "$(from_app "$gateway" "$HOST_PORT")"
 
+    group "docker, $backend, another program's accept placed ahead of every rule"
+    other_program FORWARD INPUT
+    expect "container still cannot reach the proxy on its own" "timeout" "$(from_app "$PROXY_IP" 8080)"
+    expect "nor the internet"                             "timeout" "$(from_app 1.1.1.1 443)"
+    expect "nor the LAN neighbour"                        "timeout" "$(from_app "$LAN_IP" 8080)"
+    expect "nor the host"                                 "timeout" "$(from_app "$gateway" "$HOST_PORT")"
+    expect "the LAN neighbour still does not reach the app" "000"   "$(http_from an-fwtest-lan "http://$TUNNEL_HOST_IP:3000/")"
+    expect "proxy reaches the app"                        "200"     "$(http_from an-fwtest-proxy "http://$TUNNEL_HOST_IP:3000/")"
+    other_program_gone
+
     group "docker, $backend, Turnstile on, inbound guard"
     apply --mode docker --backend "$backend" --turnstile yes --tunnel-iface "$TUNNEL"
     expect "container reaches Cloudflare on 443"         "open"    "$(from_app "$cloudflare" 443)"
@@ -261,6 +307,17 @@ live() {
   expect "the old rules are gone from FORWARD"                          "0" "$(iptables -S FORWARD | grep -c -- '-i br-archivum')"
   expect "the old rules are gone from INPUT"                            "0" "$(iptables -S INPUT | grep -c -- '--dport 3000')"
 
+  for backend in iptables nftables; do
+    group "what version 3.2.0 kept in the filter table, run again with $backend"
+    bash "$SCRIPT" --remove --yes >/dev/null 2>&1
+    layout_of_3_2_0
+    apply --mode docker --backend "$backend" --turnstile no --tunnel-iface "$TUNNEL"
+    expect "nothing of it is left in the filter table"   "0"       "$(iptables -S | grep -c 'ARCHIVUM-')"
+    expect "container cannot reach the internet"         "timeout" "$(from_app 1.1.1.1 443)"
+    expect "proxy reaches the app"                       "200"     "$(http_from an-fwtest-proxy "http://$TUNNEL_HOST_IP:3000/")"
+  done
+  layout_of_3_2_0
+
   group "--remove"
   bash "$SCRIPT" --remove --yes >/dev/null 2>&1
   same_rules "every rule from before the first run is there, and no other" "$before"
@@ -288,6 +345,14 @@ live() {
     expect "the app's user cannot reach this host's own services" "blocked" "$(as_user 127.0.0.1 "$HOST_PORT")"
     expect "another user is not affected"                "200"     "$(http_from host "http://$LAN_IP:8080/")"
     expect "packets the kernel sends itself still pass"  "ok"      "$(ping -c 1 -W 2 "$PROXY_IP" >/dev/null 2>&1 && echo ok || echo lost)"
+
+    group "bare-metal, $backend, another program's accept placed ahead of every rule"
+    other_program OUTPUT INPUT
+    expect "the app's user still cannot reach the internet" "blocked" "$(as_user 1.1.1.1 443)"
+    expect "nor the LAN"                                  "blocked" "$(as_user "$LAN_IP" 8080)"
+    expect "a LAN neighbour still does not reach the app" "000"     "$(http_from an-fwtest-lan "http://$LAN_HOST_IP:3000/")"
+    expect "proxy reaches the app"                        "200"     "$(http_from an-fwtest-proxy "http://$TUNNEL_HOST_IP:3000/")"
+    other_program_gone
   done
 
   group "--remove"

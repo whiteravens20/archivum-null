@@ -16,12 +16,14 @@
 #   Inbound  — with --tunnel-iface, the app port accepts connections from that
 #              interface only.
 #
-# How: the script owns its rules and nothing else. With iptables these are the
-# chains ARCHIVUM-EGRESS, ARCHIVUM-HOST and ARCHIVUM-INGRESS and the jumps into
-# them; with nftables, the table "inet archivum_null". Every run rebuilds them from
-# the options given, so running it again is safe, and --remove takes them out. Its
-# rules only ever drop: they never accept a packet that Docker or your own firewall
-# would have refused. IPv6 gets the same treatment, with no outbound allowances.
+# How: the script owns its rules and nothing else. With nftables that is the table
+# "inet archivum_null"; with iptables, the chains ARCHIVUM-EGRESS, ARCHIVUM-HOST and
+# ARCHIVUM-INGRESS in the mangle table and the jumps into them. Every run rebuilds
+# them from the options given, so running it again is safe, and --remove takes them
+# out. Its rules only ever drop: they never accept a packet that Docker or your own
+# firewall would have refused. And they sit where no rule of anyone else's can let a
+# packet pass them by, whatever order the rules on this host are in. IPv6 gets the
+# same treatment, with no outbound allowances.
 #
 # Usage (interactive):
 #   sudo bash scripts/setup-firewall.sh
@@ -358,17 +360,20 @@ remove_nftables() {
 # ═════════════════════════════════════════════════════════════════════════════
 #  iptables
 # ═════════════════════════════════════════════════════════════════════════════
-# Three chains of our own, each entered by a jump placed first in its parent. Allowed
-# traffic leaves them with RETURN, not ACCEPT, so whatever else filters on this host
-# still gets its say.
+# Three chains of our own in the mangle table, each entered by a jump placed first
+# in its parent there. Allowed traffic leaves them with RETURN, not ACCEPT, so
+# whatever else filters on this host still gets its say.
 #
-# For forwarded traffic there are two parents, and the jump goes into both:
-#   DOCKER-USER  the one chain Docker's iptables rules evaluate before their own
-#                accept of a container's traffic. Rules appended to FORWARD come
-#                after that accept and never run.
-#   FORWARD      for a Docker that keeps its rules in nftables, or does not manage
-#                this address family, and so never enters DOCKER-USER.
-# A packet that meets both passes the same chain twice, to the same verdict.
+# Why the mangle table. A packet passes it before the filter table, where Docker, a
+# VPN client and other firewalls keep their rules, and an ACCEPT ends the say of the
+# table it is in and of no other. A drop here therefore holds whatever those rules
+# accept and whatever order they are in. In the filter table it would not: Tailscale,
+# for one, puts a chain first in FORWARD that accepts everything leaving through its
+# interface, and a container contained by rules that come after it reaches the whole
+# tailnet. Version 3.2.0 kept these chains in the filter table.
+
+IPT_TABLE="mangle"
+IPT_OLD_TABLE="filter"
 
 run() {
   if [[ $DRY_RUN -eq 1 ]]; then
@@ -460,12 +465,9 @@ ipt_ingress_rules() {
 
 # ipt_jumps — the jumps that have to exist, one per line: "<parent> <match...> -j <chain>"
 ipt_jumps() {
-  local parent
   if [[ "$MODE" == "docker" ]]; then
-    for parent in DOCKER-USER FORWARD; do
-      echo "$parent -i $BRIDGE -j $CHAIN_EGRESS"
-      if [[ -n "$TUNNEL_IFACE" ]]; then echo "$parent -o $BRIDGE -j $CHAIN_INGRESS"; fi
-    done
+    echo "FORWARD -i $BRIDGE -j $CHAIN_EGRESS"
+    if [[ -n "$TUNNEL_IFACE" ]]; then echo "FORWARD -o $BRIDGE -j $CHAIN_INGRESS"; fi
     echo "INPUT -i $BRIDGE -j $CHAIN_HOST"
   else
     echo "OUTPUT -m owner --uid-owner $APP_UID -j $CHAIN_EGRESS"
@@ -473,18 +475,36 @@ ipt_jumps() {
   fi
 }
 
-# Every jump into one of our chains that this family holds, as "<parent> <match...> -j <chain>".
-# Nothing on a host that has no iptables: the nftables rules need none of it.
+# ipt_existing_jumps <4|6> <table> — every jump into one of our chains that the table
+# holds, as "<parent> <match...> -j <chain>". Nothing on a host that has no iptables:
+# the nftables rules need none of it.
 ipt_existing_jumps() {
-  local family="$1"
+  local family="$1" table="$2"
   family_usable "$family" || return 0
-  ipt "$family" -S 2>/dev/null \
+  ipt "$family" -t "$table" -S 2>/dev/null \
     | awk -v e="$CHAIN_EGRESS" -v h="$CHAIN_HOST" -v i="$CHAIN_INGRESS" \
         '$1 == "-A" && ($NF == e || $NF == h || $NF == i) { sub(/^-A /, ""); print }'
 }
 
 # Compare two jump specs the way iptables prints them back.
 normalise_jump() { sed -E 's/ -m tcp//; s/ +/ /g; s/ $//' <<< "$1"; }
+
+# remove_iptables_table <4|6> <table> — our jumps and chains, out of one table
+remove_iptables_table() {
+  local family="$1" table="$2" existing chain
+  family_usable "$family" || return 0
+  while IFS= read -r existing; do
+    [[ -z "$existing" ]] && continue
+    # shellcheck disable=SC2086  # a rule specification is a list of words
+    ipt_run "$family" -t "$table" -D ${existing%% *} ${existing#* }
+  done < <(ipt_existing_jumps "$family" "$table")
+  for chain in "$CHAIN_EGRESS" "$CHAIN_HOST" "$CHAIN_INGRESS"; do
+    if ipt "$family" -t "$table" -S "$chain" >/dev/null 2>&1; then
+      ipt_run "$family" -t "$table" -F "$chain"
+      ipt_run "$family" -t "$table" -X "$chain"
+    fi
+  done
+}
 
 apply_iptables_family() {
   local family="$1" chains=() chain payload="" line jump found existing wanted_jumps=()
@@ -497,7 +517,7 @@ apply_iptables_family() {
 
   # One restore per family: the chains are emptied and refilled in a single commit,
   # so there is no moment in which a chain exists without its rules.
-  payload="*filter"$'\n'
+  payload="*$IPT_TABLE"$'\n'
   for chain in "${chains[@]}"; do payload+=":$chain - [0:0]"$'\n'; done
   while IFS= read -r line; do payload+="-A $CHAIN_EGRESS $line"$'\n'; done < <(ipt_egress_rules "$family")
   if [[ "$MODE" == "docker" ]]; then
@@ -515,23 +535,20 @@ apply_iptables_family() {
     cyan "# ${tool}-restore --noflush <<'EOF'"
     printf '%s' "$payload"
     cyan "# EOF"
-    if [[ "$MODE" == "docker" ]]; then cyan "$tool -N DOCKER-USER   # unless Docker has made it already"; fi
     for jump in "${wanted_jumps[@]}"; do
-      cyan "$tool -I ${jump%% *} 1 ${jump#* }"
+      cyan "$tool -t $IPT_TABLE -I ${jump%% *} 1 ${jump#* }"
     done
     return
   fi
 
-  # Made here when it is missing: at boot this runs before Docker, which adopts the
-  # chain as it finds it.
-  if [[ "$MODE" == "docker" ]]; then ipt "$family" -N DOCKER-USER 2>/dev/null || true; fi
   printf '%s' "$payload" | "${tool}-restore" --noflush
 
   # Jumps: put in what is missing, then take out what an earlier run left for other
   # options (another bridge, a tunnel interface since dropped).
   for jump in "${wanted_jumps[@]}"; do
     # shellcheck disable=SC2086  # a rule specification is a list of words
-    ipt "$family" -C ${jump%% *} ${jump#* } 2>/dev/null || ipt "$family" -I ${jump%% *} 1 ${jump#* }
+    ipt "$family" -t "$IPT_TABLE" -C ${jump%% *} ${jump#* } 2>/dev/null \
+      || ipt "$family" -t "$IPT_TABLE" -I ${jump%% *} 1 ${jump#* }
   done
   while IFS= read -r existing; do
     [[ -z "$existing" ]] && continue
@@ -540,49 +557,63 @@ apply_iptables_family() {
       [[ "$(normalise_jump "$existing")" == "$(normalise_jump "$jump")" ]] && found=1
     done
     # shellcheck disable=SC2086
-    [[ $found -eq 1 ]] || ipt "$family" -D ${existing%% *} ${existing#* }
-  done < <(ipt_existing_jumps "$family")
+    [[ $found -eq 1 ]] || ipt "$family" -t "$IPT_TABLE" -D ${existing%% *} ${existing#* }
+  done < <(ipt_existing_jumps "$family" "$IPT_TABLE")
 
   # A chain this run has no use for (the inbound guard, when no interface is given)
   for chain in "$CHAIN_EGRESS" "$CHAIN_HOST" "$CHAIN_INGRESS"; do
     [[ " ${chains[*]} " == *" $chain "* ]] && continue
-    ipt "$family" -F "$chain" 2>/dev/null || true
-    ipt "$family" -X "$chain" 2>/dev/null || true
+    ipt "$family" -t "$IPT_TABLE" -F "$chain" 2>/dev/null || true
+    ipt "$family" -t "$IPT_TABLE" -X "$chain" 2>/dev/null || true
   done
-  green "  $tool: ${chains[*]} loaded"
+
+  # What version 3.2.0 kept in the filter table, now that the rules above are in
+  remove_old_layout "$family"
+  green "  $tool: ${chains[*]} loaded in the $IPT_TABLE table"
+}
+
+# remove_old_layout <4|6> — the chains of version 3.2.0, and the DOCKER-USER that its
+# boot unit made on a host where Docker never took the chain over. That one goes only
+# if it is empty and nothing jumps to it; Docker's own is in use and stays.
+remove_old_layout() {
+  local family="$1"
+  family_usable "$family" || return 0
+  remove_iptables_table "$family" "$IPT_OLD_TABLE"
+  if [[ $DRY_RUN -eq 0 ]]; then ipt "$family" -X DOCKER-USER 2>/dev/null || true; fi
 }
 
 apply_iptables() {
+  local family
   have iptables || [[ $DRY_RUN -eq 1 ]] || die "'iptables' not found"
+  # Both families are checked before either is touched. The iptables of old cannot
+  # open a table whose kernel module is missing, which happens inside a container.
+  if [[ $DRY_RUN -eq 0 ]]; then
+    for family in 4 6; do
+      family_usable "$family" || continue
+      ipt "$family" -t "$IPT_TABLE" -S >/dev/null 2>&1 \
+        || die "$(ipt_tool "$family") cannot open the $IPT_TABLE table on this machine. Use --backend nftables."
+    done
+  fi
   apply_iptables_family 4
   apply_iptables_family 6
 }
 
-remove_iptables_family() {
-  local family="$1" existing chain
-  family_usable "$family" || return 0
-  while IFS= read -r existing; do
-    [[ -z "$existing" ]] && continue
-    # shellcheck disable=SC2086
-    ipt_run "$family" -D ${existing%% *} ${existing#* }
-  done < <(ipt_existing_jumps "$family")
-  for chain in "$CHAIN_EGRESS" "$CHAIN_HOST" "$CHAIN_INGRESS"; do
-    if ipt "$family" -S "$chain" >/dev/null 2>&1; then
-      ipt_run "$family" -F "$chain"
-      ipt_run "$family" -X "$chain"
-    fi
+# Every jump of ours that either family holds, in the table we use and in the old one
+ipt_all_jumps() {
+  local family table
+  for family in 4 6; do
+    for table in "$IPT_TABLE" "$IPT_OLD_TABLE"; do ipt_existing_jumps "$family" "$table"; done
   done
-  # A DOCKER-USER that this script made, on a host where Docker never took it over.
-  # It goes only if it is empty and nothing jumps to it; Docker's own is in use.
-  if [[ $DRY_RUN -eq 0 ]]; then ipt "$family" -X DOCKER-USER 2>/dev/null || true; fi
 }
 
 remove_iptables() {
-  local before after
-  before="$(ipt_existing_jumps 4; ipt_existing_jumps 6)"
-  remove_iptables_family 4
-  remove_iptables_family 6
-  after="$(ipt_existing_jumps 4; ipt_existing_jumps 6)"
+  local before after family
+  before="$(ipt_all_jumps)"
+  for family in 4 6; do
+    remove_iptables_table "$family" "$IPT_TABLE"
+    remove_old_layout "$family"
+  done
+  after="$(ipt_all_jumps)"
   if [[ $DRY_RUN -eq 0 && -n "$before" && -z "$after" ]]; then green "  iptables: chains and jumps removed"; fi
 }
 
