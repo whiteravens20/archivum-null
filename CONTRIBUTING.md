@@ -87,7 +87,7 @@ Contributions we will **not accept**:
 # Backend
 cd backend
 npm install
-npm run dev        # starts on http://localhost:3000
+STORAGE_PATH=../data/vaults npm run dev        # starts on http://localhost:3000
 
 # Frontend (separate terminal)
 cd frontend
@@ -99,19 +99,19 @@ npm run dev        # starts on https://localhost:5173
 
 ### Environment variables
 
-Copy and adjust the example:
+The backend reads its configuration from the environment; it does not load a `.env` file. For a local run, put the variables in front of the command:
 
 ```bash
-cp backend/.env.example backend/.env   # if present
+STORAGE_PATH=../data/vaults ADMIN_PASSWORD=dev npm run dev
 ```
 
-The backend reads its config from environment variables. All variables and their defaults are documented in [`backend/src/config.ts`](backend/src/config.ts).
+`STORAGE_PATH` is needed locally: the default, `/data/vaults`, is the path inside the container image. [`.env.example`](.env.example) at the repository root lists every variable, and the Compose files load a copy of it named `.env`. Defaults and validation are in [`backend/src/config.ts`](backend/src/config.ts).
 
 Security-sensitive variables (never commit these):
 
 ```
 ADMIN_USER=
-ADMIN_PASS=
+ADMIN_PASSWORD=
 TURNSTILE_SECRET=
 TURNSTILE_HOSTNAME=
 ```

@@ -82,7 +82,7 @@ The table below lists the only hard requirement and optional conveniences.
 | Private tunnel (WireGuard, SSH, VPN overlay) | Without a tunnel, port 3000 must be exposed directly to the internet — significantly higher attack surface |
 | Cloudflare Turnstile | Without it, upload abuse protection relies on rate limiting alone; Turnstile verification is automatically skipped when keys are not set |
 
-> **Quickest local start:** `cd backend && npm install && npm run dev` in one terminal, `cd frontend && npm install && npm run dev` in another. Open `https://localhost:5173` (accept the self-signed cert once — required for WebCrypto).
+> **Quickest local start:** `cd backend && npm install && STORAGE_PATH=../data/vaults npm run dev` in one terminal, `cd frontend && npm install && npm run dev` in another. Open `https://localhost:5173` (accept the self-signed cert once — required for WebCrypto).
 
 ## Architecture
 
@@ -99,19 +99,18 @@ The server is a relay that cannot read what it relays. For each vault it keeps t
 git clone https://github.com/whiteravens20/archivum-null.git
 cd archivum-null
 
-# Copy env
-cp .env.example .env
-
 # Install dependencies
 cd backend && npm install && cd ..
 cd frontend && npm install && cd ..
 
 # Start backend
-cd backend && npm run dev &
+cd backend && STORAGE_PATH=../data/vaults npm run dev &
 
 # Start frontend
 cd frontend && npm run dev
 ```
+
+Run this way, the backend takes its settings from the environment and does not read `.env`. `STORAGE_PATH` points it at the repository's ignored `data/` directory; the default, `/data/vaults`, is the path inside the container image. Any other variable goes in front of the command the same way, for example `ADMIN_PASSWORD=dev` to open the admin panel.
 
 Or with Docker:
 
