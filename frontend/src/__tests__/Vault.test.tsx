@@ -14,6 +14,9 @@ vi.mock('../crypto/encrypt.js', () => ({
   parseMetadataHeader: (...args: unknown[]) => mockParseMetadataHeader(...args),
   sanitizeFilename: (name: string) => name,
   PER_CHUNK_OVERHEAD: 28,
+}));
+
+vi.mock('../format.js', () => ({
   formatBytes: (n: number) => `${n} B`,
 }));
 

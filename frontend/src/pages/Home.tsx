@@ -8,6 +8,7 @@ import Logo from '../components/Logo.tsx';
 import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
 import { getBranding } from '../branding.ts';
+import { formatBytes } from '../format.ts';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
 const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
@@ -157,7 +158,7 @@ export default function Home() {
   const handleUpload = useCallback(async () => {
     if (!file) return;
     if (file.size > runtimeConfig.maxFileSize) {
-      setError(`File exceeds maximum size of ${formatSize(runtimeConfig.maxFileSize)}`);
+      setError(`File exceeds maximum size of ${formatBytes(runtimeConfig.maxFileSize)}`);
       return;
     }
 
@@ -289,7 +290,7 @@ export default function Home() {
               <div className="bg-vault-secondary/50 rounded-lg p-4 flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="text-sm text-vault-text truncate">{file.name}</p>
-                  <p className="text-xs text-vault-subtle">{formatSize(file.size)}</p>
+                  <p className="text-xs text-vault-subtle">{formatBytes(file.size)}</p>
                 </div>
                 {stage === 'idle' && (
                   <button
@@ -394,10 +395,4 @@ export default function Home() {
       )}
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { formatBytes } from '../crypto/encrypt.ts';
+import { formatBytes } from '../format.ts';
 
 interface VaultMeta {
   vaultId: string;

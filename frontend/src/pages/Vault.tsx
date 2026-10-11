@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
-import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, formatBytes, sanitizeFilename } from '../crypto/encrypt.ts';
+import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, sanitizeFilename } from '../crypto/encrypt.ts';
+import { formatBytes } from '../format.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
 import Logo from '../components/Logo.tsx';
 import { getBranding } from '../branding.ts';
