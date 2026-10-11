@@ -191,7 +191,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
 | `TRUST_PROXY` | `loopback` | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
 | `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
-| `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images; **required for bare-metal installs** |
+| `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images and by the LXC installer; a manual source install has to set it |
 
 ## Deployment Architecture
 
@@ -494,7 +494,7 @@ Archivum Null is built by one maintainer using AI coding tools. The tools write 
 
 **What a change goes through**
 
-- Every push and pull request runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend, then builds the Docker image. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
+- Every push and pull request runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend. Beside them, the Docker image is built, the shell scripts go through ShellCheck, and the firewall script is applied to a real container on the runner and probed. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
 - CodeQL, `npm audit` and Trivy scans of the repository and of the image run on every push and pull request, and again every week ([codeql.yml](.github/workflows/codeql.yml), [security.yml](.github/workflows/security.yml)).
 - Pull requests other than automated dependency updates also get an automated review by an AI reviewer that looks for security, correctness and supply-chain problems. It is an extra check, not one of the gates.
 - Commits are signed, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/whiteravens20/archivum-null) results are public.

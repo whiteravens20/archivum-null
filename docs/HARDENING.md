@@ -16,7 +16,7 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
   - [Security Considerations](#security-considerations)
     - [What these rules protect against](#what-these-rules-protect-against)
     - [What these rules do NOT protect against](#what-these-rules-do-not-protect-against)
-    - [Rule ordering is critical](#rule-ordering-is-critical)
+    - [Rule ordering is critical, and so is the chain](#rule-ordering-is-critical-and-so-is-the-chain)
     - [Persistence](#persistence)
   - [Production Architecture](#production-architecture)
   - [Inbound Firewall Rules — App Port](#inbound-firewall-rules--app-port)
@@ -420,7 +420,7 @@ systemctl enable --now cloudflared
 
 Cloudflare Free and Pro plans enforce a **100 MB maximum body size per HTTP request**. Archivum Null handles this automatically: the frontend splits large encrypted files into `CHUNK_SIZE`-sized HTTP requests sent sequentially. Each request is processed independently and must individually pass through Cloudflare.
 
-- Keep `CHUNK_SIZE` **below 100 MB** — the default 50 MB is safe.
+- Keep `CHUNK_SIZE` **below 100 MB** — the default 10 MB is safe.
 - Do **not** raise `CHUNK_SIZE` to 100 MB or above when using Cloudflare Tunnel — Cloudflare will reject those requests with HTTP 413 before they reach the backend.
 - The Cloudflare Business/Enterprise `1 GB` upload limit applies per-request as well. If you are on a paid plan with a raised limit, you may increase `CHUNK_SIZE` up to (but not equal to) that limit.
 
