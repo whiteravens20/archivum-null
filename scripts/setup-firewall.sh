@@ -572,6 +572,9 @@ remove_iptables_family() {
       ipt_run "$family" -X "$chain"
     fi
   done
+  # A DOCKER-USER that this script made, on a host where Docker never took it over.
+  # It goes only if it is empty and nothing jumps to it; Docker's own is in use.
+  if [[ $DRY_RUN -eq 0 ]]; then ipt "$family" -X DOCKER-USER 2>/dev/null || true; fi
 }
 
 remove_iptables() {
