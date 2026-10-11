@@ -34,12 +34,14 @@ function makeMockVaultManager() {
       activeVaults: 1,
       totalStorageBytes: 1024,
     })),
+    hasVault: vi.fn((id: string) => id === 'test-vault-abc123'),
     deleteVault: vi.fn(async (id: string) => id === 'test-vault-abc123'),
   };
 }
 
 describe('Admin routes — HTTP Basic Auth gating', () => {
   let app: FastifyInstance;
+  let mockManager: ReturnType<typeof makeMockVaultManager>;
 
   beforeEach(async () => {
     vi.stubEnv('ADMIN_USER', 'admin');
@@ -49,7 +51,7 @@ describe('Admin routes — HTTP Basic Auth gating', () => {
     app = Fastify({ logger: false });
 
     // Inject mock vaultManager before importing routes
-    const mockManager = makeMockVaultManager();
+    mockManager = makeMockVaultManager();
     vi.doMock('../vault/manager.js', () => ({ vaultManager: mockManager }));
 
     const { adminRoutes } = await import('../routes/admin.js');
@@ -169,6 +171,21 @@ describe('Admin routes — HTTP Basic Auth gating', () => {
       headers: { authorization: encodeBasicAuth('admin', 'test-secret') },
     });
     expect(res.statusCode).toBe(404);
+    expect(mockManager.deleteVault).not.toHaveBeenCalled();
+  });
+
+  it('DELETE /api/admin/vaults/_uploads leaves the upload staging directory alone', async () => {
+    // Storage would remove any directory it is asked to; the route has to ask only for vaults
+    mockManager.deleteVault.mockResolvedValue(true);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/admin/vaults/_uploads',
+      headers: { authorization: encodeBasicAuth('admin', 'test-secret') },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(mockManager.deleteVault).not.toHaveBeenCalled();
   });
 });
 

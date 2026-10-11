@@ -27,7 +27,7 @@ export default function VaultLink({ url }: VaultLinkProps) {
 
   return (
     <div className="space-y-3">
-      <label className="block text-xs text-gray-400 uppercase tracking-wider">
+      <label className="block text-xs text-vault-muted uppercase tracking-wider">
         Vault Link (contains decryption key)
       </label>
 
@@ -36,20 +36,20 @@ export default function VaultLink({ url }: VaultLinkProps) {
           type="text"
           readOnly
           value={url}
-          className="flex-1 bg-vault-bg border border-gray-600 rounded px-3 py-2 text-sm
-                     text-vault-accent font-mono select-all focus:outline-none focus:border-vault-accent"
+          className="flex-1 bg-vault-bg border border-vault-line rounded px-3 py-2 text-sm
+                     text-vault-accent-ink font-mono select-all focus:outline-none focus:border-vault-accent-ink"
           onClick={(e) => (e.target as HTMLInputElement).select()}
         />
         <button
           onClick={handleCopy}
-          className="px-4 py-2 bg-vault-accent text-vault-bg rounded text-sm font-medium
+          className="px-4 py-2 bg-vault-accent text-vault-on-accent rounded text-sm font-medium
                      hover:bg-vault-accent/90 transition-colors whitespace-nowrap"
         >
           {copied ? '✓ Copied' : 'Copy'}
         </button>
       </div>
 
-      <div className="text-xs text-yellow-400/80 bg-yellow-400/5 border border-yellow-400/20 rounded p-3">
+      <div className="text-xs text-vault-warning/80 bg-vault-warning/5 border border-vault-warning/20 rounded p-3">
         ⚠ This link contains the encryption key in the URL fragment (#). 
         The key is never sent to the server. Anyone with this link can decrypt the file. 
         Store it securely or share via an encrypted channel.

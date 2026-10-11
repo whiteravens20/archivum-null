@@ -6,6 +6,15 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
+/**
+ * Staging area for chunked uploads. It sits beside the vault directories and its name
+ * passes the id pattern, so it has to be refused wherever a vault id is accepted.
+ */
+const UPLOADS_DIR = '_uploads';
+
+const DATA_FILE = 'data.enc';
+const META_FILE = 'meta.json';
+
 export class LocalStorage implements StorageBackend {
   constructor(private basePath: string) {}
 
@@ -16,16 +25,16 @@ export class LocalStorage implements StorageBackend {
   private vaultDir(vaultId: string): string {
     // Sanitize vaultId to prevent path traversal
     const safe = vaultId.replace(/[^a-zA-Z0-9_-]/g, '');
-    if (!safe || safe !== vaultId) throw new Error('Invalid vault ID');
+    if (!safe || safe !== vaultId || safe === UPLOADS_DIR) throw new Error('Invalid vault ID');
     return path.join(this.basePath, safe);
   }
 
   private dataPath(vaultId: string): string {
-    return path.join(this.vaultDir(vaultId), 'data.enc');
+    return path.join(this.vaultDir(vaultId), DATA_FILE);
   }
 
   private metaPath(vaultId: string): string {
-    return path.join(this.vaultDir(vaultId), 'meta.json');
+    return path.join(this.vaultDir(vaultId), META_FILE);
   }
 
   async writeFile(vaultId: string, stream: Readable, maxSize?: number): Promise<number> {
@@ -99,10 +108,19 @@ export class LocalStorage implements StorageBackend {
     try {
       const entries = await fsp.readdir(this.basePath, { withFileTypes: true });
       return entries
-        .filter((e) => e.isDirectory() && e.name !== '_uploads')
+        .filter((e) => e.isDirectory() && e.name !== UPLOADS_DIR)
         .map((e) => e.name);
     } catch {
       return [];
+    }
+  }
+
+  async holdsOnlyVaultFiles(vaultId: string): Promise<boolean> {
+    try {
+      const entries = await fsp.readdir(this.vaultDir(vaultId), { withFileTypes: true });
+      return entries.every((e) => e.isFile() && (e.name === DATA_FILE || e.name === META_FILE));
+    } catch {
+      return false;
     }
   }
 
@@ -111,11 +129,11 @@ export class LocalStorage implements StorageBackend {
   private uploadDir(uploadId: string): string {
     const safe = uploadId.replace(/[^a-zA-Z0-9_-]/g, '');
     if (!safe || safe !== uploadId) throw new Error('Invalid upload ID');
-    return path.join(this.basePath, '_uploads', safe);
+    return path.join(this.basePath, UPLOADS_DIR, safe);
   }
 
   private uploadDataPath(uploadId: string): string {
-    return path.join(this.uploadDir(uploadId), 'data.enc');
+    return path.join(this.uploadDir(uploadId), DATA_FILE);
   }
 
   async appendChunk(
@@ -170,7 +188,7 @@ export class LocalStorage implements StorageBackend {
   }
 
   async purgeOrphanedUploads(activeUploadIds: Set<string>): Promise<void> {
-    const uploadsDir = path.join(this.basePath, '_uploads');
+    const uploadsDir = path.join(this.basePath, UPLOADS_DIR);
     try {
       const entries = await fsp.readdir(uploadsDir, { withFileTypes: true });
       const orphans = entries

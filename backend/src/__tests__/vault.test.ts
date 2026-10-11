@@ -15,7 +15,7 @@ import { Readable } from 'node:stream';
 
 function makeMockVaultManager() {
   return {
-    createVault: vi.fn(async () => ({
+    createVault: vi.fn(async (_stream?: Readable) => ({
       vaultId: 'abc123',
       expiresAt: 9999999999,
       maxDownloads: 5,
@@ -174,6 +174,22 @@ describe('Vault routes', () => {
     expect(res.json()).toHaveProperty('error');
   });
 
+  it('POST /api/vault returns 400 with the reason when createVault refuses the upload', async () => {
+    mockManager.createVault.mockRejectedValueOnce(
+      Object.assign(new Error('Upload is too small to be an encrypted file'), { statusCode: 400 })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: buildMultipart(boundary, {}, { name: 'empty.bin', content: Buffer.alloc(0) }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Upload is too small to be an encrypted file');
+  });
+
   it('POST /api/vault returns 507 when createVault throws statusCode 507', async () => {
     mockManager.createVault.mockRejectedValueOnce(
       Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 })
@@ -192,6 +208,32 @@ describe('Vault routes', () => {
 
     expect(res.statusCode).toBe(507);
     expect(res.json().error).toContain('quota');
+  });
+
+  it('POST /api/vault hands the request length to the quota and drains an upload it refuses', async () => {
+    let part: Readable | undefined;
+    mockManager.createVault.mockImplementationOnce(async (stream: Readable) => {
+      part = stream;
+      throw Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 });
+    });
+
+    const payload = buildMultipart(boundary, {},
+      { name: 'data.bin', content: Buffer.alloc(256 * 1024) }
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(507);
+    expect(mockManager.createVault).toHaveBeenCalledWith(
+      expect.anything(), 86400, 10, 5242852, payload.length
+    );
+    // The manager refused without reading the part; the route must not leave it unread
+    expect(part?.readableFlowing).toBe(true);
   });
 
   it('POST /api/vault returns 500 on unexpected error', async () => {
@@ -228,9 +270,10 @@ describe('Vault routes', () => {
     // createVault should be called with default config values
     expect(mockManager.createVault).toHaveBeenCalledWith(
       expect.anything(),
-      86400,  // DEFAULT_TTL
-      10,     // DEFAULT_MAX_DOWNLOADS
-      5242880 // CRYPTO_CHUNK_SIZE default
+      86400,   // DEFAULT_TTL
+      10,      // DEFAULT_MAX_DOWNLOADS
+      5242852, // CRYPTO_CHUNK_SIZE default
+      payload.length // the request's Content-Length
     );
   });
 
@@ -280,6 +323,20 @@ describe('Vault routes', () => {
     expect(res.headers['cache-control']).toContain('no-store');
     expect(res.headers['pragma']).toBe('no-cache');
     expect(res.body).toBe('encrypted-data');
+  });
+
+  it('HEAD /api/vault/:vaultId/download is not routed and takes no download', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/api/vault/abc123/download' });
+
+    expect(res.statusCode).toBe(404);
+    expect(mockManager.consumeDownload).not.toHaveBeenCalled();
+  });
+
+  it('HEAD stays available on the vault info route, which changes nothing', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/api/vault/abc123' });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockManager.consumeDownload).not.toHaveBeenCalled();
   });
 
   it('GET /api/vault/:vaultId/download returns 404 for unknown vault', async () => {
@@ -394,6 +451,54 @@ describe('Vault routes', () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toContain('chunkIndex');
+  });
+
+  it('POST /api/vault/upload/:uploadId/chunk answers 409 to a refused chunk and drains it', async () => {
+    let part: Readable | undefined;
+    mockManager.appendChunk.mockImplementationOnce(async (_uploadId, _chunkIndex, stream) => {
+      part = stream;
+      throw Object.assign(
+        new Error('Another request for this upload is still being processed'),
+        { statusCode: 409 }
+      );
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': 'mock-session-token-abc',
+      },
+      payload: buildMultipart(boundary,
+        { chunkIndex: '1' },
+        { name: 'chunk.bin', content: Buffer.alloc(256 * 1024) }
+      ),
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('still being processed');
+    // The manager never read the part; the route must not leave it that way
+    expect(part?.readableFlowing).toBe(true);
+  });
+
+  it('POST /api/vault/upload/:uploadId/chunk tells a client out of step which chunk is expected', async () => {
+    mockManager.appendChunk.mockRejectedValueOnce(
+      Object.assign(new Error('Expected chunk index 3, got 2'), { statusCode: 400, expectedChunkIndex: 3 })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': 'mock-session-token-abc',
+      },
+      payload: buildMultipart(boundary, { chunkIndex: '2' }, { name: 'chunk.bin', content: Buffer.from('again') }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Expected chunk index 3, got 2', expectedChunkIndex: 3 });
   });
 
   it('POST /api/vault/upload/:uploadId/complete returns 201 with vaultId', async () => {

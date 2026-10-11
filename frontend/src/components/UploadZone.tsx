@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { formatBytes } from '../format.ts';
 
 interface UploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -18,7 +19,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
     (file: File) => {
       setError(null);
       if (file.size > maxSize) {
-        setError(`File too large — maximum allowed size is ${formatSize(maxSize)}`);
+        setError(`File too large — maximum allowed size is ${formatBytes(maxSize)}`);
         return;
       }
       if (file.size === 0) {
@@ -96,7 +97,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
       className={`
         relative border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
         transition-all duration-200
-        ${isDragOver ? 'border-vault-accent bg-vault-accent/5' : 'border-gray-600 hover:border-gray-400'}
+        ${isDragOver ? 'border-vault-accent-ink bg-vault-accent/5' : 'border-vault-line hover:border-vault-line-strong'}
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
       `}
       onDragEnter={handleDragEnter}
@@ -123,24 +124,17 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
         <div className="text-4xl opacity-40">
           {isDragOver ? '↓' : '◈'}
         </div>
-        <p className="text-gray-300">
+        <p className="text-vault-text-soft">
           {isDragOver ? 'Drop file here' : 'Drop file or click to select'}
         </p>
-        <p className="text-xs text-gray-500">
-          Max size: {formatSize(maxSize)} · Encrypted client-side before upload
+        <p className="text-xs text-vault-subtle">
+          Max size: {formatBytes(maxSize)} · Encrypted client-side before upload
         </p>
       </div>
 
       {error && (
-        <p className="mt-3 text-red-400 text-sm pointer-events-none">{error}</p>
+        <p className="mt-3 text-vault-danger text-sm pointer-events-none">{error}</p>
       )}
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
 }

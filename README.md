@@ -82,7 +82,7 @@ The table below lists the only hard requirement and optional conveniences.
 | Private tunnel (WireGuard, SSH, VPN overlay) | Without a tunnel, port 3000 must be exposed directly to the internet — significantly higher attack surface |
 | Cloudflare Turnstile | Without it, upload abuse protection relies on rate limiting alone; Turnstile verification is automatically skipped when keys are not set |
 
-> **Quickest local start:** `cd backend && npm install && npm run dev` in one terminal, `cd frontend && npm install && npm run dev` in another. Open `https://localhost:5173` (accept the self-signed cert once — required for WebCrypto).
+> **Quickest local start:** `cd backend && npm install && STORAGE_PATH=../data/vaults npm run dev` in one terminal, `cd frontend && npm install && npm run dev` in another. Open `https://localhost:5173` (accept the self-signed cert once — required for WebCrypto).
 
 ## Architecture
 
@@ -99,19 +99,18 @@ The server is a relay that cannot read what it relays. For each vault it keeps t
 git clone https://github.com/whiteravens20/archivum-null.git
 cd archivum-null
 
-# Copy env
-cp .env.example .env
-
 # Install dependencies
 cd backend && npm install && cd ..
 cd frontend && npm install && cd ..
 
 # Start backend
-cd backend && npm run dev &
+cd backend && STORAGE_PATH=../data/vaults npm run dev &
 
 # Start frontend
 cd frontend && npm run dev
 ```
+
+Run this way, the backend takes its settings from the environment and does not read `.env`. `STORAGE_PATH` points it at the repository's ignored `data/` directory; the default, `/data/vaults`, is the path inside the container image. Any other variable goes in front of the command the same way, for example `ADMIN_PASSWORD=dev` to open the admin panel.
 
 Or with Docker:
 
@@ -122,6 +121,8 @@ docker compose -f docker-compose.dev.yml up --build
 
 Frontend: `https://localhost:5173` (self-signed cert — accept the browser warning once)
 Backend API: `http://localhost:3000`
+
+Both are published on this machine only; start with `DEV_BIND_ADDRESS=0.0.0.0` in front of the command to reach them from another device on your network. The containers run as a non-root user and get `backend/src`, `frontend/src` and `frontend/public` read-only, so they reload what you edit and cannot write into your working tree. Dependencies are installed when the images are built: run the command again, with `--build`, after changing a `package.json`, a lockfile, a config file or `index.html`.
 
 The frontend uses HTTPS because WebCrypto refuses to run on insecure origins; the backend stays on HTTP because Vite's dev proxy handles the bridge. In production both sit behind your reverse proxy on TLS.
 
@@ -151,6 +152,8 @@ HOST_BIND_ADDRESS=<tunnel-ip>              # e.g. 10.8.0.2 — your homelab Wire
 # Uncomment and fill in if using Cloudflare Turnstile:
 # TURNSTILE_SECRET=<your-cf-secret>
 # TURNSTILE_SITE_KEY=<your-cf-site-key>
+# Set in step 7, once the reverse proxy is in place:
+# TRUST_PROXY=<address-the-proxy-connects-from>
 ```
 
 **6. Start** the production container (pull prebuilt image — no local build needed).
@@ -161,12 +164,13 @@ docker compose pull && docker compose up -d
 
 > To build locally from source instead: `docker compose up -d --build`
 
-**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP.
+**7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP. Then set `TRUST_PROXY` in `.env` to the address the proxy connects from, as the security note under that config describes, and run `docker compose up -d` again. Until it is set, the app ignores the proxy's `X-Forwarded-For` and all visitors share one rate-limit bucket.
 
-**8. Validate the deployment posture** on the homelab host.
+**8. Contain the app, then validate the deployment posture**, both on the homelab host. The first command stops the container from opening connections of its own and lets only the tunnel interface reach it; `--turnstile yes` if you set the Turnstile keys. The second checks the result. See [Egress Containment](docs/HARDENING.md#egress-containment) for what the rules do.
 
 ```bash
-./scripts/check-deployment.sh --tunnel-iface wg0
+sudo bash scripts/setup-firewall.sh --mode docker --turnstile no --tunnel-iface wg0 --persist
+sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 ```
 
 All checks should pass before exposing the service publicly.
@@ -175,7 +179,7 @@ All checks should pass before exposing the service publicly.
 
 All variables live in a single `.env` file at the project root. Copy `.env.example` to get started.
 
-Most deployments only touch the variables below. For the full reference (chunk sizes, rate limit tuning, Turnstile hostname pinning, etc.), see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+Most deployments only touch the variables below. For the full reference (chunk sizes, rate limit tuning, Turnstile hostname pinning, etc.), see [docs/CONFIGURATION.md](docs/CONFIGURATION.md). To change the name, colours or logo, see [Branding](#branding).
 
 | Variable | Default | Description |
 |---|---|---|
@@ -183,11 +187,11 @@ Most deployments only touch the variables below. For the full reference (chunk s
 | `HOST_BIND_ADDRESS` | `127.0.0.1` | Docker host interface for the published port. Set to your tunnel/WireGuard IP in production — never `0.0.0.0` on a public host. |
 | `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) |
 | `DEFAULT_TTL` / `MAX_TTL` | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d) |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit |
+| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit. Unlimited means uploads can fill the disk the vaults are on, which with Docker is the host's own. `.env.example` sets 10 GiB. |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
 | `TRUST_PROXY` | `loopback` | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
 | `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
-| `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images; **required for bare-metal installs** |
+| `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images and by the LXC installer; a manual source install has to set it |
 
 ## Deployment Architecture
 
@@ -203,7 +207,7 @@ Visitors connect to a small VPS, which holds the public IP, terminates TLS and r
 
 For the full hardening guide — inbound firewall rules, reverse proxy config (nginx/Caddy), VPS lockdown, WireGuard scope, and egress containment — see **[docs/HARDENING.md](docs/HARDENING.md)**.
 
-To apply firewall rules without copying commands manually:
+To apply the firewall rules, interactively:
 
 ```bash
 sudo bash scripts/setup-firewall.sh
@@ -213,7 +217,9 @@ sudo bash scripts/setup-firewall.sh
 
 Running Archivum Null as a Proxmox LXC container is a lightweight alternative to a full VM. No Docker is needed — Node.js runs directly inside the LXC.
 
-For full instructions covering container creation, manual installation, the Community Scripts quick installer, systemd service hardening, Proxmox Firewall egress rules, and SDN/VLAN isolation, see **[docs/PROXMOX.md](docs/PROXMOX.md)**.
+The installer creates an unprivileged container, installs the newest release in it, and runs the app as its own user under a sandboxed systemd unit. It asks for the address of your reverse proxy and writes a Proxmox firewall file that lets only that address in and drops what the container sends out.
+
+For full instructions covering the installer, a way to check the script before you run it as root, manual installation, the service unit, updating, the Proxmox firewall, and SDN/VLAN isolation, see **[docs/PROXMOX.md](docs/PROXMOX.md)**.
 
 **Quick start (Proxmox host shell):**
 
@@ -221,7 +227,7 @@ For full instructions covering container creation, manual installation, the Comm
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)"
 ```
 
-**Update existing LXC:**
+**Update existing LXC** to the newest release. An install made by an earlier version of the installer, which ran the app as root, is migrated by the same command:
 
 ```bash
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)" -- --update <vmid>
@@ -229,21 +235,23 @@ bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/s
 
 ### Deployment Validation
 
-After bringing up the production container on the homelab host, run the included validation script:
+After bringing up the production container on the homelab host and applying the firewall rules, run the included validation script:
 
 ```bash
-./scripts/check-deployment.sh --tunnel-iface wg0
+sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 ```
 
 It checks:
 - Container is running and healthy
-- Port 3000 is **not** bound to `0.0.0.0`
-- Container is running as non-root
-- `cap_drop: ALL` and `no-new-privileges` are active
+- Port 3000 is **not** bound to every interface, IPv6 included
+- Container is running as non-root and is not privileged
+- All capabilities are dropped, `no-new-privileges` is active, the seccomp and AppArmor profiles are on
 - Root filesystem is read-only
+- No host namespace is shared, and process and memory limits are set
 - Tunnel interface is up and its IP matches `HOST_BIND_ADDRESS`
-- Firewall rules exist for the app port
-- Port 3000 is **not** reachable via the LAN interface
+- The egress rules are loaded and the inbound guard is in place
+- The container **cannot** open a connection to the internet or to the host: it is made to try
+- Port 3000 is **not** published on the LAN address
 - `docker.sock` is not mounted inside the container
 
 ## Docker Images
@@ -282,6 +290,20 @@ docker compose up -d --build
 
 The `vault-data` volume is preserved across both modes. Check the release notes for breaking changes before upgrading.
 
+**Checking what you deploy.** Every release image carries a signed build provenance. On any machine with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify oci://ghcr.io/whiteravens20/archivum-null:1.2.3 --repo whiteravens20/archivum-null
+```
+
+It exits with an error for an image that this repository's release workflow did not build. A tag can be moved after you checked it; a digest cannot. To run exactly the image you verified, put its digest behind the tag in `.env`:
+
+```bash
+docker buildx imagetools inspect ghcr.io/whiteravens20/archivum-null:1.2.3 --format '{{json .Manifest.Digest}}'
+# .env
+IMAGE_TAG=1.2.3@sha256:<the digest printed above>
+```
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -289,7 +311,7 @@ The `vault-data` volume is preserved across both modes. Check the release notes 
 | Port 3000 still bound to `0.0.0.0` | `HOST_BIND_ADDRESS` not set in `.env` | Set `HOST_BIND_ADDRESS=<tunnel-ip>` and `docker compose up -d` |
 | Health check failing | `PORT` mismatch between app and health check | Ensure `PORT` in `.env` matches `HEALTHCHECK` in `Dockerfile` (default: `3000`) |
 | Admin panel returns 403 | `ADMIN_PASSWORD` empty or not set | Set `ADMIN_PASSWORD` in `.env` and restart |
-| Uploads fail with 413 | `client_max_body_size` too small on reverse proxy | Set to `105m` (slightly above `MAX_FILE_SIZE`) — see nginx/Caddy config examples |
+| Uploads fail with 413 | The reverse proxy's request size limit is at or below `CHUNK_SIZE` | Set it above `CHUNK_SIZE`: `15m` for the default 10 MB — see the nginx/Caddy config examples |
 | Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` matches the Cloudflare dashboard and both `TURNSTILE_SECRET` and `TURNSTILE_SITE_KEY` are set |
 | Files not persisted after restart | Volume not mounted | Check `vault-data` volume exists: `docker volume ls` |
 | Permission denied writing to `/data/vaults` | Bind mount used instead of named volume, wrong ownership on host | Named volumes handle ownership automatically. If using a bind mount, the host directory must be owned by UID `1001`: `sudo chown 1001:1001 /your/path` |
@@ -319,7 +341,7 @@ Capabilities:
 
 **Does NOT expose:** encryption keys, plaintext, or uploader identity.
 
-Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect behind a tunnel or a reverse proxy with IP allowlisting.
+Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect it behind a tunnel or an IP allowlist at the reverse proxy; the [nginx and Caddy examples](docs/HARDENING.md#reverse-proxy-configuration) carry one for `/admin` and `/api/admin`.
 
 ### Update notifications
 
@@ -357,9 +379,26 @@ To enable:
 2. Set `TURNSTILE_SITE_KEY` in `.env`
 3. Set `TURNSTILE_SECRET` in `.env`
 
-When secrets are default/missing, Turnstile verification is skipped.
+When secrets are default/missing, Turnstile verification is skipped, and the page never contacts Cloudflare. With Turnstile enabled, the visitor's browser requests the Turnstile script only on the upload form, once a file is selected; opening a vault link, the terms or any other page does not.
 
-When Turnstile is enabled, the frontend enforces a **10-second CAPTCHA timeout** — if the widget does not verify within 10 seconds of file selection, the user is shown an error and must reload.
+When the server verifies a token, it sends Cloudflare the visitor's address with it, which ties the token to the address that solved the challenge. Cloudflare receives the same address from the visitor's browser when the challenge is shown.
+
+When Turnstile is enabled, the upload stays blocked until the widget verifies. If it has not done so within 10 seconds of file selection, the page says so and keeps waiting: an interactive challenge can take longer. An error is shown only when the widget itself reports a failure or the challenge expires.
+
+## Branding
+
+An instance can carry its own name, tagline, accent colour, logo and icons, and can use a light theme or follow the visitor's system setting. All of it is set in `.env` and an optional `branding/` directory, so the published image is used as it is:
+
+```bash
+BRAND_NAME=Acme Drop
+BRAND_TAGLINE=Files, sealed and gone
+BRAND_ACCENT_COLOR=#F97316
+BRAND_THEME=auto
+```
+
+![The light theme on the left; a custom name, tagline, accent colour and logo on the right](docs/img/branding-examples.png)
+
+Branding is cosmetic only: no setting takes a URL, nothing is loaded from another origin, and no security header changes. [docs/BRANDING.md](docs/BRANDING.md) lists every setting and the file names the server looks for.
 
 ## Security
 
@@ -394,12 +433,12 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 |---|---|
 | Passive network observer | TLS in transit; ciphertext at rest — observer sees encrypted bytes only |
 | Legal demand / server seizure | Only ciphertext + metadata available; operator cannot decrypt |
-| Enumeration / brute-force | Vault IDs are 21-character nanoid (128+ bits of entropy) |
-| Abuse / spam | Turnstile CAPTCHA + 3-tier rate limiting per IP |
+| Enumeration / brute-force | Vault IDs are 24-character nanoid (144 bits of entropy) |
+| Abuse / spam | Turnstile CAPTCHA + four-tier rate limiting per IP |
 | Filename spoofing / path traversal | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link |
 | Large file DoS | Streaming size enforcement — no full file held in memory |
 | Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
-| Compromised container initiating outbound LAN/WAN connections | Docker `internal` network or host FORWARD egress rules block container-to-LAN and container-to-internet traffic; see [Egress Containment](docs/HARDENING.md#egress-containment) |
+| Compromised container initiating outbound LAN/WAN connections | Host firewall rules drop every connection the container opens, to the LAN, to the Docker host and to the internet; `scripts/setup-firewall.sh` applies them, see [Egress Containment](docs/HARDENING.md#egress-containment) |
 
 ### Threat Model Limitations
 
@@ -414,7 +453,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 
 ## Terms of Service
 
-The TOS lives in [TOS.md](TOS.md) at the repository root. The backend serves it at `/api/tos` (plain text) and the frontend renders it as Markdown at the `/tos` route.
+The TOS lives in [TOS.md](TOS.md) at the repository root. The backend converts it from Markdown to HTML once, at startup, and serves the result at `/api/tos`; the frontend shows it at the `/tos` route. Raw HTML in the file is shown as text, and links are kept to web and mail addresses and to paths on the site. Restart after editing the file.
 
 > **Legal notice:** The included TOS is a placeholder template and does not constitute legal advice. Consult a qualified lawyer before deploying a public service.
 
@@ -436,24 +475,10 @@ Before exposing this service publicly:
 - [ ] Add your contact information to TOS.md (`Replace with your contact information`)
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
-- [ ] Apply egress containment rules — Option A (`internal: true`) if Turnstile is off, Option B (FORWARD rules) if Turnstile is on (see [Egress Containment](docs/HARDENING.md#egress-containment))
-- [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
+- [ ] Set `MAX_TOTAL_STORAGE` to what the disk under the vaults can spare — without it, uploads are limited only by that disk
+- [ ] Apply the egress containment rules with `scripts/setup-firewall.sh`, with `--turnstile yes` only if Turnstile is on (see [Egress Containment](docs/HARDENING.md#egress-containment))
+- [ ] Run `sudo ./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
-
-## Development with AI Assistance
-
-> [!NOTE]
-> **This project was developed with AI assistance.**
->
-> AI-generated code can contain subtle bugs, insecure patterns, or plausible-looking nonsense ("AI slop"). Here is what we do to keep the bar high — and what you should check when auditing:
->
-> - **Tests are mandatory.** Every module has unit tests. `npm test` must pass with 0 failures across backend and frontend before any commit lands.
-> - **ESLint enforces standards.** Both projects run `eslint --max-warnings 0`. No warnings are silently ignored.
-> - **Architecture decisions are human-driven.** Crypto primitives (AES-256-GCM, key in URL fragment, no plaintext on server) were specified explicitly — not delegated to AI defaults.
-> - **Security-critical code is read line by line.** `crypto/encrypt.ts`, `basicAuth.ts`, `storage/local.ts` (path traversal guard), and vault expiry logic were reviewed manually after generation.
-> - **AI does not write the threat model.** See the *Threat Model Limitations* section above — those are our honest assessments, not AI boilerplate.
->
-> If you find a slop pattern, a logical bug, or a security issue, please open an issue or see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
@@ -462,6 +487,31 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for co
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
+## How the code is written and checked
+
+Archivum Null is built by one maintainer using AI coding tools. The tools write most of the code, tests and documentation; the maintainer decides what gets built and is responsible for everything that is merged. There is no second human reviewer, so the project relies on checks that anyone can inspect.
+
+**What a change goes through**
+
+- Every push and pull request runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend. Beside them, the Docker image is built, the shell scripts go through ShellCheck, and the firewall script is applied to a real container on the runner and probed. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
+- CodeQL, `npm audit` and Trivy scans of the repository and of the image run on every push and pull request, and again every week ([codeql.yml](.github/workflows/codeql.yml), [security.yml](.github/workflows/security.yml)).
+- Pull requests other than automated dependency updates also get an automated review by an AI reviewer that looks for security, correctness and supply-chain problems. It is an extra check, not one of the gates.
+- Commits are signed, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/whiteravens20/archivum-null) results are public.
+
+**What the maintainer decided and read**
+
+- The security design was specified by the maintainer rather than left to a tool's defaults: AES-256-GCM in the browser, the key only in the URL fragment, no plaintext on the server.
+- The [threat model](#threat-model--what-we-protect-against) and its [limitations](#threat-model-limitations) are the maintainer's own assessment.
+- These modules are read line by line by the maintainer whenever they change: `frontend/src/crypto/encrypt.ts`, `backend/src/middleware/basicAuth.ts`, `backend/src/storage/local.ts` (the path traversal guard) and the vault expiry logic in `backend/src/vault/manager.ts`.
+
+**Before a release**
+
+- A release is cut only from `main`, and nothing reaches `main` without passing every check above. That rule binds the maintainer too.
+- The release candidate is built from a clean export and run the way the Compose file runs it. In a real browser, files are encrypted and uploaded, opened from their links in a fresh session and decrypted, and everything the browser sent is searched for the key. What was checked is written into the release pull request ([#196](https://github.com/whiteravens20/archivum-null/pull/196) for v3.1.1).
+- Each release image and tarball carries a Sigstore build provenance that `gh attestation verify` checks.
+
+If something looks wrong, open an issue. For a vulnerability, follow [SECURITY.md](SECURITY.md).
 
 ## License
 

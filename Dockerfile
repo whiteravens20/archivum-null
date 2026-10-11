@@ -24,10 +24,16 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS production
 
-# Bust Docker layer cache for apk upgrade so CI always pulls the latest security patches.
-# In CI, CACHE_BUST_APK is set to github.run_id so the layer is never stale.
+# Upgrade the OS packages, then have the package manager remove itself. Nothing
+# installs a package in a running container, and with apk-tools go the packages only
+# it needed: libapk, the OpenSSL libraries, zlib, ssl_client and the CA bundle. Node
+# carries its own TLS stack and CA store, and the health check speaks plain HTTP to
+# loopback. The package database stays, and it is what image scanners read.
+#
+# CACHE_BUST_APK keeps this layer out of the build cache: the release and snapshot
+# workflows set it to github.run_id, so the upgrade runs on every one of their builds.
 ARG CACHE_BUST_APK=""
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache && apk del --no-network apk-tools
 
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
@@ -98,4 +104,9 @@ ENV STORAGE_PATH=/data/vaults
 ARG APP_VERSION=""
 ENV APP_VERSION=${APP_VERSION}
 
-CMD ["node", "backend/dist/index.js"]
+# Node's permission model, as a seat belt behind the container's own limits. Started
+# this way the process cannot run a child process or a worker thread, load a native
+# addon, use WASI or open the inspector, and the server needs none of them. File
+# access is left open to it: the read-only root filesystem and the volume already
+# decide what can be written, and STORAGE_PATH and BRANDING_PATH may point anywhere.
+CMD ["node", "--permission", "--allow-fs-read=*", "--allow-fs-write=*", "backend/dist/index.js"]

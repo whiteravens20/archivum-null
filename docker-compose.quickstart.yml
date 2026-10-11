@@ -14,6 +14,15 @@ services:
     container_name: archivum-null-quickstart
     restart: unless-stopped
 
+    # The same hardening as the production file
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
+
     ports:
       - "127.0.0.1:3000:3000"
 
@@ -27,6 +36,8 @@ services:
       - ADMIN_PASSWORD=quickstart-change-me
       - HOST_BIND_ADDRESS=127.0.0.1
       - MAX_FILE_SIZE=104857600
+      # 1 GiB for all vaults together, so a trial run cannot fill the disk
+      - MAX_TOTAL_STORAGE=1073741824
       - CHUNK_SIZE=10485760
       - DEFAULT_TTL=86400
       - MAX_TTL=604800
@@ -36,12 +47,25 @@ services:
       - RATE_LIMIT_API_MAX=120
       - RATE_LIMIT_DOWNLOAD_MAX=30
 
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+          pids: 256
+
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   vault-data-quickstart:

@@ -167,6 +167,29 @@ describe('LocalStorage', () => {
     });
   });
 
+  describe('holdsOnlyVaultFiles', () => {
+    it('should accept a directory with the vault files, some of them, or none', async () => {
+      await storage.writeFile('full', createTestStream('data'));
+      await storage.writeMetadata('full', makeMeta({ vaultId: 'full' }));
+      await storage.writeFile('data-only', createTestStream('data'));
+      await fsp.mkdir(path.join(tempDir, 'empty'));
+
+      expect(await storage.holdsOnlyVaultFiles('full')).toBe(true);
+      expect(await storage.holdsOnlyVaultFiles('data-only')).toBe(true);
+      expect(await storage.holdsOnlyVaultFiles('empty')).toBe(true);
+    });
+
+    it('should refuse a directory that holds anything else', async () => {
+      await storage.writeFile('extra-file', createTestStream('data'));
+      await fsp.writeFile(path.join(tempDir, 'extra-file', 'notes.txt'), 'x');
+      await fsp.mkdir(path.join(tempDir, 'nested', 'data.enc'), { recursive: true });
+
+      expect(await storage.holdsOnlyVaultFiles('extra-file')).toBe(false);
+      expect(await storage.holdsOnlyVaultFiles('nested')).toBe(false);
+      expect(await storage.holdsOnlyVaultFiles('missing')).toBe(false);
+    });
+  });
+
   describe('path traversal protection', () => {
     it('should reject vault IDs with path separators', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -176,6 +199,17 @@ describe('LocalStorage', () => {
     it('should reject vault IDs with dots', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(() => (storage as any).vaultDir('..foo')).toThrow('Invalid vault ID');
+    });
+
+    it('should refuse the upload staging directory as a vault ID', async () => {
+      // A chunk in progress creates the directory...
+      await storage.appendChunk('upload-1', createTestStream('partial'), 100, 0);
+      const stagingDir = path.join(tempDir, '_uploads');
+
+      // ...and no vault operation may reach it by name
+      expect(await storage.deleteVault('_uploads')).toBe(false);
+      await expect(storage.writeFile('_uploads', createTestStream('x'))).rejects.toThrow('Invalid vault ID');
+      await expect(fsp.readFile(path.join(stagingDir, 'upload-1', 'data.enc'), 'utf-8')).resolves.toBe('partial');
     });
 
     it('should allow valid nanoid-style IDs', () => {

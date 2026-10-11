@@ -1,5 +1,15 @@
 import { isIP } from 'node:net';
 
+/** What the Turnstile keys hold when Turnstile is not configured. */
+const TURNSTILE_PLACEHOLDER = '0x0000000000000000000000';
+
+/** The bounds every vault is held to, whatever a request or a default asks for. */
+export const MIN_TTL_SECONDS = 60;
+export const MAX_DOWNLOADS_PER_VAULT = 1000;
+
+// Per-chunk AES-GCM overhead: 12-byte IV + 16-byte GCM authentication tag = 28 bytes per chunk.
+const PER_CHUNK_OVERHEAD = 28;
+
 // Pre-compute CHUNK_SIZE so CRYPTO_CHUNK_SIZE can reference it in the same schema.
 const _CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 10485760);
 
@@ -7,8 +17,8 @@ const envSchema = {
   MAX_FILE_SIZE: Number(process.env.MAX_FILE_SIZE || 104857600),
   TURNSTILE_SECRET: process.env.TURNSTILE_SECRET || '',
   // Public site key — safe to expose to the browser via /api/config
-  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY || '0x0000000000000000000000',
-  TURNSTILE_ENABLED: !!process.env.TURNSTILE_SECRET && process.env.TURNSTILE_SECRET !== '0x0000000000000000000000',
+  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY || TURNSTILE_PLACEHOLDER,
+  TURNSTILE_ENABLED: !!process.env.TURNSTILE_SECRET && process.env.TURNSTILE_SECRET !== TURNSTILE_PLACEHOLDER,
   // Expected hostname in Turnstile response (e.g. 'example.com'). Leave empty to skip hostname check.
   TURNSTILE_HOSTNAME: process.env.TURNSTILE_HOSTNAME || '',
   // Upload-specific rate limit
@@ -37,8 +47,13 @@ const envSchema = {
   MAX_UPLOAD_SESSIONS_PER_IP: Number(process.env.MAX_UPLOAD_SESSIONS_PER_IP || 10),
   // Per-chunk plaintext size for client-side AES-GCM streaming encryption.
   // Each chunk is encrypted independently with a unique IV and chunkIndex in AAD.
-  // Default: min(5 MB, CHUNK_SIZE) — auto-clamped so smaller CHUNK_SIZE values don't crash.
-  CRYPTO_CHUNK_SIZE: Number(process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE)),
+  // Default: min(5 MB, CHUNK_SIZE) less the 28 bytes each chunk gains when encrypted,
+  // so that whole encrypted chunks fill an upload request of CHUNK_SIZE exactly: two
+  // of them with the default 10 MB. At a round 5 MB a second one would be 56 bytes
+  // too many, and every request would carry a single chunk.
+  CRYPTO_CHUNK_SIZE: Number(
+    process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE) - PER_CHUNK_OVERHEAD
+  ),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   // Update check — compares the running version against the latest GitHub release.
@@ -50,6 +65,17 @@ const envSchema = {
   UPDATE_CHECK_REPO: process.env.UPDATE_CHECK_REPO || 'whiteravens20/archivum-null',
   // Seconds between checks (default 6 h). Failures are retried sooner.
   UPDATE_CHECK_INTERVAL: Number(process.env.UPDATE_CHECK_INTERVAL || 21600),
+  // Branding — cosmetic. Checked and written into index.html at startup by
+  // static/branding.ts; see docs/BRANDING.md.
+  BRAND_NAME: process.env.BRAND_NAME?.trim() || 'Archivum Null',
+  BRAND_TAGLINE: process.env.BRAND_TAGLINE?.trim() || 'Zero trust file relay',
+  // #RRGGBB. Empty keeps the accent built into the stylesheet.
+  BRAND_ACCENT_COLOR: process.env.BRAND_ACCENT_COLOR?.trim() || '',
+  // dark | light | auto. `auto` follows the visitor's system setting.
+  BRAND_THEME: process.env.BRAND_THEME?.trim() || 'dark',
+  // Directory with the operator's own logo and icons. Empty means `branding` in the
+  // install directory (/app/branding in the image). Only known file names are read.
+  BRANDING_PATH: process.env.BRANDING_PATH || '',
   STORAGE_PATH: process.env.STORAGE_PATH || '/data/vaults',
   BIND_ADDRESS: process.env.BIND_ADDRESS || '0.0.0.0',
   PORT: Number(process.env.PORT || 3000),
@@ -62,9 +88,6 @@ const envSchema = {
 };
 
 export const config = Object.freeze(envSchema);
-
-// Per-chunk AES-GCM overhead: 12-byte IV + 16-byte GCM authentication tag = 28 bytes per chunk.
-const PER_CHUNK_OVERHEAD = 28;
 
 /**
  * Calculate total encryption overhead for a given plaintext size.
@@ -95,6 +118,17 @@ export function validateConfig(): void {
   if (!config.ADMIN_PASSWORD || config.ADMIN_PASSWORD === 'CHANGE_ME_IMMEDIATELY') {
     console.warn('[WARN] ADMIN_PASSWORD is not set or uses default. Admin panel will be inaccessible.');
   }
+  // Turnstile needs both keys. With one of them the result is never what was meant.
+  const siteKeySet = config.TURNSTILE_SITE_KEY !== TURNSTILE_PLACEHOLDER;
+  if (config.TURNSTILE_ENABLED && !siteKeySet) {
+    console.warn('[WARN] TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is not — every upload will be refused, because the page has no challenge to show.');
+  }
+  if (!config.TURNSTILE_ENABLED && siteKeySet) {
+    console.warn('[WARN] TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET is not — Turnstile is off and uploads are not challenged.');
+  }
+  if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) {
+    throw new Error('PORT must be an integer between 0 and 65535');
+  }
   if (!isFinite(config.MAX_FILE_SIZE) || config.MAX_FILE_SIZE <= 0) {
     throw new Error('MAX_FILE_SIZE must be a positive number');
   }
@@ -116,6 +150,14 @@ export function validateConfig(): void {
   if (!isFinite(config.DEFAULT_MAX_DOWNLOADS) || config.DEFAULT_MAX_DOWNLOADS <= 0) {
     throw new Error('DEFAULT_MAX_DOWNLOADS must be a positive number');
   }
+  // Every vault is held to these bounds, so a default outside them is not the default
+  // that applies. Said, not refused: the instance works, just not as configured.
+  if (config.DEFAULT_TTL < MIN_TTL_SECONDS) {
+    console.warn(`[WARN] DEFAULT_TTL is below ${MIN_TTL_SECONDS} seconds — vaults get the ${MIN_TTL_SECONDS}-second minimum instead.`);
+  }
+  if (config.DEFAULT_MAX_DOWNLOADS > MAX_DOWNLOADS_PER_VAULT) {
+    console.warn(`[WARN] DEFAULT_MAX_DOWNLOADS is above ${MAX_DOWNLOADS_PER_VAULT} — vaults get the ${MAX_DOWNLOADS_PER_VAULT}-download maximum instead.`);
+  }
   if (!isFinite(config.CHUNK_SIZE) || config.CHUNK_SIZE <= 0) {
     throw new Error('CHUNK_SIZE must be a positive number');
   }
@@ -130,6 +172,9 @@ export function validateConfig(): void {
   }
   if (!isFinite(config.MAX_TOTAL_STORAGE) || config.MAX_TOTAL_STORAGE < 0) {
     throw new Error('MAX_TOTAL_STORAGE must be a non-negative number');
+  }
+  if (config.MAX_TOTAL_STORAGE === 0) {
+    console.warn('[WARN] MAX_TOTAL_STORAGE is 0 — uploads are limited only by the free space of the disk the vaults are on. Set a quota in bytes.');
   }
   if (config.CRYPTO_CHUNK_SIZE > config.CHUNK_SIZE) {
     throw new Error('CRYPTO_CHUNK_SIZE must not exceed CHUNK_SIZE');
@@ -156,7 +201,9 @@ export function validateConfig(): void {
     // UPDATE_CHECK_REPO is interpolated into the api.github.com URL. Constrain it to
     // the characters GitHub actually allows in owner/repo so a stray value cannot
     // steer the request at another host or path.
-    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(config.UPDATE_CHECK_REPO)) {
+    // A segment made of dots alone is refused too: `..` would not leave the host, but
+    // it would turn the request into one for a different path of the API.
+    if (!/^(?!\.+\/)[A-Za-z0-9._-]+\/(?!\.+$)[A-Za-z0-9._-]+$/.test(config.UPDATE_CHECK_REPO)) {
       throw new Error('UPDATE_CHECK_REPO must be in "owner/repo" form');
     }
     // Below 5 minutes the check stops being a check and starts being a poll that

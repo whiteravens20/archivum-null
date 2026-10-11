@@ -73,8 +73,48 @@ jobs:
       - name: Build
         run: npm run build
 
+      # At start the server gives every built asset a random public name and rewrites
+      # the references to it that it can find: literal /assets/<name> strings
+      # (backend/src/static/assetCloak.ts). The chunks of a split build import each
+      # other by relative path, which is not rewritten, so a second script would not
+      # load in production.
+      - name: One script in the build
+        run: |
+          count=$(find dist/assets -name '*.js' | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::The frontend build emitted $count scripts. The asset cloak handles one; see backend/src/static/assetCloak.ts."
+            exit 1
+          fi
+
       - name: Tests
         run: npm run test
+
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh .github/scripts/*.sh
+
+      # What can be checked of the LXC installer without a Proxmox host: the service
+      # unit it writes, rated by systemd itself, and that it is one function.
+      - name: Installer
+        run: .github/scripts/test-installer.sh
+
+      - name: Firewall rules, as printed
+        run: .github/scripts/test-firewall.sh dry-run
+
+      # Applied for real on this runner, to a container and to a process of a test
+      # user, and probed from a stand-in for the proxy and one for a LAN neighbour.
+      - name: Firewall rules, as applied
+        run: |
+          command -v nft >/dev/null || sudo apt-get install -y --no-install-recommends nftables
+          sudo .github/scripts/test-firewall.sh live
 
   docker:
     name: Validate Docker build
@@ -97,11 +137,5 @@ jobs:
           # an image in the runner or a registry.
           push: false
           load: false
-          build-args: |
-            MAX_FILE_SIZE=104857600
-            TURNSTILE_SITE_KEY=0x0000000000000000000000
-            DEFAULT_TTL=86400
-            DEFAULT_MAX_DOWNLOADS=10
-            CHUNK_SIZE=52428800
           cache-from: type=gha
           cache-to: type=gha,mode=max

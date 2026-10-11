@@ -138,10 +138,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Stamps the release tag into the image so the admin panel can report
-          # which version is running and compare it against the latest release.
+          # APP_VERSION stamps the release tag into the image so the admin panel can
+          # report which version is running and compare it against the latest release.
+          # CACHE_BUST_APK is different on every run, so the `apk upgrade` layer is
+          # built again and not restored from the cache below.
           build-args: |
             APP_VERSION=${{ github.ref_name }}
+            CACHE_BUST_APK=${{ github.run_id }}
           # GitHub Actions cache — dramatically speeds up repeated builds
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -213,8 +216,10 @@ jobs:
             docker-compose.yml \
             .dockerignore \
             .env.example \
+            .npmrc \
             backend/package.json \
             backend/package-lock.json \
+            backend/.npmrc \
             backend/tsconfig.json \
             backend/src/ \
             frontend/package.json \

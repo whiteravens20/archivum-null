@@ -29,16 +29,16 @@ The README covers the variables you usually touch. This page is the complete ref
 | `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
 | `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
 | `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
-| `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
+| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check, and the server warns about it at startup. `.env.example` sets 10 GiB and the quick-start Compose file 1 GiB. Size it to the disk the vaults are on: a named Docker volume lives on the host's filesystem, and a full one stops Docker and everything else that uses it. |
+| `STORAGE_PATH` | `/data/vaults` | File storage path inside container. Give the app a directory of its own: it creates, expires and removes what is inside. A directory it does not recognise as a vault is left alone and named in a warning at startup |
 
 ### Chunked upload internals
 
 | Variable | Default | Description |
 |---|---|---|
 | `CHUNK_SIZE` | `10485760` | Chunk size in bytes for the chunked upload protocol (default 10 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. Smaller chunks work better for homelab/Tailscale/VPS setups with limited bandwidth. |
-| `CRYPTO_CHUNK_SIZE` | `5242880` | Crypto chunk size in bytes (default 5 MB) — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV and chunk index as AAD. Smaller values reduce peak memory; larger values reduce per-chunk overhead (28 bytes per chunk). |
-| `UPLOAD_SESSION_TTL` | `3600` | How long an incomplete chunked upload session stays alive in seconds (default 60 min) — increased from 30 min to support 1 GB uploads on slow links (5 Mbps ≈ 26 min) |
+| `CRYPTO_CHUNK_SIZE` | `5242852` | Crypto chunk size in bytes — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV, and its index and a last-chunk marker as AAD. The default is `min(5 MB, CHUNK_SIZE)` less the 28 bytes a chunk gains when encrypted, so that whole encrypted chunks fill a request of `CHUNK_SIZE`: two of them at the defaults. Smaller values reduce peak memory; larger values reduce per-chunk overhead. Vaults keep the chunk size they were uploaded with. |
+| `UPLOAD_SESSION_TTL` | `3600` | How long an incomplete chunked upload session stays alive, in seconds (default 60 min). It has to cover the largest file you allow on the slowest link you expect: 1 GB at 5 Mbps takes about 27 minutes |
 | `MAX_UPLOAD_SESSIONS_PER_IP` | `10` | Max concurrent open chunked-upload sessions a single client IP may hold (`0` = unlimited, not recommended). Each open session reserves its declared size against `MAX_TOTAL_STORAGE`; without this cap a single IP could open many sessions and never complete them, tying up the storage quota and blocking legitimate uploads until the sessions expire. |
 
 ### Rate limiting
@@ -51,6 +51,7 @@ IPv4 clients are counted per address, IPv6 clients per /64 — the same applies 
 | `RATE_LIMIT_MAX` | `10` | Max new-upload requests per window per IP — counts `POST /api/vault` and `POST /api/vault/upload/init` (chunked upload start); individual chunk/complete requests are not counted |
 | `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
 | `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
+| `RATE_LIMIT_ADMIN_MAX` | `10` | Max failed admin logins per window per IP. Once reached, every request to `/api/admin` from that client is refused until the window ends, a correct password included. Requests that carry valid credentials are not counted, so the admin panel's own polling never runs into it |
 
 ### Cloudflare Turnstile
 
@@ -66,6 +67,18 @@ IPv4 clients are counted per address, IPv6 clients per /64 — the same applies 
 |---|---|---|
 | `ADMIN_USER` | `admin` | Admin panel username |
 | `ADMIN_PASSWORD` | — | Admin panel password (**required**, see above) |
+
+### Branding
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRAND_NAME` | `Archivum Null` | Name shown in the browser tab, the page headings, the footer and the web app manifest. 1 to 64 characters. |
+| `BRAND_TAGLINE` | `Zero trust file relay` | Line under the name on the home page and at the end of the footer. 1 to 120 characters. |
+| `BRAND_ACCENT_COLOR` | `#60A5FA` | Accent colour as six hex digits (`#RRGGBB`). The label colour of buttons is chosen to match. |
+| `BRAND_THEME` | `dark` | `dark`, `light`, or `auto` to follow the visitor's system colour scheme. |
+| `BRANDING_PATH` | `branding` in the install directory (`/app/branding` in the image) | Directory holding your own logo and icons. Only a fixed list of file names is read from it, at startup. |
+
+All of these are cosmetic and are applied when the server starts; a value that fails its check stops the startup with a message naming the variable. [BRANDING.md](BRANDING.md) explains each setting and lists the image files.
 
 ### Version & update check
 

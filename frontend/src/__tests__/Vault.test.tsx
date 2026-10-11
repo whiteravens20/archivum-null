@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { setBrandingTags } from '../test/brandingTags.js';
 
 // Mock crypto and API modules
 const mockImportKey = vi.fn();
@@ -13,6 +14,9 @@ vi.mock('../crypto/encrypt.js', () => ({
   parseMetadataHeader: (...args: unknown[]) => mockParseMetadataHeader(...args),
   sanitizeFilename: (name: string) => name,
   PER_CHUNK_OVERHEAD: 28,
+}));
+
+vi.mock('../format.js', () => ({
   formatBytes: (n: number) => `${n} B`,
 }));
 
@@ -77,7 +81,7 @@ describe('Vault page', () => {
       expect(screen.getByText('2048 B')).toBeInTheDocument();
     });
     expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('Decrypt & Download')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decrypt & Download' })).toBeEnabled();
   });
 
   it('should show key warning when no key in fragment', async () => {
@@ -96,6 +100,8 @@ describe('Vault page', () => {
         screen.getByText(/No decryption key found in URL/)
       ).toBeInTheDocument();
     });
+    // Nothing to decrypt with: the button must not start a download that takes a slot
+    expect(screen.getByRole('button', { name: 'Decrypt & Download' })).toBeDisabled();
   });
 
   it('should render the branding', () => {
@@ -103,6 +109,67 @@ describe('Vault page', () => {
     renderVault('x');
     expect(screen.getByText('Archivum Null')).toBeInTheDocument();
     expect(screen.getByText('Vault retrieval')).toBeInTheDocument();
+  });
+
+  it('should render the configured name', () => {
+    setBrandingTags({ 'application-name': 'Acme Drop' });
+    mockGetVaultInfo.mockReturnValue(new Promise(() => {}));
+    renderVault('x');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Acme Drop');
+    expect(screen.queryByText('Archivum Null')).not.toBeInTheDocument();
+  });
+
+  describe('downloads that cannot be a file', () => {
+    const fakeKey = 'A'.repeat(43);
+
+    beforeEach(() => {
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:test');
+      globalThis.URL.revokeObjectURL = vi.fn();
+      mockImportKey.mockResolvedValue('fake-key');
+    });
+
+    async function openVault(info: Record<string, unknown>) {
+      mockGetVaultInfo.mockResolvedValue({
+        vaultId: 'abc',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 3600_000,
+        remainingDownloads: 3,
+        ...info,
+      });
+      renderVault('abc', `#${fakeKey}`);
+      await waitFor(() => {
+        expect(screen.getByText('Decrypt & Download')).toBeInTheDocument();
+      });
+    }
+
+    it('should report an empty download as an error, not as a file', async () => {
+      await openVault({ ciphertextSize: 0, chunkPlaintextSize: 100 });
+      mockDownloadVault.mockResolvedValue(new Blob([]));
+
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Vault unavailable')).toBeInTheDocument();
+      });
+      expect(screen.getByText(/empty or has been tampered with/)).toBeInTheDocument();
+      expect(screen.queryByText(/decrypted and downloaded successfully/)).not.toBeInTheDocument();
+      expect(mockDecryptChunk).not.toHaveBeenCalled();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('should refuse to decrypt without a usable chunk size from the server', async () => {
+      await openVault({ ciphertextSize: 128, chunkPlaintextSize: undefined });
+      mockDownloadVault.mockResolvedValue(new Blob([new Uint8Array(128)]));
+
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Vault unavailable')).toBeInTheDocument();
+      });
+      expect(screen.getByText(/metadata is corrupted/)).toBeInTheDocument();
+      expect(mockDecryptChunk).not.toHaveBeenCalled();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
   });
 
   describe('filename mismatch warning', () => {
@@ -159,6 +226,31 @@ describe('Vault page', () => {
         expect(screen.getByText(/Filename mismatch detected/)).toBeInTheDocument();
       });
       expect(screen.getByText(/malicious\.exe/)).toBeInTheDocument();
+    });
+
+    it('should keep the object URL alive after handing the file to the browser', async () => {
+      mockGetVaultInfo.mockResolvedValue({
+        vaultId: 'abc',
+        ciphertextSize: 128,
+        chunkPlaintextSize: 100,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 3600_000,
+        remainingDownloads: 3,
+      });
+      renderVault('abc', `#${fakeKey}`);
+      await waitFor(() => {
+        expect(screen.getByText('Decrypt & Download')).toBeInTheDocument();
+      });
+
+      mockDownloadFlow('report.pdf');
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/decrypted and downloaded successfully/)).toBeInTheDocument();
+      });
+      expect(URL.createObjectURL).toHaveBeenCalledOnce();
+      // Revoking it in the same turn makes some browsers save an empty file
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
     });
 
     it('should not show warning when filenames match', async () => {

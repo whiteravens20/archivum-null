@@ -78,6 +78,113 @@ describe('buildApp wiring — rate limiting is active end-to-end', () => {
     const limited = await app.inject({ method: 'DELETE', url: '/api/admin/vaults/x' });
     expect(limited.statusCode).toBe(429);
   });
+
+  it('refuses even the right password while the client is locked out', async () => {
+    const wrong = { authorization: `Basic ${Buffer.from('admin:guess').toString('base64')}` };
+    const right = { authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}` };
+
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: wrong });
+      expect(res.statusCode).toBe(401);
+    }
+
+    const locked = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
+    expect(locked.statusCode).toBe(429);
+    expect(locked.json().error).toContain('failed login attempts');
+  });
+
+  it('lets a signed-in admin poll past the admin limit', async () => {
+    // Admin limit is 2: the panel alone makes more requests than that in ten seconds.
+    // Only the general limit (5) applies to requests that carry valid credentials.
+    const right = { authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}` };
+
+    for (let i = 0; i < 5; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
+      expect(res.statusCode).toBe(200);
+    }
+    const general = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
+    expect(general.statusCode).toBe(429);
+    expect(general.json().error).toContain('Too many requests');
+  });
+});
+
+describe('buildApp wiring — request body limits', () => {
+  let app: FastifyInstance;
+  let storageDir: string;
+  const boundary = '----BodyLimitBoundary';
+
+  function multipart(fields: Record<string, string>, file: Buffer): Buffer {
+    const head = Object.entries(fields)
+      .map(([name, value]) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+      .join('');
+    return Buffer.concat([
+      Buffer.from(`${head}--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="f.bin"\r\nContent-Type: application/octet-stream\r\n\r\n`),
+      file,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+  }
+
+  beforeEach(async () => {
+    vi.resetModules();
+    storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'archivum-app-test-'));
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('STORAGE_PATH', storageDir);
+    vi.stubEnv('ADMIN_PASSWORD', 'strong-test-password');
+
+    const { buildApp } = await import('../app.js');
+    app = await buildApp();
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    vi.unstubAllEnvs();
+    fs.rmSync(storageDir, { recursive: true, force: true });
+  });
+
+  it('refuses a JSON body far larger than anything this API takes', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize: 200, padding: 'x'.repeat(100_000) }),
+    });
+
+    expect(res.statusCode).toBe(413);
+  });
+
+  it('still takes an upload far larger than the default limit', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: multipart({ ttl: '3600', maxDownloads: '1' }, Buffer.alloc(300_000, 7)),
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().ciphertextSize).toBe(300_000);
+  });
+
+  it('still takes a chunk far larger than the default limit', async () => {
+    const init = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize: 300_000, ttl: 3600, maxDownloads: 1 }),
+    });
+    expect(init.statusCode).toBe(201);
+    const { uploadId, sessionToken } = init.json();
+
+    const chunk = await app.inject({
+      method: 'POST',
+      url: `/api/vault/upload/${uploadId}/chunk`,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}`, 'x-session-token': sessionToken },
+      payload: multipart({ chunkIndex: '0' }, Buffer.alloc(300_000, 7)),
+    });
+
+    expect(chunk.statusCode).toBe(200);
+    expect(chunk.json().receivedBytes).toBe(300_000);
+  });
 });
 
 /**

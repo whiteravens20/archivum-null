@@ -1,9 +1,16 @@
-node_modules
-dist
+# Patterns are matched from the root of the build context, not at any depth as in
+# .gitignore, so whatever also exists inside backend/ and frontend/ needs **/.
+# Without it a local build copies the host's own node_modules over the dependencies
+# just installed from the lockfile.
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
 .git
-.env
 *.md
 !TOS.md
 LICENSE
 docker-compose*.yml
+branding
 .dockerignore

@@ -26,7 +26,7 @@ describe('config', () => {
     expect(config.MAX_TOTAL_STORAGE).toBe(0);
     expect(config.CHUNK_SIZE).toBe(10485760);
     expect(config.UPLOAD_SESSION_TTL).toBe(3600);
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242852);
     expect(config.ADMIN_USER).toBe('admin');
   });
 
@@ -85,6 +85,32 @@ describe('config', () => {
   it('should default RATE_LIMIT_ADMIN_MAX to 10', async () => {
     const { config } = await import('../config.js');
     expect(config.RATE_LIMIT_ADMIN_MAX).toBe(10);
+  });
+
+  it('should default the brand name and tagline to the built-in ones', async () => {
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.BRAND_NAME).toBe('Archivum Null');
+    expect(config.BRAND_TAGLINE).toBe('Zero trust file relay');
+    expect(config.BRAND_ACCENT_COLOR).toBe('');
+    expect(config.BRAND_THEME).toBe('dark');
+    expect(config.BRANDING_PATH).toBe('');
+  });
+
+  it('should read the brand name and tagline from env, trimmed', async () => {
+    vi.stubEnv('BRAND_NAME', '  Acme Drop ');
+    vi.stubEnv('BRAND_TAGLINE', ' Files, sealed ');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.BRAND_NAME).toBe('Acme Drop');
+    expect(config.BRAND_TAGLINE).toBe('Files, sealed');
+  });
+
+  it('should treat a blank brand name as not set', async () => {
+    vi.stubEnv('BRAND_NAME', '   ');
+    vi.resetModules();
+    const { config } = await import('../config.js');
+    expect(config.BRAND_NAME).toBe('Archivum Null');
   });
 });
 
@@ -181,14 +207,115 @@ describe('validateConfig', () => {
     vi.stubEnv('CHUNK_SIZE', '2000000');            // 2 MB — smaller than 5 MB default
     vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
     const { config } = await import('../config.js');
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000);  // clamped to CHUNK_SIZE
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000 - 28);  // CHUNK_SIZE less one chunk's overhead
   });
 
-  it('should default CRYPTO_CHUNK_SIZE to 5 MB when CHUNK_SIZE is larger', async () => {
+  it('should default CRYPTO_CHUNK_SIZE to just under 5 MB when CHUNK_SIZE is larger', async () => {
     vi.stubEnv('CHUNK_SIZE', '50000000');            // 50 MB
     vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
     const { config } = await import('../config.js');
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);  // 5 MB default
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880 - 28);
+  });
+
+  it('should size the default crypto chunk so that whole encrypted chunks fill a request', async () => {
+    const { config } = await import('../config.js');
+    const encryptedChunk = config.CRYPTO_CHUNK_SIZE + 28;
+    // Two per request with the defaults, and not a byte over CHUNK_SIZE
+    expect(Math.floor(config.CHUNK_SIZE / encryptedChunk)).toBe(2);
+    expect(2 * encryptedChunk).toBe(config.CHUNK_SIZE);
+  });
+
+  it('should keep a CRYPTO_CHUNK_SIZE that was set explicitly', async () => {
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', '5242880');
+    const { config } = await import('../config.js');
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);
+  });
+
+  it('should warn when the Turnstile secret is set without a site key', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    vi.stubEnv('TURNSTILE_SECRET', 'a-real-secret');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is not'));
+  });
+
+  it('should warn when the Turnstile site key is set without a secret', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    vi.stubEnv('TURNSTILE_SECRET', '');
+    vi.stubEnv('TURNSTILE_SITE_KEY', 'a-real-site-key');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET is not'));
+  });
+
+  it.each([
+    ['both keys set', { TURNSTILE_SECRET: 'a-real-secret', TURNSTILE_SITE_KEY: 'a-real-site-key' }],
+    ['neither key set', { TURNSTILE_SECRET: '', TURNSTILE_SITE_KEY: '' }],
+    ['both left at the placeholder', { TURNSTILE_SECRET: '0x0000000000000000000000', TURNSTILE_SITE_KEY: '0x0000000000000000000000' }],
+  ])('should say nothing about Turnstile with %s', async (_name, env) => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('TURNSTILE'));
+  });
+
+  it('should warn about defaults the vault limits will override, and still start', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    vi.stubEnv('DEFAULT_TTL', '30');
+    vi.stubEnv('DEFAULT_MAX_DOWNLOADS', '5000');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).not.toThrow();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DEFAULT_TTL is below 60 seconds'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DEFAULT_MAX_DOWNLOADS is above 1000'));
+  });
+
+  it.each(['abc', '-1', '70000', '3000.5'])('should reject PORT=%s', async (port) => {
+    vi.stubEnv('PORT', port);
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow('PORT must be an integer between 0 and 65535');
+  });
+
+  it.each(['../..', './repo', 'owner/..', 'owner/.', '.../x'])(
+    'should reject UPDATE_CHECK_REPO=%s',
+    async (repo) => {
+      vi.stubEnv('UPDATE_CHECK_ENABLED', 'true');
+      vi.stubEnv('UPDATE_CHECK_REPO', repo);
+      const { validateConfig } = await import('../config.js');
+      expect(() => validateConfig()).toThrow('UPDATE_CHECK_REPO must be in "owner/repo" form');
+    }
+  );
+
+  it.each(['whiteravens20/archivum-null', 'some.org/my.repo', 'a/.github', '.dotfiles/repo'])(
+    'should accept UPDATE_CHECK_REPO=%s',
+    async (repo) => {
+      vi.stubEnv('ADMIN_PASSWORD', 'secret');
+      vi.stubEnv('UPDATE_CHECK_ENABLED', 'true');
+      vi.stubEnv('UPDATE_CHECK_REPO', repo);
+      const { validateConfig } = await import('../config.js');
+      expect(() => validateConfig()).not.toThrow();
+    }
+  );
+
+  it('should warn when storage is unlimited', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MAX_TOTAL_STORAGE is 0'));
+  });
+
+  it('should not warn about storage once a quota is set', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    vi.stubEnv('MAX_TOTAL_STORAGE', '10737418240');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('MAX_TOTAL_STORAGE'));
   });
 
   it('should reject a legacy TRUST_PROXY hop count', async () => {

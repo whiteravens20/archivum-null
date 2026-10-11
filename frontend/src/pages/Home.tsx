@@ -4,8 +4,11 @@ import VaultConfig from '../components/VaultConfig.tsx';
 import ProgressBar from '../components/ProgressBar.tsx';
 import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
+import Logo from '../components/Logo.tsx';
 import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
+import { getBranding } from '../branding.ts';
+import { formatBytes } from '../format.ts';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
 const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
@@ -29,16 +32,45 @@ interface RuntimeConfig {
 const DEFAULT_CONFIG: RuntimeConfig = {
   maxFileSize: 100 * 1024 * 1024,
   chunkSize: 10 * 1024 * 1024,
-  cryptoChunkSize: 5 * 1024 * 1024,
+  // 28 bytes under 5 MB, like the server's default: two encrypted chunks fill one request
+  cryptoChunkSize: 5 * 1024 * 1024 - 28,
   defaultTtl: 86400,
   defaultMaxDownloads: 10,
   turnstileSiteKey: '0x0000000000000000000000',
   turnstileEnabled: false,
 };
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * The runtime configuration, when the response really is one. Anything else gives
+ * null, and the built-in defaults stay in force.
+ */
+function parseRuntimeConfig(raw: unknown): RuntimeConfig | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  // Narrowed field by field below: the body is whatever the server sent.
+  const candidate = raw as Record<string, unknown>;
+  const { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled } = candidate;
+  if (
+    !isPositiveInteger(maxFileSize) ||
+    !isPositiveInteger(chunkSize) ||
+    !isPositiveInteger(cryptoChunkSize) ||
+    !isPositiveInteger(defaultTtl) ||
+    !isPositiveInteger(defaultMaxDownloads) ||
+    typeof turnstileSiteKey !== 'string' ||
+    typeof turnstileEnabled !== 'boolean'
+  ) {
+    return null;
+  }
+  return { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled };
+}
+
 type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
 export default function Home() {
+  const { name, tagline } = getBranding();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
   const [file, setFile] = useState<File | null>(null);
   const [ttl, setTtl] = useState(DEFAULT_CONFIG.defaultTtl);
@@ -47,8 +79,12 @@ export default function Home() {
 
   useEffect(() => {
     fetch('/api/config')
-      .then((r) => r.json())
-      .then((cfg: RuntimeConfig) => {
+      // An error response carries JSON too ({ error, retryAfter }). Taken for the
+      // configuration, it would leave every limit undefined.
+      .then((r): Promise<unknown> => (r.ok ? r.json() : Promise.resolve(null)))
+      .then((raw) => {
+        const cfg = parseRuntimeConfig(raw);
+        if (!cfg) return; // keep the defaults
         setRuntimeConfig(cfg);
         setTtl(nearestInList(cfg.defaultTtl, TTL_OPTION_VALUES));
         setMaxDownloads(nearestInList(cfg.defaultMaxDownloads, DOWNLOAD_OPTION_VALUES));
@@ -61,40 +97,25 @@ export default function Home() {
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
-  const captchaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The file whose CAPTCHA has been pending for a while. Kept per file, so the hint
+  // it drives goes away by itself when another file is chosen.
+  const [captchaSlowFor, setCaptchaSlowFor] = useState<File | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Start 10s CAPTCHA timeout when file is selected and Turnstile is enabled
+  // Ten seconds after a file is selected with Turnstile on and no result yet, say so.
+  // A hint, not a failure: a challenge a person has to solve takes longer than that.
   useEffect(() => {
-    if (captchaTimerRef.current) {
-      clearTimeout(captchaTimerRef.current);
-      captchaTimerRef.current = null;
-    }
-
-    if (file && runtimeConfig.turnstileEnabled && !captchaVerified) {
-      captchaTimerRef.current = setTimeout(() => {
-        if (!captchaVerified) {
-          setCaptchaError('CAPTCHA verification timed out — please reload and try again');
-        }
-      }, 10_000);
-    }
-
-    return () => {
-      if (captchaTimerRef.current) {
-        clearTimeout(captchaTimerRef.current);
-        captchaTimerRef.current = null;
-      }
-    };
+    if (!file || !runtimeConfig.turnstileEnabled || captchaVerified) return;
+    const timer = setTimeout(() => setCaptchaSlowFor(file), 10_000);
+    return () => clearTimeout(timer);
   }, [file, runtimeConfig.turnstileEnabled, captchaVerified]);
+
+  const captchaSlow = file !== null && captchaSlowFor === file && !captchaVerified && !captchaError;
 
   const handleCaptchaVerify = useCallback((token: string) => {
     setTurnstileToken(token);
     setCaptchaVerified(true);
     setCaptchaError(null);
-    if (captchaTimerRef.current) {
-      clearTimeout(captchaTimerRef.current);
-      captchaTimerRef.current = null;
-    }
   }, []);
 
   const handleCaptchaError = useCallback(() => {
@@ -122,7 +143,7 @@ export default function Home() {
   const handleUpload = useCallback(async () => {
     if (!file) return;
     if (file.size > runtimeConfig.maxFileSize) {
-      setError(`File exceeds maximum size of ${formatSize(runtimeConfig.maxFileSize)}`);
+      setError(`File exceeds maximum size of ${formatBytes(runtimeConfig.maxFileSize)}`);
       return;
     }
 
@@ -198,19 +219,19 @@ export default function Home() {
       {/* Header */}
       <div className="text-center mb-12">
         <div className="flex justify-center mb-4">
-          <img src="/logo-symbol.webp" alt="" className="w-16 h-16 sm:w-20 sm:h-20" />
+          <Logo className="w-16 h-16 sm:w-20 sm:h-20" />
         </div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.05em] text-gray-100 mb-2 uppercase">
-          Archivum Null
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-[0.05em] text-vault-heading mb-2 uppercase">
+          {name}
         </h1>
-        <p className="text-gray-400 text-sm tracking-[0.15em] uppercase font-mono">
-          Zero trust file relay
+        <p className="text-vault-muted text-sm tracking-[0.15em] uppercase font-mono">
+          {tagline}
         </p>
         <div className="mt-4 flex justify-center gap-2 flex-wrap">
           {['No accounts', 'No cookies', 'No tracking', 'Zero-knowledge'].map((tag) => (
             <span
               key={tag}
-              className="text-[10px] uppercase tracking-widest text-gray-500 border border-gray-700 rounded px-2 py-0.5"
+              className="text-[10px] uppercase tracking-widest text-vault-subtle border border-vault-line-soft rounded px-2 py-0.5"
             >
               {tag}
             </span>
@@ -221,11 +242,11 @@ export default function Home() {
       {stage === 'done' && vaultUrl ? (
         /* Success state */
         <div className="space-y-6">
-          <div className="bg-vault-secondary/50 border border-green-500/20 rounded-lg p-6">
+          <div className="bg-vault-secondary/50 border border-vault-success-fill/20 rounded-lg p-6">
             <div className="text-center mb-6">
               <div className="text-3xl mb-2">◈</div>
-              <p className="text-green-400 font-medium">Vault created</p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-vault-success font-medium">Vault created</p>
+              <p className="text-xs text-vault-subtle mt-1">
                 File encrypted and uploaded successfully
               </p>
             </div>
@@ -234,7 +255,7 @@ export default function Home() {
 
           <button
             onClick={handleReset}
-            className="w-full py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+            className="w-full py-2 text-sm text-vault-muted hover:text-vault-text transition-colors"
           >
             Create another vault
           </button>
@@ -253,13 +274,13 @@ export default function Home() {
               {/* Selected file info */}
               <div className="bg-vault-secondary/50 rounded-lg p-4 flex items-center justify-between">
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-200 truncate">{file.name}</p>
-                  <p className="text-xs text-gray-500">{formatSize(file.size)}</p>
+                  <p className="text-sm text-vault-text truncate">{file.name}</p>
+                  <p className="text-xs text-vault-subtle">{formatBytes(file.size)}</p>
                 </div>
                 {stage === 'idle' && (
                   <button
                     onClick={() => setFile(null)}
-                    className="text-gray-500 hover:text-gray-300 text-sm ml-4"
+                    className="text-vault-subtle hover:text-vault-text-soft text-sm ml-4"
                   >
                     ✕
                   </button>
@@ -283,8 +304,15 @@ export default function Home() {
                 />
               )}
 
+              {captchaSlow && (
+                <div className="bg-vault-warning-fill/10 border border-vault-warning-fill/20 rounded-lg p-3 text-sm text-vault-warning-soft">
+                  Still waiting for the CAPTCHA. If a challenge is shown above, complete it.
+                  If nothing appears, reload the page.
+                </div>
+              )}
+
               {captchaError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+                <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
                   {captchaError}
                 </div>
               )}
@@ -297,7 +325,7 @@ export default function Home() {
                   />
                   <button
                     onClick={handleCancel}
-                    className="w-full py-2 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg transition-colors"
+                    className="w-full py-2 text-sm text-vault-danger hover:text-vault-danger-strong border border-vault-danger-fill/30 rounded-lg transition-colors"
                   >
                     Cancel upload
                   </button>
@@ -305,7 +333,7 @@ export default function Home() {
               )}
 
               {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+                <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
                   {error}
                 </div>
               )}
@@ -313,7 +341,7 @@ export default function Home() {
               {stage === 'error' ? (
                 <button
                   onClick={handleReset}
-                  className="w-full py-3 text-sm text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg transition-colors"
+                  className="w-full py-3 text-sm text-vault-muted hover:text-vault-text border border-vault-line-soft rounded-lg transition-colors"
                 >
                   ← Return to main page
                 </button>
@@ -321,7 +349,7 @@ export default function Home() {
                 <button
                   onClick={handleUpload}
                   disabled={stage !== 'idle' || !file || (runtimeConfig.turnstileEnabled && !captchaVerified)}
-                  className="w-full py-3 bg-vault-accent text-vault-bg rounded-lg font-medium
+                  className="w-full py-3 bg-vault-accent text-vault-on-accent rounded-lg font-medium
                              hover:bg-vault-accent/90 transition-colors
                              disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -337,20 +365,20 @@ export default function Home() {
 
           {/* How it works */}
           <div className="mt-12 border-t border-vault-secondary pt-8">
-            <h2 className="text-xs uppercase tracking-widest text-gray-500 mb-4">
+            <h2 className="text-xs uppercase tracking-widest text-vault-subtle mb-4">
               How it works
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-gray-400">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-vault-muted">
               <div className="bg-vault-secondary/30 rounded p-4">
-                <div className="text-vault-accent font-mono text-lg mb-2">01</div>
+                <div className="text-vault-accent-ink font-mono text-lg mb-2">01</div>
                 <p>File is encrypted in your browser using AES-256-GCM before upload.</p>
               </div>
               <div className="bg-vault-secondary/30 rounded p-4">
-                <div className="text-vault-accent font-mono text-lg mb-2">02</div>
+                <div className="text-vault-accent-ink font-mono text-lg mb-2">02</div>
                 <p>Only the ciphertext is sent to the server. The key stays in the URL fragment.</p>
               </div>
               <div className="bg-vault-secondary/30 rounded p-4">
-                <div className="text-vault-accent font-mono text-lg mb-2">03</div>
+                <div className="text-vault-accent-ink font-mono text-lg mb-2">03</div>
                 <p>Vault auto-deletes after TTL expires or download limit is reached.</p>
               </div>
             </div>
@@ -359,10 +387,4 @@ export default function Home() {
       )}
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
 }

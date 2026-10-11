@@ -11,6 +11,14 @@ import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
+import {
+  applyBranding,
+  brandingWarnings,
+  buildManifest,
+  MANIFEST_PATH,
+  parseBranding,
+} from './static/branding.js';
+import { loadBrandingAssets } from './static/brandingAssets.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -38,6 +46,12 @@ export function serializeRequest(request: FastifyRequest) {
  */
 export async function buildApp(): Promise<FastifyInstance> {
   validateConfig();
+  const branding = parseBranding({
+    name: config.BRAND_NAME,
+    tagline: config.BRAND_TAGLINE,
+    accentColor: config.BRAND_ACCENT_COLOR,
+    theme: config.BRAND_THEME,
+  });
 
   const app = Fastify({
     logger: {
@@ -52,7 +66,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Never `true` (trust all) and never a hop count — neither checks who is connecting,
     // so a client reaching the port directly could spoof its IP past rate limiting.
     trustProxy: [...config.TRUST_PROXY],
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64,
+    // Small: the JSON bodies this API takes are a few hundred bytes. It does not
+    // bound the two upload routes: a multipart body is read by the multipart parser,
+    // under the limits set for it below.
+    bodyLimit: 16 * 1024,
   });
 
   // Security headers
@@ -85,8 +102,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Multipart (streaming)
-  // The per-request file size limit must accommodate both single-shot uploads
-  // (up to MAX_FILE_SIZE) and individual chunk requests (up to CHUNK_SIZE).
+  // One upload request carries at most one chunk, on the single-request route and on
+  // the chunk route alike; the 64 KiB on top leave room for the encryption overhead
+  // of a chunk. The parser does not fail a file part over the limit, it cuts it off:
+  // routes/vault.ts turns that into a 413.
   await app.register(multipart, {
     limits: {
       fileSize: config.CHUNK_SIZE + 1024 * 64,
@@ -130,11 +149,23 @@ export async function buildApp(): Promise<FastifyInstance> {
   const assetCloak = fs.existsSync(frontendDist) ? buildAssetCloak(frontendDist) : null;
 
   if (assetCloak) {
+    // Branding goes on top of the cloak's output, once, here — the request path
+    // below only ever sends a finished string.
+    const brandingAssets = loadBrandingAssets(
+      config.BRANDING_PATH || path.join(__dirname, '..', '..', 'branding'),
+      (warning) => app.log.warn(warning)
+    );
+    const indexHtml = applyBranding(assetCloak.indexHtml, branding, brandingAssets);
+    for (const warning of brandingWarnings(branding)) app.log.warn(warning);
+    if (brandingAssets.files.size > 0) {
+      app.log.info({ files: [...brandingAssets.files.keys()] }, 'Serving the operator\'s branding files');
+    }
+
     const sendIndex = (reply: FastifyReply) =>
       reply
         .header('Cache-Control', 'no-store')
         .type('text/html; charset=utf-8')
-        .send(assetCloak.indexHtml);
+        .send(indexHtml);
 
     // Cloaked assets. The name changes on every restart, so the bytes behind a given
     // URL never do — safe to cache immutably for as long as the client likes.
@@ -149,6 +180,27 @@ export async function buildApp(): Promise<FastifyInstance> {
       }
       return reply.sendFile(asset.relativePath, frontendDist);
     });
+
+    // The operator's own images, answered from memory. These are exact routes, which
+    // the router prefers over the static plugin's wildcard, so each one takes the
+    // place of the built-in file at the same URL. Cached like any unhashed public file.
+    for (const [url, asset] of brandingAssets.files) {
+      app.get(url, async (_request, reply) =>
+        reply
+          .header('Cache-Control', 'public, max-age=0, must-revalidate')
+          .type(asset.contentType)
+          .send(asset.body)
+      );
+    }
+
+    // Generated, because it carries the configured name. Built once: config is frozen.
+    const manifest = buildManifest(branding);
+    app.get(MANIFEST_PATH, async (_request, reply) =>
+      reply
+        .header('Cache-Control', 'public, max-age=0, must-revalidate')
+        .type('application/manifest+json; charset=utf-8')
+        .send(manifest)
+    );
 
     await app.register(fastifyStatic, {
       root: frontendDist,
@@ -176,9 +228,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     app.get('/', async (_request, reply) => sendIndex(reply));
 
-    // SPA fallback — serve index.html for non-API routes
+    // SPA fallback — serve index.html for non-API routes. The page is the answer to a
+    // navigation, so only to GET and HEAD: a POST or DELETE that matches no route gets
+    // a 404, not a page and a 200.
     app.setNotFoundHandler(async (request, reply) => {
-      if (request.url.startsWith('/api/')) {
+      const navigation = request.method === 'GET' || request.method === 'HEAD';
+      if (!navigation || request.url.startsWith('/api/')) {
         return reply.status(404).send({ error: 'Not found' });
       }
       return sendIndex(reply);

@@ -87,7 +87,7 @@ Contributions we will **not accept**:
 # Backend
 cd backend
 npm install
-npm run dev        # starts on http://localhost:3000
+STORAGE_PATH=../data/vaults npm run dev        # starts on http://localhost:3000
 
 # Frontend (separate terminal)
 cd frontend
@@ -99,19 +99,19 @@ npm run dev        # starts on https://localhost:5173
 
 ### Environment variables
 
-Copy and adjust the example:
+The backend reads its configuration from the environment; it does not load a `.env` file. For a local run, put the variables in front of the command:
 
 ```bash
-cp backend/.env.example backend/.env   # if present
+STORAGE_PATH=../data/vaults ADMIN_PASSWORD=dev npm run dev
 ```
 
-The backend reads its config from environment variables. All variables and their defaults are documented in [`backend/src/config.ts`](backend/src/config.ts).
+`STORAGE_PATH` is needed locally: the default, `/data/vaults`, is the path inside the container image. [`.env.example`](.env.example) at the repository root lists every variable, and the Compose files load a copy of it named `.env`. Defaults and validation are in [`backend/src/config.ts`](backend/src/config.ts).
 
 Security-sensitive variables (never commit these):
 
 ```
 ADMIN_USER=
-ADMIN_PASS=
+ADMIN_PASSWORD=
 TURNSTILE_SECRET=
 TURNSTILE_HOSTNAME=
 ```
@@ -127,12 +127,14 @@ backend/src/
   index.ts           # server entrypoint (buildApp + listen + graceful shutdown)
   middleware/        # auth, rate limiting, turnstile
   routes/            # HTTP route handlers
+  static/            # serving the frontend: asset cloak, branding
   storage/           # pluggable storage back-ends
   vault/             # vault manager and types
   __tests__/         # unit/integration tests (Vitest)
 
 frontend/src/
   api/               # fetch wrappers
+  branding.ts        # name, tagline, theme and logo the server wrote into the page
   components/        # reusable UI components
   crypto/            # client-side AES-256-GCM (WebCrypto)
   pages/             # route-level React pages
@@ -249,7 +251,7 @@ Archivum Null is a security-sensitive project. The following rules apply strictl
 
 - **Do not change or replace cryptographic primitives** without opening a dedicated security issue first.
 - The key derivation, encryption scheme (AES-256-GCM, 256-bit key, 96-bit IV, URL fragment delivery) and zero-server-knowledge guarantee must be preserved.
-- **Per-chunk encryption is mandatory.** Each plaintext chunk is encrypted independently with a unique random IV and the chunk index as Additional Authenticated Data (AAD). Do not modify the AAD scheme — it prevents chunk reordering attacks.
+- **Per-chunk encryption is mandatory.** Each plaintext chunk is encrypted independently with a unique random IV, and with the chunk index and a last-chunk marker as Additional Authenticated Data (AAD). Do not modify the AAD scheme — it is what makes reordering, dropping or appending chunks fail.
 - Do not introduce server-side access to the encryption key under any circumstances.
 
 ### Input handling
@@ -272,12 +274,12 @@ Archivum Null is a security-sensitive project. The following rules apply strictl
 
 ### AI-assisted code
 
-This project was partially built with AI assistance. The same standard applies to all contributions:
+Most of this project is written with AI coding tools, as the [README](README.md#how-the-code-is-written-and-checked) describes, and contributions may be too. The same standard applies to every contribution:
 
-- AI-generated code **must be reviewed line by line** before submission.
-- Security-critical files (`crypto/encrypt.ts`, `middleware/basicAuth.ts`, `storage/local.ts`, vault expiry logic) must be reviewed with extra care.
-- Do not submit AI output that you cannot explain and defend in a PR review.
-- AI slop (plausible-looking but logically broken code) is a known risk — tests are the primary guard against it.
+- Read AI-generated code line by line before you submit it.
+- Take extra care with the security-critical files: `crypto/encrypt.ts`, `middleware/basicAuth.ts`, `storage/local.ts` and the vault expiry logic.
+- Do not submit code that you cannot explain and defend in review.
+- Code that looks right and is subtly wrong is the usual failure. Tests are the main guard against it.
 
 ### Pull request security checklist
 
