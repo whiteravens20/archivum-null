@@ -935,10 +935,10 @@ Run the current script once, with the options for your deployment. It finds the 
 | `OUTPUT`, rules for the app's UID | The egress rules of bare-metal mode | They also dropped the app's replies, so the service answered nobody |
 | The table `inet filter`, nftables | The same rules in their nftables form | Replaced by a table of the script's own |
 
-Then deal with what was saved, or the old rules come back at the next boot:
+Then deal with what was saved, or the old rules come back at the next boot. The earlier `--persist` saved the whole ruleset of that moment, and with it Docker's own rules and those of a VPN client. Restored at every boot, that copy leaves rules behind for containers and bridges that no longer exist, at addresses other containers have since been given.
 
-- `netfilter-persistent` or `/etc/iptables/rules.v4`: run `netfilter-persistent save` again.
-- `/etc/nftables.conf`: the earlier `--persist` wrote the whole ruleset over this file, Docker's rules of that moment included. Restore your distribution's default or your own file.
+- `netfilter-persistent`, `/etc/iptables/rules.v4` and `rules.v6`: if you keep no rules of your own there, stop restoring the files (`systemctl disable netfilter-persistent`). If you do, cut the files down to those rules. Do not run `netfilter-persistent save` on a Docker host: it writes Docker's rules into the files again.
+- `/etc/nftables.conf`: the earlier `--persist` wrote the whole ruleset over this file. Restore your distribution's default or your own file.
 
 **From version 3.2.0.** Run the script again with the options you used, `--persist` included. With iptables it moves its chains from the `filter` table to the `mangle` table, where no other program's accept can pass them by. With either backend it rewrites the boot unit, which was not ordered after `nftables.service` and `netfilter-persistent.service` and did not follow their restarts.
 
