@@ -708,6 +708,12 @@ remove_legacy() {
 # A unit of our own that runs this script again at boot with the same options. It
 # loads nothing but our rules, so it leaves alone whatever else the host restores,
 # and it is ordered before Docker and before the app: the rules are there first.
+#
+# It is also ordered after the services that load a saved ruleset, and follows them
+# when they are restarted or reloaded. nftables.service starts its file with "flush
+# ruleset", and netfilter-persistent replaces every table its file names: either one
+# running after us would take our rules out again.
+RULE_LOADERS="netfilter-persistent.service nftables.service"
 
 unit_arguments() {
   local args="--at-boot --mode $MODE --backend $BACKEND --turnstile $TURNSTILE --app-port $APP_PORT"
@@ -723,23 +729,27 @@ unit_arguments() {
 }
 
 install_unit() {
-  local source="${BASH_SOURCE[0]}" unit
+  local source="${BASH_SOURCE[0]}" unit command
+  command="$INSTALLED_COPY $(unit_arguments)"
   unit="[Unit]
 Description=Archivum Null firewall rules
 Documentation=https://github.com/whiteravens20/archivum-null/blob/main/docs/HARDENING.md
 DefaultDependencies=no
 Wants=network-pre.target
-After=local-fs.target systemd-modules-load.service
+After=local-fs.target systemd-modules-load.service $RULE_LOADERS
 Before=network-pre.target docker.service archivum-null.service shutdown.target
 Conflicts=shutdown.target
+PartOf=$RULE_LOADERS
+ReloadPropagatedFrom=$RULE_LOADERS
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=$INSTALLED_COPY $(unit_arguments)
+ExecStart=$command
+ExecReload=$command
 
 [Install]
-WantedBy=multi-user.target"
+WantedBy=multi-user.target $RULE_LOADERS"
 
   echo
   bold "── Persistence ──"

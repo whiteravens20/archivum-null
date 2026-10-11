@@ -91,6 +91,17 @@ dry_run() {
   lacks "nothing is accepted"         "$out" "-j ACCEPT"
   lacks "no resolver without anywhere to connect to" "$out" "--dport 53"
 
+  group "persistence, as printed"
+  out=$(bash "$SCRIPT" --mode docker --backend nftables --turnstile yes --tunnel-iface wg0 --allow 198.51.100.0/24:443 --persist --dry-run 2>&1)
+  has   "the unit runs before Docker and the app"   "$out" "Before=network-pre.target docker.service archivum-null.service shutdown.target"
+  has   "and after the services that load a saved ruleset" "$out" "After=local-fs.target systemd-modules-load.service netfilter-persistent.service nftables.service"
+  has   "it is restarted with them"                 "$out" "PartOf=netfilter-persistent.service nftables.service"
+  has   "and reloaded with them"                    "$out" "ReloadPropagatedFrom=netfilter-persistent.service nftables.service"
+  has   "and started with them"                     "$out" "WantedBy=multi-user.target netfilter-persistent.service nftables.service"
+  expect "start and reload run the same command" \
+    "$(grep -F 'ExecStart=' <<< "$out" | cut -d= -f2-)" "$(grep -F 'ExecReload=' <<< "$out" | cut -d= -f2-)"
+  has   "the command carries the options of this run" "$out" "--at-boot --mode docker --backend nftables --turnstile yes --app-port 3000 --bridge br-archivum --tunnel-iface wg0 --dns none --allow 198.51.100.0/24:443"
+
   group "what it refuses"
   out=$(bash "$SCRIPT" --mode proxmox-veth --dry-run 2>&1); expect "the removed proxmox-veth mode, exit code" "1" "$?"
   has   "and says what to use"                    "$out" "Proxmox firewall"

@@ -99,7 +99,7 @@ Both iptables and nftables evaluate rules **top-to-bottom and stop at the first 
 
 Rules applied with `iptables` or `nft` commands are **in-memory only** and lost on reboot.
 
-- **setup-firewall.sh:** pass `--persist` or answer `y` when prompted. It installs `archivum-null-firewall.service`, which applies the same rules at every boot, before Docker and before the app start. The unit loads this project's rules and nothing else.
+- **setup-firewall.sh:** pass `--persist` or answer `y` when prompted. It installs `archivum-null-firewall.service`, which applies the same rules at every boot, before Docker and before the app start. The unit loads this project's rules and nothing else. It runs after `nftables.service` and `netfilter-persistent.service` where the host has them, and again whenever one of them is started, restarted or reloaded: both load a saved ruleset over what is there, and `/etc/nftables.conf` as Debian ships it begins with `flush ruleset`. After loading saved rules by hand (`nft -f`, `iptables-restore`), run `systemctl restart archivum-null-firewall`.
 - **Rules you wrote by hand, iptables:** `apt install iptables-persistent && netfilter-persistent save`
 - **Rules you wrote by hand, nftables:** keep them in a file of their own and load it from `/etc/nftables.conf`. Do not write `nft list ruleset` over that file on a Docker host: the dump contains Docker's own rules as they were at that moment.
 
@@ -939,5 +939,7 @@ Then deal with what was saved, or the old rules come back at the next boot:
 
 - `netfilter-persistent` or `/etc/iptables/rules.v4`: run `netfilter-persistent save` again.
 - `/etc/nftables.conf`: the earlier `--persist` wrote the whole ruleset over this file, Docker's rules of that moment included. Restore your distribution's default or your own file.
+
+**From version 3.2.0.** Run the script again with the options you used, `--persist` included. With iptables it moves its chains from the `filter` table to the `mangle` table, where no other program's accept can pass them by. With either backend it rewrites the boot unit, which was not ordered after `nftables.service` and `netfilter-persistent.service` and did not follow their restarts.
 
 The `proxmox-veth` mode is gone. Its rules matched a guest's veth in the host's `FORWARD` chain, and a guest's traffic is never presented there under that interface: bridged frames either bypass iptables or appear as coming from the bridge. If you applied them, they are dead weight; list them with `iptables -S FORWARD | grep veth` and delete each with `iptables -D`. Use the Proxmox firewall, as [PROXMOX.md](PROXMOX.md#egress-containment--proxmox-firewall) describes.
