@@ -230,7 +230,7 @@ describe('Vault routes', () => {
 
     expect(res.statusCode).toBe(507);
     expect(mockManager.createVault).toHaveBeenCalledWith(
-      expect.anything(), 86400, 10, 5242880, payload.length
+      expect.anything(), 86400, 10, 5242852, payload.length
     );
     // The manager refused without reading the part; the route must not leave it unread
     expect(part?.readableFlowing).toBe(true);
@@ -272,7 +272,7 @@ describe('Vault routes', () => {
       expect.anything(),
       86400,   // DEFAULT_TTL
       10,      // DEFAULT_MAX_DOWNLOADS
-      5242880, // CRYPTO_CHUNK_SIZE default
+      5242852, // CRYPTO_CHUNK_SIZE default
       payload.length // the request's Content-Length
     );
   });

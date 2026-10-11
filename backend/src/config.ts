@@ -7,6 +7,9 @@ const TURNSTILE_PLACEHOLDER = '0x0000000000000000000000';
 export const MIN_TTL_SECONDS = 60;
 export const MAX_DOWNLOADS_PER_VAULT = 1000;
 
+// Per-chunk AES-GCM overhead: 12-byte IV + 16-byte GCM authentication tag = 28 bytes per chunk.
+const PER_CHUNK_OVERHEAD = 28;
+
 // Pre-compute CHUNK_SIZE so CRYPTO_CHUNK_SIZE can reference it in the same schema.
 const _CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 10485760);
 
@@ -44,8 +47,13 @@ const envSchema = {
   MAX_UPLOAD_SESSIONS_PER_IP: Number(process.env.MAX_UPLOAD_SESSIONS_PER_IP || 10),
   // Per-chunk plaintext size for client-side AES-GCM streaming encryption.
   // Each chunk is encrypted independently with a unique IV and chunkIndex in AAD.
-  // Default: min(5 MB, CHUNK_SIZE) — auto-clamped so smaller CHUNK_SIZE values don't crash.
-  CRYPTO_CHUNK_SIZE: Number(process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE)),
+  // Default: min(5 MB, CHUNK_SIZE) less the 28 bytes each chunk gains when encrypted,
+  // so that whole encrypted chunks fill an upload request of CHUNK_SIZE exactly: two
+  // of them with the default 10 MB. At a round 5 MB a second one would be 56 bytes
+  // too many, and every request would carry a single chunk.
+  CRYPTO_CHUNK_SIZE: Number(
+    process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE) - PER_CHUNK_OVERHEAD
+  ),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   // Update check — compares the running version against the latest GitHub release.
@@ -80,9 +88,6 @@ const envSchema = {
 };
 
 export const config = Object.freeze(envSchema);
-
-// Per-chunk AES-GCM overhead: 12-byte IV + 16-byte GCM authentication tag = 28 bytes per chunk.
-const PER_CHUNK_OVERHEAD = 28;
 
 /**
  * Calculate total encryption overhead for a given plaintext size.

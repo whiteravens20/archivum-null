@@ -31,7 +31,8 @@ interface RuntimeConfig {
 const DEFAULT_CONFIG: RuntimeConfig = {
   maxFileSize: 100 * 1024 * 1024,
   chunkSize: 10 * 1024 * 1024,
-  cryptoChunkSize: 5 * 1024 * 1024,
+  // 28 bytes under 5 MB, like the server's default: two encrypted chunks fill one request
+  cryptoChunkSize: 5 * 1024 * 1024 - 28,
   defaultTtl: 86400,
   defaultMaxDownloads: 10,
   turnstileSiteKey: '0x0000000000000000000000',

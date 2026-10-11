@@ -26,7 +26,7 @@ describe('config', () => {
     expect(config.MAX_TOTAL_STORAGE).toBe(0);
     expect(config.CHUNK_SIZE).toBe(10485760);
     expect(config.UPLOAD_SESSION_TTL).toBe(3600);
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242852);
     expect(config.ADMIN_USER).toBe('admin');
   });
 
@@ -207,14 +207,28 @@ describe('validateConfig', () => {
     vi.stubEnv('CHUNK_SIZE', '2000000');            // 2 MB — smaller than 5 MB default
     vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
     const { config } = await import('../config.js');
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000);  // clamped to CHUNK_SIZE
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000 - 28);  // CHUNK_SIZE less one chunk's overhead
   });
 
-  it('should default CRYPTO_CHUNK_SIZE to 5 MB when CHUNK_SIZE is larger', async () => {
+  it('should default CRYPTO_CHUNK_SIZE to just under 5 MB when CHUNK_SIZE is larger', async () => {
     vi.stubEnv('CHUNK_SIZE', '50000000');            // 50 MB
     vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
     const { config } = await import('../config.js');
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);  // 5 MB default
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880 - 28);
+  });
+
+  it('should size the default crypto chunk so that whole encrypted chunks fill a request', async () => {
+    const { config } = await import('../config.js');
+    const encryptedChunk = config.CRYPTO_CHUNK_SIZE + 28;
+    // Two per request with the defaults, and not a byte over CHUNK_SIZE
+    expect(Math.floor(config.CHUNK_SIZE / encryptedChunk)).toBe(2);
+    expect(2 * encryptedChunk).toBe(config.CHUNK_SIZE);
+  });
+
+  it('should keep a CRYPTO_CHUNK_SIZE that was set explicitly', async () => {
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', '5242880');
+    const { config } = await import('../config.js');
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);
   });
 
   it('should warn when the Turnstile secret is set without a site key', async () => {
