@@ -443,6 +443,11 @@ export class VaultManager {
     return { stream, meta };
   }
 
+  /** Whether the id is a vault this instance holds, expired or not. */
+  hasVault(vaultId: string): boolean {
+    return vaults.has(vaultId);
+  }
+
   async deleteVault(vaultId: string): Promise<boolean> {
     vaults.delete(vaultId);
     return storage.deleteVault(vaultId);

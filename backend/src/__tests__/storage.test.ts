@@ -178,6 +178,17 @@ describe('LocalStorage', () => {
       expect(() => (storage as any).vaultDir('..foo')).toThrow('Invalid vault ID');
     });
 
+    it('should refuse the upload staging directory as a vault ID', async () => {
+      // A chunk in progress creates the directory...
+      await storage.appendChunk('upload-1', createTestStream('partial'), 100, 0);
+      const stagingDir = path.join(tempDir, '_uploads');
+
+      // ...and no vault operation may reach it by name
+      expect(await storage.deleteVault('_uploads')).toBe(false);
+      await expect(storage.writeFile('_uploads', createTestStream('x'))).rejects.toThrow('Invalid vault ID');
+      await expect(fsp.readFile(path.join(stagingDir, 'upload-1', 'data.enc'), 'utf-8')).resolves.toBe('partial');
+    });
+
     it('should allow valid nanoid-style IDs', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(() => (storage as any).vaultDir('abc123DEF-_xyz')).not.toThrow();
