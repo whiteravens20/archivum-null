@@ -107,6 +107,7 @@ NETWORK=an-fwtest
 TEST_USER=anfwtest
 HOST_PORT=18099
 PIDS=()
+WEBROOT=""
 
 cleanup() {
   set +e
@@ -120,6 +121,7 @@ cleanup() {
   ip link del "$TUNNEL" 2>/dev/null
   ip link del anfwlan0 2>/dev/null
   userdel "$TEST_USER" 2>/dev/null
+  [[ -n "$WEBROOT" ]] && rm -rf "$WEBROOT"
   return 0
 }
 
@@ -163,7 +165,16 @@ without() {
   rm -rf "$shadow"
   return "$status"
 }
-rules() { { iptables-save; ip6tables-save; nft list ruleset; } 2>/dev/null | grep -v -E '^(#|:)|packets [0-9]+ bytes'; }
+# Every rule on this machine. Chains and tables without a rule do not count: asking
+# ip6tables a question is enough to create its empty table on a machine that had none.
+rules() { { iptables-save; ip6tables-save; } 2>/dev/null | grep -E '^-A ' | sort; }
+# same_rules <what> <before> — the rules now are the ones from before; the difference is printed if not
+same_rules() {
+  local now; now=$(rules)
+  if [[ "$2" == "$now" ]]; then ok "$1"; else bad "$1" "$(diff <(echo "$2") <(echo "$now") | grep '^[<>]' | head -8)"; fi
+}
+# Nothing that carries this script's names is left, in either tool.
+leftovers() { { iptables-save; ip6tables-save; nft list ruleset; } 2>/dev/null | grep -c -E 'ARCHIVUM-|archivum_null' || true; }
 
 live() {
   local image cloudflare gateway before after backend
@@ -229,7 +240,7 @@ live() {
 
     group "docker, $backend, run again with the same options"
     after=$(rules); apply --mode docker --backend "$backend" --turnstile yes --tunnel-iface "$TUNNEL"
-    expect "the rules are the same after a second run"   "same" "$([[ "$after" == "$(rules)" ]] && echo same || echo different)"
+    same_rules "the rules are the same after a second run" "$after"
 
     group "docker, $backend, the tunnel interface dropped from the options"
     apply --mode docker --backend "$backend" --turnstile no
@@ -252,13 +263,17 @@ live() {
 
   group "--remove"
   bash "$SCRIPT" --remove --yes >/dev/null 2>&1
-  expect "the firewall is as it was before the first run" "same" "$([[ "$before" == "$(rules)" ]] && echo same || echo different)"
+  same_rules "every rule from before the first run is there, and no other" "$before"
+  expect "no chain, jump or table of the script is left"  "0"    "$(leftovers)"
   expect "container reaches the internet again"           "open" "$(from_app 1.1.1.1 443)"
   docker rm -f "$APP" >/dev/null 2>&1
 
   # ── bare-metal: a process of a user of its own ──
+  # Served from a directory the test user can read, so that the answer is 200
+  # wherever this is run from.
   useradd --system --no-create-home --shell /usr/sbin/nologin "$TEST_USER"
-  sudo -u "$TEST_USER" python3 -m http.server 3000 --bind 0.0.0.0 >/dev/null 2>&1 & PIDS+=($!)
+  WEBROOT=$(mktemp -d); chmod 755 "$WEBROOT"; echo ok > "$WEBROOT/index.html"
+  sudo -u "$TEST_USER" python3 -m http.server 3000 --bind 0.0.0.0 --directory "$WEBROOT" >/dev/null 2>&1 & PIDS+=($!)
   for _ in $(seq 1 20); do [[ "$(http_from host http://127.0.0.1:3000/)" == 200 ]] && break; sleep 0.5; done
 
   for backend in iptables nftables; do
@@ -277,6 +292,7 @@ live() {
 
   group "--remove"
   bash "$SCRIPT" --remove --yes >/dev/null 2>&1
+  expect "no chain, jump or table of the script is left" "0"    "$(leftovers)"
   expect "the app's user reaches the internet again"     "open" "$(as_user 1.1.1.1 443)"
 
   group "a machine with only one of the two tools"
