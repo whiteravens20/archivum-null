@@ -474,8 +474,10 @@ ipt_jumps() {
 }
 
 # Every jump into one of our chains that this family holds, as "<parent> <match...> -j <chain>".
+# Nothing on a host that has no iptables: the nftables rules need none of it.
 ipt_existing_jumps() {
   local family="$1"
+  family_usable "$family" || return 0
   ipt "$family" -S 2>/dev/null \
     | awk -v e="$CHAIN_EGRESS" -v h="$CHAIN_HOST" -v i="$CHAIN_INGRESS" \
         '$1 == "-A" && ($NF == e || $NF == h || $NF == i) { sub(/^-A /, ""); print }'

@@ -143,6 +143,26 @@ http_from() {
   return 0
 }
 apply() { bash "$SCRIPT" "$@" --yes >/dev/null 2>&1 || bad "setup-firewall.sh $*" "exit code $?"; }
+
+# without <pattern> <command...> — run a command on a PATH that holds every tool of this machine except the ones
+# whose name matches the pattern. A minimal container image has nft and no iptables; some hosts have it the other way.
+without() {
+  local pattern="$1" shadow dir file name status
+  shift
+  shadow=$(mktemp -d)
+  for dir in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do
+    for file in "$dir"/*; do
+      name=${file##*/}
+      # shellcheck disable=SC2053  # the pattern is meant to be one
+      [[ $name == $pattern ]] && continue
+      [[ -e "$shadow/$name" ]] || ln -s "$file" "$shadow/$name"
+    done
+  done
+  PATH="$shadow" "$@"
+  status=$?
+  rm -rf "$shadow"
+  return "$status"
+}
 rules() { { iptables-save; ip6tables-save; nft list ruleset; } 2>/dev/null | grep -v -E '^(#|:)|packets [0-9]+ bytes'; }
 
 live() {
@@ -258,6 +278,19 @@ live() {
   group "--remove"
   bash "$SCRIPT" --remove --yes >/dev/null 2>&1
   expect "the app's user reaches the internet again"     "open" "$(as_user 1.1.1.1 443)"
+
+  group "a machine with only one of the two tools"
+  without '*tables*' bash "$SCRIPT" --mode bare-metal --backend nftables --turnstile no --app-uid "$TEST_USER" --yes >/dev/null 2>&1
+  expect "nftables rules load where there is no iptables, exit code" "0" "$?"
+  expect "and they hold"                                             "blocked" "$(as_user 1.1.1.1 443)"
+  without '*tables*' bash "$SCRIPT" --remove --yes >/dev/null 2>&1
+  expect "and come out again, exit code"                             "0" "$?"
+  without 'nft' bash "$SCRIPT" --mode bare-metal --backend iptables --turnstile no --app-uid "$TEST_USER" --yes >/dev/null 2>&1
+  expect "iptables rules load where there is no nft, exit code"      "0" "$?"
+  expect "and they hold"                                             "blocked" "$(as_user 1.1.1.1 443)"
+  without 'nft' bash "$SCRIPT" --remove --yes >/dev/null 2>&1
+  expect "and come out again, exit code"                             "0" "$?"
+  expect "the app's user reaches the internet again"                 "open" "$(as_user 1.1.1.1 443)"
 }
 
 case "${1:-}" in
