@@ -48,6 +48,8 @@ services:
     # the directory on the host must be owned by UID 1001 (the in-container user):
     #   sudo mkdir -p /srv/vaults && sudo chown 1001:1001 /srv/vaults
     # Without this the container will fail to write files.
+    # Give the service a directory of its own. At startup it clears what unfinished
+    # uploads left in there, and it is not the place for anything else.
     volumes:
       - vault-data:/data/vaults
       - ./TOS.md:/app/TOS.md:ro
