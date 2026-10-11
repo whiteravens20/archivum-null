@@ -133,6 +133,18 @@ describe('Rate-limit middleware', () => {
     expect(res.statusCode).toBe(429);
   });
 
+  it('should count every method in the download tier, not only GET', async () => {
+    // Download limit is 2, general limit is 5. A HEAD on the download path must run
+    // out with the stricter of the two.
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({ method: 'HEAD', url: '/api/vault/test-id/download' });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const res = await app.inject({ method: 'HEAD', url: '/api/vault/test-id/download' });
+    expect(res.statusCode).toBe(429);
+  });
+
   it('should not let a query string bypass the download tier', async () => {
     // Download limit is 2. Appending a query string must NOT drop the request to
     // the looser general tier — the stricter download limit still applies.

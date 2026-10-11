@@ -105,8 +105,10 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
       if (!checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply)) return;
     }
 
-    // Tier 3 — download limit (prevents bulk enumeration / download exhaustion)
-    if (/^\/api\/vault\/[^/]+\/download$/.test(pathname) && request.method === 'GET') {
+    // Tier 3 — download limit (prevents bulk enumeration / download exhaustion).
+    // Whatever the method: only GET is routed, but a request made with another one is
+    // still counted where a download would be, not in the looser general tier.
+    if (/^\/api\/vault\/[^/]+\/download$/.test(pathname)) {
       checkLimit(downloadBuckets, ip, config.RATE_LIMIT_DOWNLOAD_MAX, windowMs, reply);
     }
   });

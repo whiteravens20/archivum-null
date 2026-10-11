@@ -116,8 +116,12 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // Download vault content (consumes a download)
-  app.get<{ Params: VaultParams }>('/api/vault/:vaultId/download', async (request, reply) => {
+  // Download vault content (consumes a download).
+  // No HEAD twin: Fastify would run this handler for HEAD as well, and a request that
+  // only asks for headers would take a download without delivering anything.
+  app.get<{ Params: VaultParams }>('/api/vault/:vaultId/download', {
+    exposeHeadRoute: false,
+  }, async (request, reply) => {
     const { vaultId } = request.params;
     const result = await vaultManager.consumeDownload(vaultId);
 

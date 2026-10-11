@@ -309,6 +309,20 @@ describe('Vault routes', () => {
     expect(res.body).toBe('encrypted-data');
   });
 
+  it('HEAD /api/vault/:vaultId/download is not routed and takes no download', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/api/vault/abc123/download' });
+
+    expect(res.statusCode).toBe(404);
+    expect(mockManager.consumeDownload).not.toHaveBeenCalled();
+  });
+
+  it('HEAD stays available on the vault info route, which changes nothing', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/api/vault/abc123' });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockManager.consumeDownload).not.toHaveBeenCalled();
+  });
+
   it('GET /api/vault/:vaultId/download returns 404 for unknown vault', async () => {
     const res = await app.inject({
       method: 'GET',
