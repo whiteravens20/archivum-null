@@ -45,6 +45,9 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
     - [Docker](#docker)
     - [Bare-metal / systemd](#bare-metal--systemd)
     - [Summary — what to apply](#summary--what-to-apply)
+  - [Host-Side Isolation](#host-side-isolation)
+    - [A filesystem of its own for the vaults](#a-filesystem-of-its-own-for-the-vaults)
+    - [The shared kernel](#the-shared-kernel)
   - [Quick Setup with setup-firewall.sh](#quick-setup-with-setup-firewallsh)
     - [Coming from an earlier version of the script](#coming-from-an-earlier-version-of-the-script)
 
@@ -823,6 +826,44 @@ For the Proxmox firewall, see [PROXMOX.md — Egress Containment](PROXMOX.md#egr
 > **A per-container `.fw` file does nothing on its own.** Guest rules are compiled only while the **datacenter** firewall is enabled — `pve-firewall status` must not report `disabled`. Until it is, `policy_out: DROP` is inert and the container's egress is wide open, whatever the file says. Turn it on under **Datacenter → Firewall → Options**, reviewing the host rules first so you do not lock yourself out, or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
 >
 > [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) warns when it finishes against a disabled datacenter firewall — it will not flip the switch itself, because that is a host-wide change affecting every guest. It does keep `firewall=1` on the container's veth regardless of the firewall prompt, so enabling the datacenter firewall later activates the rules without touching the NIC.
+
+---
+
+## Host-Side Isolation
+
+Everything above limits what the app's container can reach over the network. Two things remain on the host's side: the disk the vaults are written to, and the kernel the container shares with everything else on the machine.
+
+### A filesystem of its own for the vaults
+
+The vault volume is the one place in the production container that can be written to and executed from: `/tmp` is mounted `noexec`, the rest is read-only. By default it is also a directory on the host's own filesystem, so the only bound on its size is `MAX_TOTAL_STORAGE`. A dedicated filesystem closes both: nothing runs from it, and it cannot grow past its size whatever the app believes.
+
+```bash
+# On the homelab host. Any block device will do: a partition, a logical volume, a ZFS volume.
+mkfs.ext4 /dev/<device>
+mkdir -p /srv/archivum
+echo '/dev/<device>  /srv/archivum  ext4  noexec,nosuid,nodev  0  2' >> /etc/fstab
+mount /srv/archivum
+
+# The vaults go one level down, so that the filesystem's own lost+found is not among them
+mkdir /srv/archivum/vaults
+chown 1001:1001 /srv/archivum/vaults
+```
+
+```yaml
+# docker-compose.yml, under the archivum-null service: in place of "vault-data:/data/vaults"
+volumes:
+  - /srv/archivum/vaults:/data/vaults
+```
+
+`docker exec archivum-null grep /data/vaults /proc/mounts` then shows `noexec,nosuid,nodev`. Keep `MAX_TOTAL_STORAGE` below the size of the filesystem: the quota is what makes the app refuse an upload cleanly, the filesystem is what holds if the quota is ever wrong.
+
+### The shared kernel
+
+A container is a process on the host's kernel, confined by it. The settings in `docker-compose.yml` leave the app nothing to work with: no capability, no new privileges, a system-call filter, a read-only root. What they cannot do is fix a flaw in the kernel or in the container runtime, and no setting in this repository can. That part is yours:
+
+- **Keep the host and Docker patched.** A container escape is, almost always, a known and already fixed vulnerability on a machine that was not updated.
+- **Consider user-namespace remapping or rootless Docker.** The container's user is UID 1001 inside and, by default, UID 1001 on the host as well, which on many machines is a real account. With `userns-remap` in `/etc/docker/daemon.json`, or with Docker running rootless, the container's IDs map to host IDs that own nothing. See Docker's documentation on [user namespaces](https://docs.docker.com/engine/security/userns-remap/) and [rootless mode](https://docs.docker.com/engine/security/rootless/); both change where volumes live and who owns them, so set them up before the first deployment, not after.
+- **A Proxmox LXC** made by the installer is unprivileged for the same reason: root inside it is an unprivileged ID on the host.
 
 ---
 
