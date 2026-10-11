@@ -41,7 +41,7 @@ What the code guarantees today, and what it deliberately does not protect agains
 - [x] Startup cleanup removes only what the app itself created — any other directory under `STORAGE_PATH` is left alone and named in a warning
 - [x] File size enforced at frontend, backend, and proxy levels:
   - Frontend: `file.size > MAX_FILE_SIZE` check before encryption
-  - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk; a file part over the limit ends the upload with 413
+  - Backend multipart: `@fastify/multipart` limit set to `CHUNK_SIZE + 64KB` — with streaming per-chunk encryption, no single HTTP request exceeds one chunk. The parser cuts a larger file part off at the limit without an error of its own; both upload routes turn that into a 413 and keep nothing of the part
   - Backend streaming: transform stream aborts at `MAX_FILE_SIZE + MAX_METADATA_HEADER(768) + calcEncryptionOverhead(…)` in `writeFile` — `MAX_FILE_SIZE` refers to the user's raw file; the 768-byte metadata-header allowance accounts for the encrypted filename + MIME header the frontend prepends; encryption overhead is `ceil(plaintextMax / CRYPTO_CHUNK_SIZE) * 28` (28 bytes per chunk: 12-byte IV + 16-byte GCM tag)
   - Reverse proxy: `client_max_body_size` (documented in README)
 - [x] Timing-safe comparison for admin credentials
