@@ -85,6 +85,16 @@ describe('crypto/encrypt', () => {
       expect(parsed.filename).toBe('日本語ファイル.txt');
     });
 
+    it('should cut a name that is too long between two characters, never inside one', () => {
+      // 130 four-byte characters are 520 bytes; the limit of 510 falls inside the 128th
+      const header = buildMetadataHeader('😀'.repeat(130), 'text/plain');
+      const parsed = parseMetadataHeader(header);
+
+      expect(parsed.filename).toBe('😀'.repeat(127));
+      expect(parsed.filename).not.toContain('\uFFFD');
+      expect(parsed.mimeType).toBe('text/plain');
+    });
+
     it('should sanitize path traversal in filename', () => {
       const header = buildMetadataHeader('../../../etc/passwd', 'text/plain');
       const parsed = parseMetadataHeader(header);
@@ -354,6 +364,31 @@ describe('crypto/encrypt', () => {
       expect(sanitizeFilename('file\u200Ename\u200F.txt')).toBe('filename.txt');
     });
 
+    it('should strip the invisible characters a fixed list would miss', () => {
+      const invisible = [
+        '\u00AD', // soft hyphen
+        '\u061C', // Arabic letter mark
+        '\u180E', // Mongolian vowel separator
+        '\u2028', // line separator
+        '\u2029', // paragraph separator
+        '\u2060', // word joiner
+        '\u2064', // invisible plus
+        '\u3164', // Hangul filler
+        '\uFE0F', // variation selector
+        '\uFFF9', // interlinear annotation anchor
+        '\u{E0041}', // tag character
+      ];
+      for (const character of invisible) {
+        expect(sanitizeFilename(`inv${character}oice.pdf`)).toBe('invoice.pdf');
+      }
+    });
+
+    it('should not let whitespace hide leading dots', () => {
+      expect(sanitizeFilename(' .hidden')).toBe('hidden');
+      expect(sanitizeFilename('. .bashrc')).toBe('bashrc');
+      expect(sanitizeFilename('\u200B.profile')).toBe('profile');
+    });
+
     it('should strip leading dots', () => {
       expect(sanitizeFilename('.hidden')).toBe('hidden');
       expect(sanitizeFilename('...secret')).toBe('secret');
@@ -367,6 +402,14 @@ describe('crypto/encrypt', () => {
     it('should truncate to 255 characters', () => {
       const long = 'x'.repeat(300);
       expect(sanitizeFilename(long)).toHaveLength(255);
+    });
+
+    it('should count the limit in characters and never cut one in half', () => {
+      // Each of these is two UTF-16 units; a cut by units would leave half a character
+      const result = sanitizeFilename('😀'.repeat(300));
+      expect(Array.from(result)).toHaveLength(255);
+      expect(result.isWellFormed()).toBe(true);
+      expect(result).toBe('😀'.repeat(255));
     });
 
     it('should return "file" for empty string', () => {
