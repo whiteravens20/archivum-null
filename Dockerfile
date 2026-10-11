@@ -24,10 +24,16 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS production
 
-# Bust Docker layer cache for apk upgrade so CI always pulls the latest security patches.
-# In CI, CACHE_BUST_APK is set to github.run_id so the layer is never stale.
+# Upgrade the OS packages, then have the package manager remove itself. Nothing
+# installs a package in a running container, and with apk-tools go the packages only
+# it needed: libapk, the OpenSSL libraries, zlib, ssl_client and the CA bundle. Node
+# carries its own TLS stack and CA store, and the health check speaks plain HTTP to
+# loopback. The package database stays, and it is what image scanners read.
+#
+# CACHE_BUST_APK keeps this layer out of the build cache: the release and snapshot
+# workflows set it to github.run_id, so the upgrade runs on every one of their builds.
 ARG CACHE_BUST_APK=""
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache && apk del --no-network apk-tools
 
 # Security: non-root user
 RUN addgroup -g 1001 -S archivum && \
