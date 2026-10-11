@@ -73,6 +73,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      # At start the server gives every built asset a random public name and rewrites
+      # the references to it that it can find: literal /assets/<name> strings
+      # (backend/src/static/assetCloak.ts). The chunks of a split build import each
+      # other by relative path, which is not rewritten, so a second script would not
+      # load in production.
+      - name: One script in the build
+        run: |
+          count=$(find dist/assets -name '*.js' | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::The frontend build emitted $count scripts. The asset cloak handles one; see backend/src/static/assetCloak.ts."
+            exit 1
+          fi
+
       - name: Tests
         run: npm run test
 
