@@ -225,9 +225,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     app.get('/', async (_request, reply) => sendIndex(reply));
 
-    // SPA fallback — serve index.html for non-API routes
+    // SPA fallback — serve index.html for non-API routes. The page is the answer to a
+    // navigation, so only to GET and HEAD: a POST or DELETE that matches no route gets
+    // a 404, not a page and a 200.
     app.setNotFoundHandler(async (request, reply) => {
-      if (request.url.startsWith('/api/')) {
+      const navigation = request.method === 'GET' || request.method === 'HEAD';
+      if (!navigation || request.url.startsWith('/api/')) {
         return reply.status(404).send({ error: 'Not found' });
       }
       return sendIndex(reply);
