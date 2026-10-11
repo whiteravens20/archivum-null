@@ -142,6 +142,9 @@ export function validateConfig(): void {
   if (!isFinite(config.MAX_TOTAL_STORAGE) || config.MAX_TOTAL_STORAGE < 0) {
     throw new Error('MAX_TOTAL_STORAGE must be a non-negative number');
   }
+  if (config.MAX_TOTAL_STORAGE === 0) {
+    console.warn('[WARN] MAX_TOTAL_STORAGE is 0 — uploads are limited only by the free space of the disk the vaults are on. Set a quota in bytes.');
+  }
   if (config.CRYPTO_CHUNK_SIZE > config.CHUNK_SIZE) {
     throw new Error('CRYPTO_CHUNK_SIZE must not exceed CHUNK_SIZE');
   }

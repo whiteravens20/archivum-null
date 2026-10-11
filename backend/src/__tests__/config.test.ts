@@ -217,6 +217,23 @@ describe('validateConfig', () => {
     expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880);  // 5 MB default
   });
 
+  it('should warn when storage is unlimited', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MAX_TOTAL_STORAGE is 0'));
+  });
+
+  it('should not warn about storage once a quota is set', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'secret');
+    vi.stubEnv('MAX_TOTAL_STORAGE', '10737418240');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { validateConfig } = await import('../config.js');
+    validateConfig();
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('MAX_TOTAL_STORAGE'));
+  });
+
   it('should reject a legacy TRUST_PROXY hop count', async () => {
     vi.stubEnv('TRUST_PROXY', '1');
     const { validateConfig } = await import('../config.js');
