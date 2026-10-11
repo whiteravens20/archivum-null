@@ -89,6 +89,28 @@ jobs:
       - name: Tests
         run: npm run test
 
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh .github/scripts/*.sh
+
+      - name: Firewall rules, as printed
+        run: .github/scripts/test-firewall.sh dry-run
+
+      # Applied for real on this runner, to a container and to a process of a test
+      # user, and probed from a stand-in for the proxy and one for a LAN neighbour.
+      - name: Firewall rules, as applied
+        run: |
+          command -v nft >/dev/null || sudo apt-get install -y --no-install-recommends nftables
+          sudo .github/scripts/test-firewall.sh live
+
   docker:
     name: Validate Docker build
     runs-on: ubuntu-latest
