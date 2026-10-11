@@ -195,6 +195,9 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         nextChunkIndex: session.nextChunkIndex,
       });
     } catch (err: unknown) {
+      // A refused chunk never reached storage, so its body is still unread. Drain it,
+      // or the connection is left waiting on a request nobody will finish reading.
+      data.file.resume();
       return sendUploadError(request, reply, err);
     }
   });
