@@ -66,8 +66,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Never `true` (trust all) and never a hop count — neither checks who is connecting,
     // so a client reaching the port directly could spoof its IP past rate limiting.
     trustProxy: [...config.TRUST_PROXY],
-    // Small by default: the JSON bodies this API takes are a few hundred bytes. The
-    // two upload routes carry a limit of their own (routes/vault.ts).
+    // Small: the JSON bodies this API takes are a few hundred bytes. It does not
+    // bound the two upload routes: a multipart body is read by the multipart parser,
+    // under the limits set for it below.
     bodyLimit: 16 * 1024,
   });
 
@@ -101,8 +102,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Multipart (streaming)
-  // The per-request file size limit must accommodate both single-shot uploads
-  // (up to MAX_FILE_SIZE) and individual chunk requests (up to CHUNK_SIZE).
+  // One upload request carries at most one chunk, on the single-request route and on
+  // the chunk route alike; the 64 KiB on top leave room for the encryption overhead
+  // of a chunk. The parser does not fail a file part over the limit, it cuts it off:
+  // routes/vault.ts turns that into a 413.
   await app.register(multipart, {
     limits: {
       fileSize: config.CHUNK_SIZE + 1024 * 64,
