@@ -104,4 +104,9 @@ ENV STORAGE_PATH=/data/vaults
 ARG APP_VERSION=""
 ENV APP_VERSION=${APP_VERSION}
 
-CMD ["node", "backend/dist/index.js"]
+# Node's permission model, as a seat belt behind the container's own limits. Started
+# this way the process cannot run a child process or a worker thread, load a native
+# addon, use WASI or open the inspector, and the server needs none of them. File
+# access is left open to it: the read-only root filesystem and the volume already
+# decide what can be written, and STORAGE_PATH and BRANDING_PATH may point anywhere.
+CMD ["node", "--permission", "--allow-fs-read=*", "--allow-fs-write=*", "backend/dist/index.js"]
