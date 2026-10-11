@@ -70,7 +70,7 @@ describe('GET /api/tos', () => {
     vi.resetModules();
   });
 
-  it('should return TOS content as text/plain when file exists', async () => {
+  it('should return the TOS as HTML, converted from the Markdown file', async () => {
     // TOS.md exists in the repo — load the real file, no mocking needed.
     vi.resetModules();
     const app = Fastify({ logger: false });
@@ -81,8 +81,13 @@ describe('GET /api/tos', () => {
     const res = await app.inject({ method: 'GET', url: '/api/tos' });
 
     expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toMatch(/text\/plain/);
-    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.body).toMatch(/^<h1>Terms of Service/);
+    expect(res.body).toContain('<h2>1. Service Description</h2>');
+    expect(res.body).toContain('<li>');
+    // Formatting is in the markup now, not in the text
+    expect(res.body).not.toContain('## ');
+    expect(res.body).not.toContain('**');
 
     await app.close();
   });
