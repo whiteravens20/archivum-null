@@ -65,12 +65,25 @@ if [[ -z "$TUNNEL_IFACE" ]]; then
   done
 fi
 
-# ── Load .env for HOST_BIND_ADDRESS ───────────────────────────────────────────
-HOST_BIND_ADDRESS=""
-if [[ -f "$ENV_FILE" ]]; then
-  HOST_BIND_ADDRESS=$(grep -E '^HOST_BIND_ADDRESS=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]' || true)
-fi
-HOST_BIND_ADDRESS="${HOST_BIND_ADDRESS:-}"
+# ── Settings of the deployment ────────────────────────────────────────────────
+# setting <NAME> — the value the container was started with. Compose has read the
+# environment file by then, so its rules for quotes and for a comment after a value
+# are already applied. The file is read only when the container does not carry the
+# variable, and then by those same rules.
+setting() {
+  local value
+  value=$(inspect '{{range .Config.Env}}{{println .}}{{end}}' | sed -n "s/^$1=//p" | tail -1)
+  if [[ -z "$value" && -f "$ENV_FILE" ]]; then
+    value=$(sed -n "s/^$1=//p" "$ENV_FILE" | tail -1)
+    case "$value" in
+      \"*) value="${value#\"}"; value="${value%%\"*}" ;;
+      \'*) value="${value#\'}"; value="${value%%\'*}" ;;
+      *)   value=$(sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//' <<< "$value") ;;
+    esac
+  fi
+  printf '%s' "$value"
+}
+HOST_BIND_ADDRESS=$(setting HOST_BIND_ADDRESS)
 
 # ── Check 1: Container is running ─────────────────────────────────────────────
 header "1. Container status"
