@@ -16,8 +16,17 @@ vi.mock('../api/vault.js', () => ({
   uploadVaultChunked: vi.fn(),
 }));
 
+// The widget itself is not rendered; what the page handed it is kept, so a test can
+// answer the way Cloudflare's script would.
+const turnstile = vi.hoisted(() => ({
+  props: null as null | { onVerify: (token: string) => void; onError?: () => void; onExpire?: () => void },
+}));
+
 vi.mock('../components/Turnstile.js', () => ({
-  default: () => null,
+  default: (props: NonNullable<typeof turnstile.props>) => {
+    turnstile.props = props;
+    return null;
+  },
 }));
 
 const mockConfig = {
@@ -179,7 +188,7 @@ describe('Home', () => {
       vi.useRealTimers();
     });
 
-    it('should show timeout error after 10s when CAPTCHA is not verified', async () => {
+    async function selectFile() {
       const { default: Home } = await import('../pages/Home.js');
       const { container } = render(
         <MemoryRouter>
@@ -195,14 +204,51 @@ describe('Home', () => {
       await act(async () => {
         fireEvent.change(fileInput, { target: { files: [new File(['x'], 'test.txt')] } });
       });
+    }
+
+    it('should say after 10s that the CAPTCHA is still pending, and keep waiting', async () => {
+      await selectFile();
 
       expect(screen.getByText('Waiting for CAPTCHA...')).toBeInTheDocument();
+      expect(screen.queryByText(/Still waiting for the CAPTCHA/)).not.toBeInTheDocument();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
 
-      expect(screen.getByText(/CAPTCHA verification timed out/)).toBeInTheDocument();
+      expect(screen.getByText(/Still waiting for the CAPTCHA/)).toBeInTheDocument();
+      // Not a failure: nothing tells the visitor to give up, and the form still waits
+      expect(screen.queryByText(/timed out/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Waiting for CAPTCHA/i })).toBeDisabled();
+    });
+
+    it('should drop the hint and allow the upload once the CAPTCHA verifies late', async () => {
+      await selectFile();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(screen.getByText(/Still waiting for the CAPTCHA/)).toBeInTheDocument();
+
+      await act(async () => {
+        turnstile.props?.onVerify('late-token');
+      });
+
+      expect(screen.queryByText(/Still waiting for the CAPTCHA/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Encrypt & Upload' })).toBeEnabled();
+    });
+
+    it('should show an error, and no hint beside it, when the widget reports a failure', async () => {
+      await selectFile();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      await act(async () => {
+        turnstile.props?.onError?.();
+      });
+
+      expect(screen.getByText(/CAPTCHA verification failed/)).toBeInTheDocument();
+      expect(screen.queryByText(/Still waiting for the CAPTCHA/)).not.toBeInTheDocument();
     });
 
     it('should disable upload button while waiting for CAPTCHA', async () => {

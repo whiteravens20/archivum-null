@@ -359,7 +359,7 @@ To enable:
 
 When secrets are default/missing, Turnstile verification is skipped, and the page never contacts Cloudflare. With Turnstile enabled, the visitor's browser requests the Turnstile script only on the upload form, once a file is selected; opening a vault link, the terms or any other page does not.
 
-When Turnstile is enabled, the frontend enforces a **10-second CAPTCHA timeout** — if the widget does not verify within 10 seconds of file selection, the user is shown an error and must reload.
+When Turnstile is enabled, the upload stays blocked until the widget verifies. If it has not done so within 10 seconds of file selection, the page says so and keeps waiting: an interactive challenge can take longer. An error is shown only when the widget itself reports a failure or the challenge expires.
 
 ## Branding
 

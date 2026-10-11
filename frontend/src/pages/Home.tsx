@@ -97,40 +97,25 @@ export default function Home() {
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
-  const captchaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The file whose CAPTCHA has been pending for a while. Kept per file, so the hint
+  // it drives goes away by itself when another file is chosen.
+  const [captchaSlowFor, setCaptchaSlowFor] = useState<File | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Start 10s CAPTCHA timeout when file is selected and Turnstile is enabled
+  // Ten seconds after a file is selected with Turnstile on and no result yet, say so.
+  // A hint, not a failure: a challenge a person has to solve takes longer than that.
   useEffect(() => {
-    if (captchaTimerRef.current) {
-      clearTimeout(captchaTimerRef.current);
-      captchaTimerRef.current = null;
-    }
-
-    if (file && runtimeConfig.turnstileEnabled && !captchaVerified) {
-      captchaTimerRef.current = setTimeout(() => {
-        if (!captchaVerified) {
-          setCaptchaError('CAPTCHA verification timed out — please reload and try again');
-        }
-      }, 10_000);
-    }
-
-    return () => {
-      if (captchaTimerRef.current) {
-        clearTimeout(captchaTimerRef.current);
-        captchaTimerRef.current = null;
-      }
-    };
+    if (!file || !runtimeConfig.turnstileEnabled || captchaVerified) return;
+    const timer = setTimeout(() => setCaptchaSlowFor(file), 10_000);
+    return () => clearTimeout(timer);
   }, [file, runtimeConfig.turnstileEnabled, captchaVerified]);
+
+  const captchaSlow = file !== null && captchaSlowFor === file && !captchaVerified && !captchaError;
 
   const handleCaptchaVerify = useCallback((token: string) => {
     setTurnstileToken(token);
     setCaptchaVerified(true);
     setCaptchaError(null);
-    if (captchaTimerRef.current) {
-      clearTimeout(captchaTimerRef.current);
-      captchaTimerRef.current = null;
-    }
   }, []);
 
   const handleCaptchaError = useCallback(() => {
@@ -317,6 +302,13 @@ export default function Home() {
                   onError={handleCaptchaError}
                   onExpire={handleCaptchaExpire}
                 />
+              )}
+
+              {captchaSlow && (
+                <div className="bg-vault-warning-fill/10 border border-vault-warning-fill/20 rounded-lg p-3 text-sm text-vault-warning-soft">
+                  Still waiting for the CAPTCHA. If a challenge is shown above, complete it.
+                  If nothing appears, reload the page.
+                </div>
               )}
 
               {captchaError && (
