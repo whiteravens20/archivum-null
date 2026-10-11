@@ -33,6 +33,14 @@ const MAX_METADATA_HEADER = 768;
 // Cleanup interval — every 60 seconds, purge expired vaults
 const CLEANUP_INTERVAL = 60_000;
 
+/** A second request for an upload session whose data file is being written to. */
+function sessionBusy(): Error {
+  return Object.assign(
+    new Error('Another request for this upload is still being processed'),
+    { statusCode: 409 }
+  );
+}
+
 export class VaultManager {
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -226,6 +234,15 @@ export class VaultManager {
       throw Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 });
     }
 
+    // One chunk at a time. Whatever its index, a second request for the session is
+    // refused while a write is running: the size bound handed to storage below is only
+    // right when it counts every byte written before it, and two writers appending to
+    // one file would interleave. The flag is set before the first await, so requests
+    // that arrive together cannot both pass.
+    if (session.writing) {
+      throw sessionBusy();
+    }
+
     if (chunkIndex !== session.nextChunkIndex) {
       throw Object.assign(
         new Error(`Expected chunk index ${session.nextChunkIndex}, got ${chunkIndex}`),
@@ -233,26 +250,22 @@ export class VaultManager {
       );
     }
 
-    // Increment BEFORE the async call to prevent concurrent requests with the
-    // same chunkIndex from both passing the guard above.
-    session.nextChunkIndex += 1;
-    const prevReceivedBytes = session.receivedBytes;
-
-    let chunkBytes: number;
+    session.writing = true;
     try {
-      chunkBytes = await storage.appendChunk(
+      const chunkBytes = await storage.appendChunk(
         uploadId,
         stream,
         session.totalSize,
-        prevReceivedBytes
+        session.receivedBytes
       );
-    } catch (err) {
-      // Rollback on failure so the client can retry the same chunk index
-      session.nextChunkIndex -= 1;
-      throw err;
+      // Advance only once the bytes are on disk. A failed chunk leaves the session
+      // where it was, so the client can send the same index again.
+      session.receivedBytes += chunkBytes;
+      session.nextChunkIndex += 1;
+    } finally {
+      session.writing = false;
     }
 
-    session.receivedBytes += chunkBytes;
     return session;
   }
 
@@ -265,6 +278,12 @@ export class VaultManager {
         await storage.deleteChunkedUpload(uploadId).catch(() => {});
       }
       throw Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 });
+    }
+
+    // A chunk still being written is not part of the count yet. Judging the upload
+    // now would call it empty or incomplete, and discard a session that is in use.
+    if (session.writing) {
+      throw sessionBusy();
     }
 
     if (session.receivedBytes === 0) {
@@ -284,7 +303,15 @@ export class VaultManager {
     const vaultId = nanoid(24);
     const now = Date.now();
 
-    await storage.finalizeChunkedUpload(uploadId, vaultId);
+    // Held while the file is moved, so a second complete or a late chunk is refused
+    // instead of racing the rename.
+    session.writing = true;
+    try {
+      await storage.finalizeChunkedUpload(uploadId, vaultId);
+    } catch (err) {
+      session.writing = false;
+      throw err;
+    }
     this.releaseSessionAccounting(session);
     uploadSessions.delete(uploadId);
 
