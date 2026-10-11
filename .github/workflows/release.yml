@@ -216,8 +216,10 @@ jobs:
             docker-compose.yml \
             .dockerignore \
             .env.example \
+            .npmrc \
             backend/package.json \
             backend/package-lock.json \
+            backend/.npmrc \
             backend/tsconfig.json \
             backend/src/ \
             frontend/package.json \
