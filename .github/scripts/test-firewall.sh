@@ -77,6 +77,15 @@ dry_run() {
   has   "the extra destination is allowed"      "$out" "ip daddr 198.51.100.0/24 tcp dport 443 accept"
   lacks "Cloudflare is not, with Turnstile off" "$out" "104.16.0.0/13"
 
+  group "docker, an IPv6 resolver and an IPv6 destination given"
+  out=$(bash "$SCRIPT" --mode docker --backend nftables --turnstile no --dns 2001:db8::53 --allow '[2001:db8:1::/48]:443' --dry-run 2>&1)
+  has   "nftables: the IPv6 resolver is allowed on 53"    "$out" "ip6 daddr { 2001:db8::53 } meta l4proto { tcp, udp } th dport 53 accept"
+  has   "nftables: the IPv6 destination is allowed"       "$out" "ip6 daddr 2001:db8:1::/48 tcp dport 443 accept"
+  out=$(bash "$SCRIPT" --mode docker --backend iptables --turnstile no --dns 2001:db8::53 --allow '[2001:db8:1::/48]:443' --dry-run 2>&1)
+  has   "iptables: the IPv6 destination is allowed"       "$out" "-A ARCHIVUM-EGRESS -d 2001:db8:1::/48 -p tcp --dport 443 -j RETURN"
+  expect "iptables: and only in the IPv6 rules" "1" "$(grep -cF -- "-d 2001:db8:1::/48" <<< "$out")"
+  has   "iptables: the IPv6 resolver is allowed on 53"    "$out" "-A ARCHIVUM-EGRESS -d 2001:db8::53 -p udp --dport 53 -j RETURN"
+
   group "bare-metal, nftables, Turnstile on"
   out=$(bash "$SCRIPT" --mode bare-metal --backend nftables --turnstile yes --tunnel-iface wg0 --app-uid 1001 --dns 127.0.0.53 --dry-run 2>&1)
   has   "entered by packets of the app's user only"   "$out" "meta skuid 1001 jump egress"
@@ -118,6 +127,9 @@ TUNNEL_HOST_IP=10.213.0.2  # where the app is published
 PROXY_IP=10.213.0.1
 LAN_HOST_IP=10.214.0.1
 LAN_IP=10.214.0.2
+LAN_HOST_IP6=fd00:214::1   # the same LAN and the app's network once more, over IPv6
+LAN_IP6=fd00:214::2
+APP_NET6=fd00:215::/64
 APP=an-fwtest-app
 NETWORK=an-fwtest
 TEST_USER=anfwtest
@@ -246,12 +258,16 @@ live() {
   ip addr add "$LAN_HOST_IP/24" dev anfwlan0; ip link set anfwlan0 up
   ip netns exec an-fwtest-proxy sh -c "ip link set lo up; ip addr add $PROXY_IP/24 dev eth0; ip link set eth0 up"
   ip netns exec an-fwtest-lan sh -c "ip link set lo up; ip addr add $LAN_IP/24 dev eth0; ip link set eth0 up; ip route add default via $LAN_HOST_IP"
+  ip -6 addr add "$LAN_HOST_IP6/64" dev anfwlan0 nodad
+  ip netns exec an-fwtest-lan sh -c "ip -6 addr add $LAN_IP6/64 dev eth0 nodad; ip -6 route add default via $LAN_HOST_IP6"
   # A LAN neighbour that sends the published address through this host
   ip netns exec an-fwtest-lan ip route replace "$TUNNEL_HOST_IP/32" via "$LAN_HOST_IP"
   ip netns exec an-fwtest-lan python3 -m http.server 8080 --bind "$LAN_IP" >/dev/null 2>&1 & PIDS+=($!)
+  ip netns exec an-fwtest-lan python3 -m http.server 8080 --bind "$LAN_IP6" >/dev/null 2>&1 & PIDS+=($!)
   python3 -m http.server "$HOST_PORT" --bind 0.0.0.0 >/dev/null 2>&1 & PIDS+=($!)
+  python3 -m http.server "$HOST_PORT" --bind "$LAN_HOST_IP6" >/dev/null 2>&1 & PIDS+=($!)
 
-  docker network create -o com.docker.network.bridge.name=br-archivum "$NETWORK" >/dev/null
+  docker network create --ipv6 --subnet "$APP_NET6" -o com.docker.network.bridge.name=br-archivum "$NETWORK" >/dev/null
   docker run -d --name "$APP" --network "$NETWORK" -p "$TUNNEL_HOST_IP:3000:3000" "$image" \
     node -e 'require("http").createServer((q, s) => s.end("ok")).listen(3000, "0.0.0.0")' >/dev/null
   gateway=$(docker inspect "$APP" --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}')
@@ -263,7 +279,9 @@ live() {
   expect "a LAN neighbour reaches it too, by routing"    "200"  "$(http_from an-fwtest-lan "http://$TUNNEL_HOST_IP:3000/")"
   expect "container reaches the internet"                "open" "$(from_app 1.1.1.1 443)"
   expect "container reaches the LAN neighbour"           "open" "$(from_app "$LAN_IP" 8080)"
+  expect "container reaches the LAN neighbour over IPv6" "open" "$(from_app "$LAN_IP6" 8080)"
   expect "container reaches a service on the host"       "open" "$(from_app "$gateway" "$HOST_PORT")"
+  expect "container reaches the host over IPv6"          "open" "$(from_app "$LAN_HOST_IP6" "$HOST_PORT")"
 
   for backend in iptables nftables; do
     group "docker, $backend, Turnstile off, inbound guard"
@@ -276,6 +294,8 @@ live() {
     expect "container cannot reach the LAN neighbour"    "timeout" "$(from_app "$LAN_IP" 8080)"
     expect "container cannot reach the proxy on its own" "timeout" "$(from_app "$PROXY_IP" 8080)"
     expect "container cannot reach the host"             "timeout" "$(from_app "$gateway" "$HOST_PORT")"
+    expect "container cannot reach the LAN neighbour over IPv6" "timeout" "$(from_app "$LAN_IP6" 8080)"
+    expect "container cannot reach the host over IPv6"   "timeout" "$(from_app "$LAN_HOST_IP6" "$HOST_PORT")"
 
     group "docker, $backend, another program's accept placed ahead of every rule"
     other_program FORWARD INPUT
@@ -353,8 +373,10 @@ live() {
     expect "the app's user cannot reach the internet"    "blocked" "$(as_user 1.1.1.1 443)"
     expect "the app's user reaches Cloudflare on 443"    "open"    "$(as_user "$cloudflare" 443)"
     expect "the app's user cannot reach the LAN"         "blocked" "$(as_user "$LAN_IP" 8080)"
+    expect "the app's user cannot reach the LAN over IPv6" "blocked" "$(as_user "$LAN_IP6" 8080)"
     expect "the app's user cannot reach this host's own services" "blocked" "$(as_user 127.0.0.1 "$HOST_PORT")"
     expect "another user is not affected"                "200"     "$(http_from host "http://$LAN_IP:8080/")"
+    expect "another user is not affected over IPv6"      "200"     "$(http_from host "http://[$LAN_IP6]:8080/")"
     expect "packets the kernel sends itself still pass"  "ok"      "$(ping -c 1 -W 2 "$PROXY_IP" >/dev/null 2>&1 && echo ok || echo lost)"
 
     group "bare-metal, $backend, another program's accept placed ahead of every rule"
@@ -370,6 +392,7 @@ live() {
   bash "$SCRIPT" --remove --yes >/dev/null 2>&1
   expect "no chain, jump or table of the script is left" "0"    "$(leftovers)"
   expect "the app's user reaches the internet again"     "open" "$(as_user 1.1.1.1 443)"
+  expect "and the LAN over IPv6"                         "open" "$(as_user "$LAN_IP6" 8080)"
 
   group "a machine with only one of the two tools"
   without '*tables*' bash "$SCRIPT" --mode bare-metal --backend nftables --turnstile no --app-uid "$TEST_USER" --yes >/dev/null 2>&1
