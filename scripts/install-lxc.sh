@@ -903,7 +903,7 @@ cat << 'POSTINSTALL'
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  nginx:  set  client_max_body_size  > CHUNK_SIZE (e.g. 15m)         │
-│  Caddy:  request_body { max_size 105MB }                            │
+│  Caddy:  request_body { max_size 15MB }                             │
 │  TRUST_PROXY must name the address the proxy connects from          │
 │  (loopback if it runs in here).                                     │
 │                                                                     │

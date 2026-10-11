@@ -297,7 +297,7 @@ The `vault-data` volume is preserved across both modes. Check the release notes 
 | Port 3000 still bound to `0.0.0.0` | `HOST_BIND_ADDRESS` not set in `.env` | Set `HOST_BIND_ADDRESS=<tunnel-ip>` and `docker compose up -d` |
 | Health check failing | `PORT` mismatch between app and health check | Ensure `PORT` in `.env` matches `HEALTHCHECK` in `Dockerfile` (default: `3000`) |
 | Admin panel returns 403 | `ADMIN_PASSWORD` empty or not set | Set `ADMIN_PASSWORD` in `.env` and restart |
-| Uploads fail with 413 | `client_max_body_size` too small on reverse proxy | Set to `105m` (slightly above `MAX_FILE_SIZE`) — see nginx/Caddy config examples |
+| Uploads fail with 413 | The reverse proxy's request size limit is at or below `CHUNK_SIZE` | Set it above `CHUNK_SIZE`: `15m` for the default 10 MB — see the nginx/Caddy config examples |
 | Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` matches the Cloudflare dashboard and both `TURNSTILE_SECRET` and `TURNSTILE_SITE_KEY` are set |
 | Files not persisted after restart | Volume not mounted | Check `vault-data` volume exists: `docker volume ls` |
 | Permission denied writing to `/data/vaults` | Bind mount used instead of named volume, wrong ownership on host | Named volumes handle ownership automatically. If using a bind mount, the host directory must be owned by UID `1001`: `sudo chown 1001:1001 /your/path` |
@@ -327,7 +327,7 @@ Capabilities:
 
 **Does NOT expose:** encryption keys, plaintext, or uploader identity.
 
-Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect behind a tunnel or a reverse proxy with IP allowlisting.
+Set `ADMIN_PASSWORD` in `.env` to enable. For production, additionally protect it behind a tunnel or an IP allowlist at the reverse proxy; the [nginx and Caddy examples](docs/HARDENING.md#reverse-proxy-configuration) carry one for `/admin` and `/api/admin`.
 
 ### Update notifications
 

@@ -149,25 +149,30 @@ server {
 
     # TLS — managed by your reverse proxy / Let's Encrypt / acme.sh / etc.
 
-    # Must exceed CHUNK_SIZE (default 10 MB) so individual chunk requests pass
-    # through. Set slightly above MAX_FILE_SIZE if you also want the single-
-    # request upload path to work for files up to MAX_FILE_SIZE.
-    # With chunked uploads each HTTP request body is bounded by CHUNK_SIZE,
-    # not the total file size — so 15m is enough for the default 10 MB chunks.
-    # Smaller default chunks (10 MB vs 50 MB) work better for homelab/Tailscale/VPS
-    # setups with limited bandwidth and flaky connections.
-    client_max_body_size 105m;
+    # Must exceed CHUNK_SIZE (default 10 MB). No request the app accepts is
+    # larger than one chunk plus its multipart framing, whatever the size of the
+    # file, so 15m covers the default. Raise the two together.
+    client_max_body_size 15m;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Streaming support
+    proxy_request_buffering off;
+    proxy_buffering off;
+
+    # The admin panel and its API: the addresses you administer from, nobody else.
+    # Everyone else gets 403 here, before the app's own login is ever reached.
+    location ~* ^/(admin|api/admin)(/|$) {
+        allow <YOUR_IP>;      # one line per address or range, e.g. 203.0.113.7 or 10.8.0.0/24
+        deny all;
+        proxy_pass http://<TUNNEL_IP>:3000;
+    }
 
     location / {
         proxy_pass http://<TUNNEL_IP>:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Streaming support
-        proxy_request_buffering off;
-        proxy_buffering off;
     }
 }
 ```
@@ -180,13 +185,20 @@ server {
 archivum.yourdomain.com {
     # Caddy handles TLS automatically — no certificate config needed
 
-    # Must exceed CHUNK_SIZE (default 10 MB). With chunked uploads each HTTP
-    # request body is bounded by CHUNK_SIZE, not the total file size — so
-    # 15MB is enough for the default 10 MB chunks. 105MB covers the single-
-    # request upload path up to MAX_FILE_SIZE as well.
-    # Smaller default chunks (10 MB vs 50 MB) work better for homelab/Tailscale/VPS
-    # setups with limited bandwidth.
-    request_body max 105MB
+    # Must exceed CHUNK_SIZE (default 10 MB). No request the app accepts is
+    # larger than one chunk plus its multipart framing, whatever the size of the
+    # file, so 15MB covers the default. Raise the two together.
+    request_body {
+        max_size 15MB
+    }
+
+    # The admin panel and its API: the addresses you administer from, nobody else.
+    # Everyone else gets 403 here, before the app's own login is ever reached.
+    @admin_from_elsewhere {
+        path /admin /admin/* /api/admin /api/admin/*
+        not remote_ip <YOUR_IP>      # several addresses or ranges may follow, separated by spaces
+    }
+    respond @admin_from_elsewhere 403
 
     reverse_proxy <TUNNEL_IP>:3000 {
         header_up Host {host}
@@ -199,6 +211,8 @@ archivum.yourdomain.com {
     }
 }
 ```
+
+The allowlist in both examples matches the address the proxy sees. If another proxy or a CDN sits in front of this one, that is the CDN's address, and the rule has to be written against the client address that layer reports. Without a fixed address to administer from, leave the block out and keep the panel behind a VPN.
 
 ---
 
