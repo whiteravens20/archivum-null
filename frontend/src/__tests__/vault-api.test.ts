@@ -11,6 +11,10 @@ vi.mock('../crypto/encrypt.js', () => ({
   buildMetadataHeader: () => new Uint8Array([0, 4, 116, 101, 115, 116, 0, 0]),
   encryptChunk: async (plaintext: Uint8Array) => plaintext, // passthrough
   calculateTotalEncryptedSize: (size: number) => size,
+  countChunks: (size: number, chunkSize: number) => {
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) throw new Error('Invalid crypto chunk size');
+    return Math.max(1, Math.ceil(size / chunkSize));
+  },
   PER_CHUNK_OVERHEAD: 28,
 }));
 
@@ -242,6 +246,25 @@ describe('vault API client', () => {
 
       await expect(promise).rejects.toThrow('Upload cancelled');
       expect(inst.abort).toHaveBeenCalled();
+    });
+
+    it('should send nothing when the crypto chunk size is unusable', async () => {
+      const XhrCtor = createMockXhr();
+      vi.stubGlobal('XMLHttpRequest', XhrCtor);
+      globalThis.fetch = vi.fn();
+
+      const { uploadVault, uploadVaultChunked } = await import('../api/vault.js');
+      const file = new File(['data'], 'test.txt', { type: 'text/plain' });
+      const mockKey = {} as CryptoKey;
+      // What a value missing from the runtime configuration turns into
+      const missing = undefined as unknown as number;
+
+      await expect(uploadVault(file, mockKey, missing, 3600, 5)).rejects.toThrow('Invalid crypto chunk size');
+      await expect(uploadVaultChunked(file, mockKey, missing, 3600, 5)).rejects.toThrow('Invalid crypto chunk size');
+
+      // No request with an empty body, and no upload session opened
+      expect(XhrCtor._instance).toBeUndefined();
+      expect(fetch).not.toHaveBeenCalled();
     });
   });
 });

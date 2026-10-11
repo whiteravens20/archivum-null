@@ -15,6 +15,7 @@ import {
   buildMetadataHeader,
   parseMetadataHeader,
   calculateTotalEncryptedSize,
+  countChunks,
   formatBytes,
   sanitizeFilename,
   IV_LENGTH,
@@ -269,6 +270,27 @@ describe('crypto/encrypt', () => {
       // Correct order works
       await expect(decryptChunk(chunk0, key, 0, false)).resolves.toEqual(new Uint8Array([1, 2, 3]));
       await expect(decryptChunk(chunk1, key, 1, true)).resolves.toEqual(new Uint8Array([4, 5, 6]));
+    });
+  });
+
+  describe('countChunks', () => {
+    it('should count at least one chunk and round up', () => {
+      expect(countChunks(0, 100)).toBe(1);
+      expect(countChunks(100, 100)).toBe(1);
+      expect(countChunks(101, 100)).toBe(2);
+    });
+
+    it('should refuse a chunk size that is not a positive integer', () => {
+      for (const bad of [0, -1, 1.5, NaN, Infinity, undefined as unknown as number]) {
+        expect(() => countChunks(100, bad)).toThrow('Invalid crypto chunk size');
+        expect(() => calculateTotalEncryptedSize(100, bad)).toThrow('Invalid crypto chunk size');
+      }
+    });
+
+    it('should refuse a plaintext size that is not a whole number of bytes', () => {
+      for (const bad of [-1, 1.5, NaN, undefined as unknown as number]) {
+        expect(() => countChunks(bad, 100)).toThrow('Invalid plaintext size');
+      }
     });
   });
 

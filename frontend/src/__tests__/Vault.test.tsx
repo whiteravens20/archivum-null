@@ -114,6 +114,59 @@ describe('Vault page', () => {
     expect(screen.queryByText('Archivum Null')).not.toBeInTheDocument();
   });
 
+  describe('downloads that cannot be a file', () => {
+    const fakeKey = 'A'.repeat(43);
+
+    beforeEach(() => {
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:test');
+      globalThis.URL.revokeObjectURL = vi.fn();
+      mockImportKey.mockResolvedValue('fake-key');
+    });
+
+    async function openVault(info: Record<string, unknown>) {
+      mockGetVaultInfo.mockResolvedValue({
+        vaultId: 'abc',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 3600_000,
+        remainingDownloads: 3,
+        ...info,
+      });
+      renderVault('abc', `#${fakeKey}`);
+      await waitFor(() => {
+        expect(screen.getByText('Decrypt & Download')).toBeInTheDocument();
+      });
+    }
+
+    it('should report an empty download as an error, not as a file', async () => {
+      await openVault({ ciphertextSize: 0, chunkPlaintextSize: 100 });
+      mockDownloadVault.mockResolvedValue(new Blob([]));
+
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Vault unavailable')).toBeInTheDocument();
+      });
+      expect(screen.getByText(/empty or has been tampered with/)).toBeInTheDocument();
+      expect(screen.queryByText(/decrypted and downloaded successfully/)).not.toBeInTheDocument();
+      expect(mockDecryptChunk).not.toHaveBeenCalled();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('should refuse to decrypt without a usable chunk size from the server', async () => {
+      await openVault({ ciphertextSize: 128, chunkPlaintextSize: undefined });
+      mockDownloadVault.mockResolvedValue(new Blob([new Uint8Array(128)]));
+
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Vault unavailable')).toBeInTheDocument();
+      });
+      expect(screen.getByText(/metadata is corrupted/)).toBeInTheDocument();
+      expect(mockDecryptChunk).not.toHaveBeenCalled();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+  });
+
   describe('filename mismatch warning', () => {
     const fakeKey = 'A'.repeat(43);
 

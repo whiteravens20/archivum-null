@@ -192,6 +192,23 @@ export async function decryptChunk(
 }
 
 /**
+ * How many crypto chunks a plaintext of this size is split into: at least one.
+ *
+ * Throws when either number is unusable. A chunk size that is not a positive integer
+ * turns the count into NaN, and a loop over NaN chunks encrypts nothing: the upload
+ * would go out empty and still be reported as a vault.
+ */
+export function countChunks(plaintextSize: number, chunkPlaintextSize: number): number {
+  if (!Number.isSafeInteger(plaintextSize) || plaintextSize < 0) {
+    throw new Error('Invalid plaintext size');
+  }
+  if (!Number.isSafeInteger(chunkPlaintextSize) || chunkPlaintextSize <= 0) {
+    throw new Error('Invalid crypto chunk size');
+  }
+  return Math.max(1, Math.ceil(plaintextSize / chunkPlaintextSize));
+}
+
+/**
  * Calculate the total encrypted size for a file with metadata header.
  * Useful to determine totalSize before starting upload.
  */
@@ -199,8 +216,7 @@ export function calculateTotalEncryptedSize(
   plaintextSize: number,
   chunkPlaintextSize: number
 ): number {
-  const numChunks = Math.max(1, Math.ceil(plaintextSize / chunkPlaintextSize));
-  return plaintextSize + numChunks * PER_CHUNK_OVERHEAD;
+  return plaintextSize + countChunks(plaintextSize, chunkPlaintextSize) * PER_CHUNK_OVERHEAD;
 }
 
 /**

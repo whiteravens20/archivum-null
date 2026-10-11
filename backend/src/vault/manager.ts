@@ -31,6 +31,11 @@ const sessionSecret = randomBytes(32);
 // 2 (nameLen) + 510 (MAX_NAME_BYTES) + 2 (mimeLen) + 254 (MAX_MIME_BYTES)
 const MAX_METADATA_HEADER = 768;
 
+// The smallest ciphertext a real upload produces: one chunk's IV and tag around the
+// 4 bytes of an empty metadata header (12 + 16 + 4). Anything shorter cannot be
+// decrypted into a file, and zero bytes would even pass for one in the client.
+const MIN_CIPHERTEXT_SIZE = 32;
+
 // Cleanup interval — every 60 seconds, purge expired vaults
 const CLEANUP_INTERVAL = 60_000;
 
@@ -174,6 +179,14 @@ export class VaultManager {
         throw err;
       }
 
+      if (size < MIN_CIPHERTEXT_SIZE) {
+        await storage.deleteVault(vaultId).catch(() => {});
+        throw Object.assign(
+          new Error('Upload is too small to be an encrypted file'),
+          { statusCode: 400 }
+        );
+      }
+
       // What was stored takes the place of what was declared: the declared length
       // includes the request's framing, and some requests declare none. Held until the
       // vault is in the map, so two uploads finishing together cannot both fit.
@@ -211,7 +224,7 @@ export class VaultManager {
   initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE, clientIp?: string): ChunkedUploadSession {
     const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
     const maxAllowed = plaintextMax + calcEncryptionOverhead(plaintextMax);
-    if (!Number.isSafeInteger(totalSize) || totalSize <= 0 || totalSize > maxAllowed) {
+    if (!Number.isSafeInteger(totalSize) || totalSize < MIN_CIPHERTEXT_SIZE || totalSize > maxAllowed) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
 

@@ -87,6 +87,9 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       if (error.statusCode === 413) {
         return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
       }
+      if (error.statusCode === 400) {
+        return reply.status(400).send({ error: error.message });
+      }
       if (error.statusCode === 507) {
         return reply.status(507).send({
           error: 'Storage quota exceeded. Please try again later or contact the administrator.',

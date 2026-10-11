@@ -38,6 +38,33 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   turnstileEnabled: false,
 };
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * The runtime configuration, when the response really is one. Anything else gives
+ * null, and the built-in defaults stay in force.
+ */
+function parseRuntimeConfig(raw: unknown): RuntimeConfig | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  // Narrowed field by field below: the body is whatever the server sent.
+  const candidate = raw as Record<string, unknown>;
+  const { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled } = candidate;
+  if (
+    !isPositiveInteger(maxFileSize) ||
+    !isPositiveInteger(chunkSize) ||
+    !isPositiveInteger(cryptoChunkSize) ||
+    !isPositiveInteger(defaultTtl) ||
+    !isPositiveInteger(defaultMaxDownloads) ||
+    typeof turnstileSiteKey !== 'string' ||
+    typeof turnstileEnabled !== 'boolean'
+  ) {
+    return null;
+  }
+  return { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled };
+}
+
 type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
 export default function Home() {
@@ -50,8 +77,12 @@ export default function Home() {
 
   useEffect(() => {
     fetch('/api/config')
-      .then((r) => r.json())
-      .then((cfg: RuntimeConfig) => {
+      // An error response carries JSON too ({ error, retryAfter }). Taken for the
+      // configuration, it would leave every limit undefined.
+      .then((r): Promise<unknown> => (r.ok ? r.json() : Promise.resolve(null)))
+      .then((raw) => {
+        const cfg = parseRuntimeConfig(raw);
+        if (!cfg) return; // keep the defaults
         setRuntimeConfig(cfg);
         setTtl(nearestInList(cfg.defaultTtl, TTL_OPTION_VALUES));
         setMaxDownloads(nearestInList(cfg.defaultMaxDownloads, DOWNLOAD_OPTION_VALUES));

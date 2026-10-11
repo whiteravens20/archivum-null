@@ -34,6 +34,7 @@ describe('Home', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve(mockConfig),
     }));
   });
@@ -117,12 +118,59 @@ describe('Home', () => {
     expect(screen.getByText(/AES-256-GCM/)).toBeInTheDocument();
   });
 
+  describe('runtime configuration', () => {
+    async function renderWithConfigResponse(response: unknown) {
+      const fetchMock = vi.fn().mockResolvedValue(response);
+      vi.stubGlobal('fetch', fetchMock);
+      const { default: Home } = await import('../pages/Home.js');
+      const view = render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>
+      );
+      // Let the response be read and applied, or ignored
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(fetchMock).toHaveBeenCalledWith('/api/config');
+      return view;
+    }
+
+    it('should apply the limits the server reports', async () => {
+      await renderWithConfigResponse({
+        ok: true,
+        json: () => Promise.resolve({ ...mockConfig, maxFileSize: 20 * 1024 * 1024 }),
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/Max size: 20 MB/)).toBeInTheDocument();
+      });
+    });
+
+    it('should keep the built-in limits when the server answers with an error', async () => {
+      // What the rate limiter sends: valid JSON, but not a configuration
+      await renderWithConfigResponse({
+        ok: false,
+        status: 429,
+        json: () => Promise.resolve({ error: 'Too many requests. Try again later.', retryAfter: 30 }),
+      });
+      expect(screen.getByText(/Max size: 100 MB/)).toBeInTheDocument();
+      expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
+    });
+
+    it('should keep the built-in limits when the body is not a configuration', async () => {
+      await renderWithConfigResponse({
+        ok: true,
+        json: () => Promise.resolve({ ...mockConfig, cryptoChunkSize: 'big' }),
+      });
+      expect(screen.getByText(/Max size: 100 MB/)).toBeInTheDocument();
+    });
+  });
+
   describe('CAPTCHA timeout', () => {
     const enabledConfig = { ...mockConfig, turnstileEnabled: true, turnstileSiteKey: '0xABC123' };
 
     beforeEach(() => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
         json: () => Promise.resolve(enabledConfig),
       }));
     });

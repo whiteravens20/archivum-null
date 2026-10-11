@@ -69,8 +69,17 @@ export default function Vault() {
       // chunk at a time instead of the whole file — the accumulating Blob parts are
       // managed by the browser (and may be spilled to disk).
       const chunkPT = info.chunkPlaintextSize;
+      // Both numbers come from the server. With an unusable chunk size, or with no
+      // bytes at all, the loop below would not run once, nothing would be
+      // authenticated, and an empty file would pass for a successful download.
+      if (!Number.isSafeInteger(chunkPT) || chunkPT <= 0) {
+        throw new Error('The vault metadata is corrupted');
+      }
       const chunkCT = chunkPT + PER_CHUNK_OVERHEAD;
       const numChunks = Math.ceil(encryptedBlob.size / chunkCT);
+      if (numChunks < 1) {
+        throw new Error('The vault is empty or has been tampered with');
+      }
       const contentParts: BlobPart[] = [];
       let filename = 'file';
       let mimeType = 'application/octet-stream';

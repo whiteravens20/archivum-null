@@ -2,6 +2,7 @@ import {
   encryptChunk,
   buildMetadataHeader,
   calculateTotalEncryptedSize,
+  countChunks,
   PER_CHUNK_OVERHEAD,
 } from '../crypto/encrypt.ts';
 
@@ -78,7 +79,7 @@ export async function uploadVault(
 ): Promise<VaultCreateResponse> {
   const header = buildMetadataHeader(file.name, file.type);
   const totalPlaintext = header.length + file.size;
-  const numCryptoChunks = Math.max(1, Math.ceil(totalPlaintext / chunkPlaintextSize));
+  const numCryptoChunks = countChunks(totalPlaintext, chunkPlaintextSize);
 
   // Encrypt all crypto chunks. Each ciphertext chunk is wrapped in a Blob right
   // away so the JS heap holds one chunk at a time rather than the whole encrypted
@@ -192,7 +193,7 @@ export async function uploadVaultChunked(
   const header = buildMetadataHeader(file.name, file.type);
   const totalPlaintext = header.length + file.size;
   const totalEncrypted = calculateTotalEncryptedSize(totalPlaintext, chunkPlaintextSize);
-  const numCryptoChunks = Math.max(1, Math.ceil(totalPlaintext / chunkPlaintextSize));
+  const numCryptoChunks = countChunks(totalPlaintext, chunkPlaintextSize);
 
   // 1. Init session
   const initHeaders: Record<string, string> = { 'Content-Type': 'application/json' };

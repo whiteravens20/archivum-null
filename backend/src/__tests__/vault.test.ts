@@ -174,6 +174,22 @@ describe('Vault routes', () => {
     expect(res.json()).toHaveProperty('error');
   });
 
+  it('POST /api/vault returns 400 with the reason when createVault refuses the upload', async () => {
+    mockManager.createVault.mockRejectedValueOnce(
+      Object.assign(new Error('Upload is too small to be an encrypted file'), { statusCode: 400 })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: buildMultipart(boundary, {}, { name: 'empty.bin', content: Buffer.alloc(0) }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Upload is too small to be an encrypted file');
+  });
+
   it('POST /api/vault returns 507 when createVault throws statusCode 507', async () => {
     mockManager.createVault.mockRejectedValueOnce(
       Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 })

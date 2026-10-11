@@ -52,7 +52,7 @@ describe('VaultManager — download counter atomicity', () => {
   // ------------------------------------------------------------------
 
   it('allows exactly maxDownloads=1 concurrent download (single winner)', async () => {
-    const vault = await manager.createVault(makeStream('secret-payload'), 3600, 1);
+    const vault = await manager.createVault(makeStream('secret-payload-'.repeat(4)), 3600, 1);
 
     // Fire 5 concurrent download requests — Node's event loop is cooperative
     // so only the first synchronously-checked getVault() wins.
@@ -71,7 +71,7 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('allows exactly N successful downloads for maxDownloads=N', async () => {
     const N = 3;
-    const vault = await manager.createVault(makeStream('payload'), 3600, N);
+    const vault = await manager.createVault(makeStream('payload-'.repeat(8)), 3600, N);
 
     const results = await Promise.all(
       Array.from({ length: N + 2 }, () => manager.consumeDownload(vault.vaultId))
@@ -91,7 +91,7 @@ describe('VaultManager — download counter atomicity', () => {
   });
 
   it('returns null after vault is explicitly deleted', async () => {
-    const vault = await manager.createVault(makeStream('data'), 3600, 5);
+    const vault = await manager.createVault(makeStream('data-'.repeat(8)), 3600, 5);
     await manager.deleteVault(vault.vaultId);
     const result = await manager.consumeDownload(vault.vaultId);
     expect(result).toBeNull();
@@ -104,7 +104,7 @@ describe('VaultManager — download counter atomicity', () => {
   // ------------------------------------------------------------------
 
   it('deletes vault and returns null when underlying file is missing', async () => {
-    const vault = await manager.createVault(makeStream('data'), 3600, 5);
+    const vault = await manager.createVault(makeStream('data-'.repeat(8)), 3600, 5);
 
     // Simulate storage corruption by removing the data file directly
     const dataFile = path.join(tempDir, vault.vaultId, 'data.enc');
@@ -147,8 +147,8 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('rejects vault creation when global storage quota is exceeded', async () => {
     vi.resetModules();
-    // Set a tiny quota (30 bytes) so a second upload is rejected
-    vi.stubEnv('MAX_TOTAL_STORAGE', '30');
+    // Set a tiny quota (60 bytes) so a second upload is rejected
+    vi.stubEnv('MAX_TOTAL_STORAGE', '60');
     vi.stubEnv('STORAGE_PATH', tempDir);
     vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
     vi.stubEnv('MAX_TTL', '604800');
@@ -156,13 +156,13 @@ describe('VaultManager — download counter atomicity', () => {
     const quotaManager = new mod.VaultManager();
     await quotaManager.init();
 
-    // First upload: 20 bytes, within the 30-byte quota
-    const first = await quotaManager.createVault(makeStream('a'.repeat(20)), 3600, 5);
+    // First upload: 40 bytes, within the 60-byte quota
+    const first = await quotaManager.createVault(makeStream('a'.repeat(40)), 3600, 5);
 
-    // Second upload: 20 more would make 40. Nothing announced its size, so it is
+    // Second upload: 40 more would make 80. Nothing announced its size, so it is
     // refused once it has been written, and nothing of it is left on disk.
     await expect(
-      quotaManager.createVault(makeStream('b'.repeat(20)), 3600, 5)
+      quotaManager.createVault(makeStream('b'.repeat(40)), 3600, 5)
     ).rejects.toMatchObject({ statusCode: 507, message: expect.stringMatching(/Storage quota exceeded/) });
     expect(await fsp.readdir(tempDir)).toEqual([first.vaultId]);
 
@@ -202,7 +202,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // An upload that declared 80 bytes and has not finished...
     const slow = new Readable({ read() {} });
-    slow.push(Buffer.alloc(10, 'a'));
+    slow.push(Buffer.alloc(40, 'a'));
     const writing = quotaManager.createVault(slow, 3600, 5, undefined, 80);
 
     // ...leaves room for 20. One that declares 80 as well does not fit beside it.
@@ -214,12 +214,12 @@ describe('VaultManager — download counter atomicity', () => {
 
     slow.push(null);
     const stored = await writing;
-    expect(stored.ciphertextSize).toBe(10);
+    expect(stored.ciphertextSize).toBe(40);
 
-    // Once it is stored, only its real 10 bytes count
+    // Once it is stored, only its real 40 bytes count
     await expect(
-      quotaManager.createVault(makeStream('c'.repeat(80)), 3600, 5, undefined, 80)
-    ).resolves.toMatchObject({ ciphertextSize: 80 });
+      quotaManager.createVault(makeStream('c'.repeat(60)), 3600, 5, undefined, 60)
+    ).resolves.toMatchObject({ ciphertextSize: 60 });
 
     await quotaManager.shutdown();
   });
@@ -265,6 +265,26 @@ describe('VaultManager — download counter atomicity', () => {
     expect(await fsp.readdir(tempDir)).toHaveLength(1);
 
     await quotaManager.shutdown();
+  });
+
+  it('refuses an upload too small to be an encrypted file and keeps nothing of it', async () => {
+    // 31 bytes: one short of an IV, a tag and an empty metadata header
+    await expect(
+      manager.createVault(makeStream('x'.repeat(31)), 3600, 5)
+    ).rejects.toMatchObject({ statusCode: 400 });
+    await expect(
+      manager.createVault(makeStream(''), 3600, 5)
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(await fsp.readdir(tempDir)).toEqual([]);
+
+    await expect(
+      manager.createVault(makeStream('x'.repeat(32)), 3600, 5)
+    ).resolves.toMatchObject({ ciphertextSize: 32 });
+  });
+
+  it('refuses a chunked upload that declares less than an encrypted file needs', () => {
+    expect(() => manager.initChunkedUpload(31, 3600, 5)).toThrow(/Invalid total size/);
+    expect(() => manager.initChunkedUpload(32, 3600, 5)).not.toThrow();
   });
 
   it('allows uploads when MAX_TOTAL_STORAGE is 0 (unlimited)', async () => {
