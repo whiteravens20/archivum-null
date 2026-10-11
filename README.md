@@ -233,21 +233,23 @@ bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/s
 
 ### Deployment Validation
 
-After bringing up the production container on the homelab host, run the included validation script:
+After bringing up the production container on the homelab host and applying the firewall rules, run the included validation script:
 
 ```bash
-./scripts/check-deployment.sh --tunnel-iface wg0
+sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 ```
 
 It checks:
 - Container is running and healthy
-- Port 3000 is **not** bound to `0.0.0.0`
-- Container is running as non-root
-- `cap_drop: ALL` and `no-new-privileges` are active
+- Port 3000 is **not** bound to every interface, IPv6 included
+- Container is running as non-root and is not privileged
+- All capabilities are dropped, `no-new-privileges` is active, the seccomp and AppArmor profiles are on
 - Root filesystem is read-only
+- No host namespace is shared, and process and memory limits are set
 - Tunnel interface is up and its IP matches `HOST_BIND_ADDRESS`
-- Firewall rules exist for the app port
-- Port 3000 is **not** reachable via the LAN interface
+- The egress rules are loaded and the inbound guard is in place
+- The container **cannot** open a connection to the internet or to the host: it is made to try
+- Port 3000 is **not** published on the LAN address
 - `docker.sock` is not mounted inside the container
 
 ## Docker Images
