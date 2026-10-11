@@ -166,10 +166,11 @@ docker compose pull && docker compose up -d
 
 **7. Configure the reverse proxy** on the VPS — copy the config for your proxy from [Reverse Proxy Configuration](docs/HARDENING.md#reverse-proxy-configuration). Replace `<TUNNEL_IP>` with your homelab tunnel IP. Then set `TRUST_PROXY` in `.env` to the address the proxy connects from, as the security note under that config describes, and run `docker compose up -d` again. Until it is set, the app ignores the proxy's `X-Forwarded-For` and all visitors share one rate-limit bucket.
 
-**8. Validate the deployment posture** on the homelab host.
+**8. Contain the app, then validate the deployment posture**, both on the homelab host. The first command stops the container from opening connections of its own and lets only the tunnel interface reach it; `--turnstile yes` if you set the Turnstile keys. The second checks the result. See [Egress Containment](docs/HARDENING.md#egress-containment) for what the rules do.
 
 ```bash
-./scripts/check-deployment.sh --tunnel-iface wg0
+sudo bash scripts/setup-firewall.sh --mode docker --turnstile no --tunnel-iface wg0 --persist
+sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 ```
 
 All checks should pass before exposing the service publicly.
@@ -206,7 +207,7 @@ Visitors connect to a small VPS, which holds the public IP, terminates TLS and r
 
 For the full hardening guide — inbound firewall rules, reverse proxy config (nginx/Caddy), VPS lockdown, WireGuard scope, and egress containment — see **[docs/HARDENING.md](docs/HARDENING.md)**.
 
-To apply firewall rules without copying commands manually:
+To apply the firewall rules, interactively:
 
 ```bash
 sudo bash scripts/setup-firewall.sh
@@ -419,7 +420,7 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 | Filename spoofing / path traversal | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link |
 | Large file DoS | Streaming size enforcement — no full file held in memory |
 | Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
-| Compromised container initiating outbound LAN/WAN connections | Docker `internal` network or host FORWARD egress rules block container-to-LAN and container-to-internet traffic; see [Egress Containment](docs/HARDENING.md#egress-containment) |
+| Compromised container initiating outbound LAN/WAN connections | Host firewall rules drop every connection the container opens, to the LAN, to the Docker host and to the internet; `scripts/setup-firewall.sh` applies them, see [Egress Containment](docs/HARDENING.md#egress-containment) |
 
 ### Threat Model Limitations
 
@@ -457,8 +458,8 @@ Before exposing this service publicly:
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
 - [ ] Set `MAX_TOTAL_STORAGE` to what the disk under the vaults can spare — without it, uploads are limited only by that disk
-- [ ] Apply egress containment rules — Option A (`internal: true`) if Turnstile is off, Option B (FORWARD rules) if Turnstile is on (see [Egress Containment](docs/HARDENING.md#egress-containment))
-- [ ] Run `./scripts/check-deployment.sh` and confirm all checks pass
+- [ ] Apply the egress containment rules with `scripts/setup-firewall.sh`, with `--turnstile yes` only if Turnstile is on (see [Egress Containment](docs/HARDENING.md#egress-containment))
+- [ ] Run `sudo ./scripts/check-deployment.sh` and confirm all checks pass
 - [ ] Review the [Threat Model Limitations](#threat-model-limitations) and confirm they are acceptable for your use case
 
 ## Contributing

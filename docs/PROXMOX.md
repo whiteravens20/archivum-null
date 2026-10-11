@@ -11,7 +11,6 @@ Running Archivum Null as a Proxmox LXC container is a lightweight alternative to
 - [systemd Service](#systemd-service)
 - [Updating](#updating)
 - [Egress Containment — Proxmox Firewall](#egress-containment--proxmox-firewall)
-- [Egress Containment — Host veth Rules](#egress-containment--host-veth-rules)
 - [Proxmox SDN / VLAN Isolation](#proxmox-sdn--vlan-isolation)
 
 ---
@@ -184,15 +183,6 @@ systemctl status archivum-null
 
 ## Egress Containment — Proxmox Firewall
 
-> **Quick setup:** use the included script to apply host-level veth FORWARD rules automatically:
->
-> ```bash
-> # Run on the Proxmox host
-> sudo bash ../scripts/setup-firewall.sh --mode proxmox-veth --veth veth<vmid>i0
-> ```
->
-> Or interactively: `sudo bash ../scripts/setup-firewall.sh` and choose `proxmox-veth` mode.
-
 Proxmox has a built-in firewall controllable from the GUI (**Datacenter → `<node>` → CT `<vmid>` → Firewall**) or by editing the container's firewall config file directly on the host.
 
 **Step 1 — enable the firewall and set `policy_out` to DROP:**
@@ -228,40 +218,7 @@ Changes take effect immediately (no reload required). Verify in the Proxmox GUI 
 
 ---
 
-## Egress Containment — Host veth Rules
-
-Proxmox assigns each container a `veth` pair on the host. For defence in depth, you can add host FORWARD rules on top of the Proxmox Firewall.
-
-Find the interface:
-
-```bash
-# The interface name printed next to the container's MAC address
-grep "net0" /etc/pve/lxc/<vmid>.conf
-# typically becomes veth<vmid>i0 on the host
-ip link show | grep veth
-```
-
-Apply iptables FORWARD rules on the Proxmox host:
-
-```bash
-VETH=veth<vmid>i0    # e.g. veth200i0
-
-iptables -I FORWARD -i $VETH -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -I FORWARD -i $VETH -d 10.0.0.0/8     -j DROP
-iptables -I FORWARD -i $VETH -d 172.16.0.0/12  -j DROP
-iptables -I FORWARD -i $VETH -d 192.168.0.0/16 -j DROP
-iptables -I FORWARD -i $VETH -d 169.254.0.0/16 -j DROP
-# If Turnstile enabled:
-iptables -I FORWARD -i $VETH -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
-iptables -I FORWARD -i $VETH -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
-iptables -A FORWARD -i $VETH -j DROP
-```
-
-Persist with:
-
-```bash
-apt install iptables-persistent && netfilter-persistent save
-```
+> **Do not add iptables rules for the container's `veth` to the host's `FORWARD` chain.** An earlier version of this guide did. A guest's traffic is bridged, and the host's iptables either does not see it at all or sees it as coming from the bridge, never from `veth<vmid>i0`, so such rules match nothing. The Proxmox firewall above is what filters a guest.
 
 ---
 
@@ -269,4 +226,4 @@ apt install iptables-persistent && netfilter-persistent save
 
 The strongest network isolation is to place the container on a dedicated SDN VNET with no default route to the LAN. Create a **Zone** (Simple or VLAN) and a **VNet** in **Datacenter → SDN**, then assign the container to it via `--net0 bridge=<vnet-name>`. Without a gateway configured on the VNET, the container has no route to reach LAN or WAN at all — outbound connections fail at the routing layer rather than at the firewall layer.
 
-This is equivalent to Docker's `internal: true` but enforced at the hypervisor level. Combine with the Proxmox Firewall rules above for defence in depth.
+Combine with the Proxmox Firewall rules above for defence in depth.

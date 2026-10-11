@@ -42,11 +42,11 @@ To apply firewall rules automatically, use [scripts/setup-firewall.sh](../script
     - [Self-hosted coordination — Headscale](#self-hosted-coordination--headscale)
     - [Privacy considerations](#privacy-considerations-1)
   - [Egress Containment](#egress-containment)
-    - [Option A — Docker `internal` network](#option-a--docker-internal-network)
-    - [Option B — Host FORWARD rules (Docker with Turnstile)](#option-b--host-forward-rules-docker-with-turnstile)
-    - [Option C — Bare-metal / systemd UID rules](#option-c--bare-metal--systemd-uid-rules)
-    - [Summary — which option to apply](#summary--which-option-to-apply)
+    - [Docker](#docker)
+    - [Bare-metal / systemd](#bare-metal--systemd)
+    - [Summary — what to apply](#summary--what-to-apply)
   - [Quick Setup with setup-firewall.sh](#quick-setup-with-setup-firewallsh)
+    - [Coming from an earlier version of the script](#coming-from-an-earlier-version-of-the-script)
 
 ---
 
@@ -58,9 +58,9 @@ Before applying any rules, understand the threat model this guide addresses and 
 
 | Threat | Mitigation |
 |---|---|
-| Port 3000 reachable from the public internet or LAN | Inbound INPUT rules + `HOST_BIND_ADDRESS` in `.env` bind the port exclusively to the tunnel IP |
-| Attacker uses a compromised container to pivot to other LAN hosts | Egress FORWARD / OUTPUT rules block container-to-RFC-1918 traffic |
-| Attacker uses a compromised container to beacon to internet C2 | Egress rules drop all outbound except optionally Cloudflare (Turnstile) endpoints |
+| Port 3000 reachable from the public internet or LAN | `HOST_BIND_ADDRESS` in `.env` publishes the port on the tunnel address only, and the inbound guard drops connections that did not arrive on the tunnel interface |
+| Attacker uses a compromised container to pivot to other LAN hosts | Egress rules drop every connection the app opens, to the LAN and to the Docker host itself |
+| Attacker uses a compromised container to beacon to internet C2 | Egress rules drop all outbound except, when Turnstile is on, Cloudflare's challenge endpoints |
 | VPS reverse proxy exposes the backend port publicly | VPS firewall drops port 3000; only 80/443 are open |
 | WireGuard misconfiguration routes all homelab traffic through the tunnel | `AllowedIPs = <homelab-ip>/32` scopes the tunnel to the homelab endpoint only |
 | TLS termination breaks WebCrypto on the client | Reverse proxy enforces HTTPS; HSTS header is set by the backend |
@@ -70,27 +70,34 @@ Before applying any rules, understand the threat model this guide addresses and 
 | Limitation | Why |
 |---|---|
 | A root-level compromise of the Proxmox / hypervisor host | Host compromise is above the firewall layer — keep the host OS patched and SSH restricted |
-| IPv6 lateral movement | All examples use IPv4 rules only. If the container or VM has an IPv6 address, duplicate the rules with `ip6tables` / `nft` `ip6` family |
+| A channel through a destination you allowed | With Turnstile on, the app may reach Cloudflare's address ranges on port 443. Those ranges serve a great many other sites, so egress is narrowed, not closed. The same holds for anything you add with `--allow` |
+| Data leaving in DNS queries from a container | Docker's built-in resolver answers the container from the daemon's side, where no rule on the container's traffic applies. See [Docker](#docker) for how to leave the container without a resolver |
+| IPv6, if you write the rules by hand | `setup-firewall.sh` drops whatever the app opens over IPv6. The hand-written examples in this guide are IPv4 only: add the `ip6tables` counterparts, or use the nftables form, which covers both |
 | Rule loss after reboot (without persistence) | iptables rules are in-memory by default — see [persistence notes](#persistence) |
 | Docker daemon itself as an attack surface | Do not expose `/var/run/docker.sock` inside containers; the production Compose file already enforces this |
 | `conntrack` table exhaustion DoS | Rate limiting in the app and at the reverse proxy layer mitigate this; kernel `nf_conntrack_max` tuning is outside the scope of this guide |
 | Cloudflare Tunnel / Tailscale coordination metadata | Both services collect metadata (see their dedicated sections) — they are not zero-knowledge transports |
 
-### Rule ordering is critical
+### Rule ordering is critical, and so is the chain
 
 Both iptables and nftables evaluate rules **top-to-bottom and stop at the first match**.
 
-- Always put **ACCEPT** rules before **DROP** rules for the same interface.
-- Tunnel interfaces (WireGuard, OpenVPN) often use private-range IPs (e.g. `10.8.0.x`). If you DROP `10.0.0.0/8` before the ACCEPT rule for the tunnel, tunnel traffic is silently blocked.
-- The `scripts/setup-firewall.sh` script inserts rules in the correct order automatically.
+- Replies come first. A rule that accepts established connections has to precede every drop, or the app stops answering the very proxy it serves: the reply to a proxy on `10.8.0.1` is a packet to a private address.
+- **With Docker, where a rule sits matters as much as its order.** Docker's own rules accept everything a container sends, and they are reached from `FORWARD` before anything you append to that chain. A drop appended to `FORWARD` is never evaluated. The one chain Docker evaluates before its own rules is `DOCKER-USER`.
+- Traffic to a published port is forwarded, not delivered to the host. Rules in `INPUT` do not see it.
+- A container that connects to the Docker host itself is not forwarded. That traffic passes `INPUT`, not `DOCKER-USER`.
+- Do not put an `ACCEPT` into `DOCKER-USER`. It ends the evaluation for the packets it matches, Docker's own filtering included. An accept for a tunnel interface there makes the host forward that interface's packets to every network it has a route to.
+- nftables rules in a table of their own are evaluated beside Docker's rules, whatever their order: a packet has to pass every table.
+
+`scripts/setup-firewall.sh` takes care of all of the above.
 
 ### Persistence
 
 Rules applied with `iptables` or `nft` commands are **in-memory only** and lost on reboot.
 
-- **iptables:** `apt install iptables-persistent && netfilter-persistent save`
-- **nftables:** `nft list ruleset > /etc/nftables.conf && systemctl enable --now nftables`
-- **setup-firewall.sh:** pass `--persist` flag or answer `y` when prompted.
+- **setup-firewall.sh:** pass `--persist` or answer `y` when prompted. It installs `archivum-null-firewall.service`, which applies the same rules at every boot, before Docker and before the app start. The unit loads this project's rules and nothing else.
+- **Rules you wrote by hand, iptables:** `apt install iptables-persistent && netfilter-persistent save`
+- **Rules you wrote by hand, nftables:** keep them in a file of their own and load it from `/etc/nftables.conf`. Do not write `nft list ruleset` over that file on a Docker host: the dump contains Docker's own rules as they were at that moment.
 
 ---
 
@@ -109,28 +116,21 @@ Visitors connect to a small VPS, which holds the public IP, terminates TLS and r
 
 ## Inbound Firewall Rules — App Port
 
-Run these on the **homelab host** (the machine running the container or the bare-metal Node process).
+`HOST_BIND_ADDRESS` decides which address the port is published on. It does not decide who can reach that address. Linux answers for each of its addresses on every interface, so a machine on your LAN that routes the tunnel address through the homelab host reaches a port published "on the tunnel address only". The inbound guard closes that: connections to the app are accepted from the tunnel interface and from nowhere else.
 
-> **Whitelist-first ordering:** put the ACCEPT rule for the tunnel interface *before* the DROP rule.
-> If you drop private ranges first, tunnel traffic (which also uses private IPs) is blocked.
-
-**iptables**
 ```bash
-# 1. Accept traffic arriving on the tunnel interface (e.g. wg0, tun0)
-iptables -A INPUT -i <tunnel-iface> -p tcp --dport 3000 -j ACCEPT
-
-# 2. Drop everything else to the app port (covers LAN, WAN, etc.)
-iptables -A INPUT -p tcp --dport 3000 -j DROP
+# On the homelab host. wg0 stands for the interface your tunnel arrives on.
+sudo bash scripts/setup-firewall.sh --mode docker --turnstile no --tunnel-iface wg0
 ```
 
-**nftables**
-```bash
-# Accept on tunnel interface, drop all other traffic to the port
-nft add rule inet filter input tcp dport 3000 iifname "<tunnel-iface>" accept
-nft add rule inet filter input tcp dport 3000 drop
-```
+What it sets up differs between the two ways of running the app, because the traffic takes a different path:
 
-> These rules are applied automatically by `setup-firewall.sh` when `--tunnel-iface` is provided.
+| | Path of a connection to the app | Where the guard sits |
+|---|---|---|
+| **Docker** | Forwarded to the container. `INPUT` never sees it | With iptables, a chain entered from `DOCKER-USER` for traffic going out to the app's bridge; with nftables, a chain on the forward hook |
+| **Bare-metal** | Delivered to the Node process on the host | A chain entered from `INPUT` for the app port. Connections from the host itself stay allowed, so a proxy or tunnel daemon on the same machine keeps working |
+
+Add `--dry-run` to print the rules without applying them.
 
 ---
 
@@ -407,7 +407,7 @@ Cloudflare Free and Pro plans enforce a **100 MB maximum body size per HTTP requ
 
 ### Egress containment with Cloudflare Tunnel
 
-`cloudflared` runs as a **host process**, not inside the Docker container. The container itself still gets Option A (`internal: true`) or Option B FORWARD rules — those remain unchanged.
+`cloudflared` runs as a **host process**, not inside the Docker container. The container keeps the rules from [Egress Containment](#egress-containment) unchanged: they apply to the container's traffic, and `cloudflared`'s is the host's own.
 
 The `cloudflared` daemon on the host needs outbound HTTPS to Cloudflare's infrastructure. If you apply host-wide egress rules, add the following ACCEPT before any DROP:
 
@@ -489,13 +489,11 @@ HOST_BIND_ADDRESS=100.x.x.x   # Tailscale IP of this host
 
 The service is now reachable only from devices in the same tailnet.
 
-> **Docker + iptables:** Docker manages its own `DOCKER-USER` iptables chain. By default, packets arriving on a tunnel interface (`tailscale0`, `wg0`, etc.) may be silently dropped by that chain before any other rules are evaluated. Add an explicit ACCEPT rule on the homelab host:
+> **Do not add an `ACCEPT` for the tunnel interface to `DOCKER-USER`.** Earlier versions of this guide and of `setup-firewall.sh` did (`iptables -I DOCKER-USER -i tailscale0 -j ACCEPT`). The published port works without it, and with it the host forwards whatever arrives on that interface to every network it has a route to. The current script removes the rule when it finds it; to check by hand:
 >
 > ```bash
-> sudo iptables -I DOCKER-USER -i tailscale0 -j ACCEPT   # replace with your tunnel iface
+> sudo iptables -S DOCKER-USER
 > ```
->
-> `setup-firewall.sh` applies this automatically when `--mode docker --tunnel-iface <iface>` is set with the `iptables` backend.
 
 ### Hardening
 
@@ -529,9 +527,9 @@ The service is now reachable only from devices in the same tailnet.
 
 | `tailscaled` runs on | What changes |
 |---|---|
-| The Docker / Proxmox **host**, app in a container | Nothing. The container keeps Option A or Option B unchanged; the tunnel's traffic is host traffic and never crosses the container's rules. Prefer this — the app's own egress stays at zero. |
+| The Docker / Proxmox **host**, app in a container | Nothing. The container keeps its egress rules unchanged; the tunnel's traffic is host traffic and never crosses them. Prefer this — the app's own egress stays at zero. |
 | **Inside** the contained container / LXC | Allow the ports below *before* the DROP, or the tunnel never comes up. |
-| Bare-metal alongside the app ([Option C](#option-c--bare-metal--systemd-uid-rules)) | Nothing. Those rules match `--uid-owner <app uid>` and `tailscaled` runs as root, so they never touch it — unless you widen them into a blanket `OUTPUT` DROP, which puts you in the row above. |
+| Bare-metal alongside the app ([Bare-metal / systemd](#bare-metal--systemd)) | Nothing. Those rules apply to packets of the app's user, and `tailscaled` runs as root, so they never touch it — unless you widen them into a blanket `OUTPUT` DROP, which puts you in the row above. |
 
 **What Tailscale needs outbound:**
 
@@ -561,7 +559,7 @@ OUT ACCEPT -proto udp -dport 53
 OUT ACCEPT -proto tcp -dport 53
 ```
 
-> These rules stay inert until the **datacenter** firewall is enabled — see the note under [Summary — which option to apply](#summary--which-option-to-apply).
+> These rules stay inert until the **datacenter** firewall is enabled — see the note under [Summary — what to apply](#summary--what-to-apply).
 >
 > Return traffic for inbound client sessions is accepted automatically — `pve-firewall` inserts a RELATED,ESTABLISHED accept at the top of every guest chain. Do not add one by hand; the ruleset format does not parse raw iptables options.
 
@@ -634,155 +632,183 @@ egress shut, leave it off and track releases from outside the host — see
 
 ---
 
-### Option A — Docker `internal` network
+### Docker
 
-**When to use:** Turnstile is **disabled** and the update check is off. The container requires zero outbound internet access.
+**One command, on the homelab host:**
 
-Set the Docker network to `internal: true` in `docker-compose.yml`:
+```bash
+# Turnstile off: the container may open no connection at all
+sudo bash scripts/setup-firewall.sh --mode docker --turnstile no --tunnel-iface wg0 --persist
 
-```yaml
-# docker-compose.yml — networks block at the bottom of the file
-networks:
-  archivum:
-    driver: bridge
-    internal: true          # container cannot initiate any outbound connections
-    driver_opts:
-      com.docker.network.bridge.name: br-archivum   # stable name for iptables rules
+# Turnstile on: it may reach Cloudflare's challenge endpoints, nothing else
+sudo bash scripts/setup-firewall.sh --mode docker --turnstile yes --tunnel-iface wg0 --persist
 ```
 
-With `internal: true`, Docker removes the default gateway from the container's network namespace. The container can **still receive** traffic via the `ports:` mapping on the host, but cannot initiate any TCP/UDP connections outward.
+The rules match the app's network by the name of its bridge, `br-archivum`, which `docker-compose.yml` pins. They survive `docker compose down && up`, a restart of Docker and, with `--persist`, a reboot.
 
-> **If Turnstile is enabled,** the backend must reach `https://challenges.cloudflare.com`. Use Option B instead.
+**What the rules do:**
+
+| Traffic | Verdict |
+|---|---|
+| Replies of the app to its visitors | Pass: they belong to connections the proxy opened |
+| A connection the container opens to the LAN or the internet | Dropped. With `--turnstile yes`, TCP 443 to `104.16.0.0/13` and `104.24.0.0/14` passes |
+| A connection the container opens to the Docker host itself | Dropped. Without this the host's SSH daemon, and anything else it listens on, stays within the container's reach whatever the other rules say |
+| A connection to the container (with `--tunnel-iface`) | Passes from that interface only |
+
+Do **not** use `internal: true` on the Compose network for this. Docker publishes no port for a container on an internal network, so the app stops being reachable.
+
+**The same by hand.** `--dry-run` prints exactly what the script would apply for your options. As iptables commands, for Turnstile on and a tunnel on `wg0`:
+
+```bash
+# Chains of our own. Allowed traffic leaves them with RETURN, so Docker's own
+# rules and yours still apply to it.
+iptables -N ARCHIVUM-EGRESS
+iptables -A ARCHIVUM-EGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -A ARCHIVUM-EGRESS -d 104.16.0.0/13 -p tcp --dport 443 -j RETURN   # Turnstile only
+iptables -A ARCHIVUM-EGRESS -d 104.24.0.0/14 -p tcp --dport 443 -j RETURN   # Turnstile only
+iptables -A ARCHIVUM-EGRESS -j DROP
+
+iptables -N ARCHIVUM-HOST
+iptables -A ARCHIVUM-HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -A ARCHIVUM-HOST -j DROP
+
+iptables -N ARCHIVUM-INGRESS
+iptables -A ARCHIVUM-INGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -A ARCHIVUM-INGRESS -i wg0 -j RETURN
+iptables -A ARCHIVUM-INGRESS -j DROP
+
+# Forwarded traffic of the app's bridge: DOCKER-USER, the chain Docker evaluates
+# before its own accept. Not FORWARD, where a rule comes after that accept.
+iptables -I DOCKER-USER 1 -i br-archivum -j ARCHIVUM-EGRESS
+iptables -I DOCKER-USER 1 -o br-archivum -j ARCHIVUM-INGRESS
+# From the container to the host itself
+iptables -I INPUT 1 -i br-archivum -j ARCHIVUM-HOST
+```
+
+The script adds two things this listing leaves out: the same jumps in `FORWARD`, for a Docker that keeps its rules in nftables and never enters `DOCKER-USER`, and the `ip6tables` counterparts.
+
+As one nftables table, which covers IPv4 and IPv6 and needs no chain of Docker's:
+
+```
+table inet archivum_null {
+	chain forward_from_app {
+		type filter hook forward priority filter; policy accept;
+		iifname "br-archivum" jump egress
+	}
+	chain egress {
+		ct state established,related accept
+		ip daddr { 104.16.0.0/13, 104.24.0.0/14 } tcp dport 443 accept   # Turnstile only
+		drop
+	}
+	chain input_from_app {
+		type filter hook input priority filter; policy accept;
+		iifname "br-archivum" jump host
+	}
+	chain host {
+		ct state established,related accept
+		icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-solicit } accept
+		drop
+	}
+	chain forward_to_app {
+		type filter hook forward priority filter; policy accept;
+		oifname "br-archivum" jump ingress
+	}
+	chain ingress {
+		ct state established,related accept
+		iifname "wg0" accept
+		drop
+	}
+}
+```
+
+**Name resolution.** The container asks Docker's built-in resolver, and Docker passes the query to the host's name servers from the host's side. Turnstile therefore works without any rule for DNS, and the script adds none. Two consequences:
+
+- A resolver the container reaches *by itself* does need one: a server set with `dns:` in the Compose file, or any server on an old Docker. It shows in `docker exec archivum-null cat /etc/resolv.conf` as an `ExtServers` entry without `host(...)`. Pass it with `--dns <address>`.
+- The rules cannot stop a contained container from resolving names, and a name can carry data to whoever runs its zone. If Turnstile and the update check are both off, the app resolves nothing. Leave it without a resolver then:
+
+  ```yaml
+  # docker-compose.yml, under the archivum-null service
+  dns:
+    - 127.0.0.1
+  ```
+
+**The update check** needs `api.github.com`. Add its range with `--allow`, which takes any `CIDR:PORT` and can be repeated; GitHub publishes the current ranges under `api` at `https://api.github.com/meta`:
+
+```bash
+sudo bash scripts/setup-firewall.sh --mode docker --turnstile yes --tunnel-iface wg0 \
+  --allow 140.82.112.0/20:443 --persist
+```
+
+**Verify.** `sudo ./scripts/check-deployment.sh` reads the rules and then tests them: it has the container try a connection to the internet and one to the host, and fails if either gets through.
 
 ---
 
-### Option B — Host FORWARD rules (Docker with Turnstile)
+### Bare-metal / systemd
 
-**When to use:** Turnstile is **enabled** and the container needs selective internet access.
+**When to use:** Node.js runs directly on the host OS, or inside a VM. For a Proxmox LXC use the Proxmox firewall instead, see [PROXMOX.md](PROXMOX.md#egress-containment--proxmox-firewall).
 
-**Step 1 — pin the bridge name** (prevents rules from breaking across `docker compose down && up`):
+The rules apply to the packets of one user, so the app must run as a user of its own. Rules for root would contain the whole system, and the script refuses to write them.
 
-```yaml
-# docker-compose.yml — networks block
-networks:
-  archivum:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: br-archivum
-```
-
-Rebuild the network once: `docker compose down && docker compose up -d`
-
-**Step 2 — FORWARD egress rules on the host:**
-
-> **Ordering:** ACCEPT rules before DROP rules. ESTABLISHED,RELATED must be first.
-
-**iptables**
 ```bash
-BRIDGE=br-archivum
-
-# 1. Allow return traffic for inbound connections (MUST be first)
-iptables -I FORWARD -i $BRIDGE -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# 2. Block container → RFC 1918 LAN and link-local (always)
-iptables -A FORWARD -i $BRIDGE -d 10.0.0.0/8     -j DROP
-iptables -A FORWARD -i $BRIDGE -d 172.16.0.0/12  -j DROP
-iptables -A FORWARD -i $BRIDGE -d 192.168.0.0/16 -j DROP
-iptables -A FORWARD -i $BRIDGE -d 169.254.0.0/16 -j DROP
-
-# 3. If Turnstile IS enabled — allow Cloudflare challenge endpoints only
-iptables -A FORWARD -i $BRIDGE -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
-iptables -A FORWARD -i $BRIDGE -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
-
-# 4. Drop everything else outbound from the container
-iptables -A FORWARD -i $BRIDGE -j DROP
+sudo bash scripts/setup-firewall.sh --mode bare-metal --turnstile yes --tunnel-iface wg0 --persist
 ```
 
-> **Critical:** use `-I` (insert) only for the ESTABLISHED,RELATED rule so it lands at position 1. All subsequent rules use `-A` (append). If you use `-I` for the RFC 1918 DROP rules too, they get prepended one by one and push ESTABLISHED,RELATED to the bottom — return packets destined for container IPs in `172.16.0.0/12` (Docker's default bridge range) hit the DROP rule before the ACCEPT, breaking all client connections.
+`--app-uid` takes the user's name or number and defaults to `archivum`. With `--turnstile yes` the app may also query the name servers in `/etc/resolv.conf`; `--dns` replaces that list.
 
-**nftables**
-```bash
-BRIDGE=br-archivum
+The same by hand, as the nftables table the script loads (UID 1001, Turnstile on, a local stub resolver):
 
-nft add rule inet filter forward iifname "$BRIDGE" ct state established,related accept
-nft add rule inet filter forward iifname "$BRIDGE" \
-    ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } drop
-
-# If Turnstile IS enabled:
-nft add rule inet filter forward iifname "$BRIDGE" \
-    ip daddr { 104.16.0.0/13, 104.24.0.0/14 } tcp dport 443 accept
-
-nft add rule inet filter forward iifname "$BRIDGE" drop
 ```
+table inet archivum_null {
+	chain output_from_app {
+		type filter hook output priority filter; policy accept;
+		meta skuid 1001 jump egress
+	}
+	chain egress {
+		ct state established,related accept
+		ip daddr { 127.0.0.53 } meta l4proto { tcp, udp } th dport 53 accept   # Turnstile only
+		ip daddr { 104.16.0.0/13, 104.24.0.0/14 } tcp dport 443 accept        # Turnstile only
+		drop
+	}
+	chain input_to_app {
+		type filter hook input priority filter; policy accept;
+		tcp dport 3000 jump ingress
+	}
+	chain ingress {
+		iifname "lo" accept
+		iifname "wg0" accept
+		drop
+	}
+}
+```
+
+Two details carry the weight here:
+
+- `ct state established,related accept` comes first. The app's replies to its visitors are packets of the app's user too; without that line the service answers nobody.
+- The rules are entered by a jump that matches the user (`meta skuid 1001 jump egress`), not written as a list that starts with "everyone else may pass". Packets the kernel sends on its own account have no user, and a list of that shape drops them.
+
+With iptables the script builds the same from `-m owner --uid-owner`; `--backend iptables --dry-run` prints it.
 
 ---
 
-### Option C — Bare-metal / systemd UID rules
-
-**When to use:** Node.js runs directly on the host OS (or inside an LXC without a Docker layer).
-
-Use OUTPUT chain rules matched by process UID:
-
-```bash
-# Find the UID
-id archivum          # if a dedicated system user exists
-# or: ps -eo uid,cmd | grep 'node.*index'
-
-APP_UID=1001         # adjust to match
-
-# Block app process → RFC 1918 / link-local
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 10.0.0.0/8     -j DROP
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 172.16.0.0/12  -j DROP
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 192.168.0.0/16 -j DROP
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 169.254.0.0/16 -j DROP
-
-# If Turnstile IS enabled — allow Cloudflare only
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 104.16.0.0/13 -p tcp --dport 443 -j ACCEPT
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -d 104.24.0.0/14 -p tcp --dport 443 -j ACCEPT
-
-# Drop all remaining outbound from the app UID
-iptables -A OUTPUT -m owner --uid-owner $APP_UID -j DROP
-```
-
-**nftables equivalent:**
-```bash
-APP_UID=1001
-
-nft add rule inet filter output meta skuid $APP_UID \
-    ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } drop
-
-# If Turnstile IS enabled:
-nft add rule inet filter output meta skuid $APP_UID \
-    ip daddr { 104.16.0.0/13, 104.24.0.0/14 } tcp dport 443 accept
-
-nft add rule inet filter output meta skuid $APP_UID drop
-```
-
-> `meta skuid` matching requires Linux kernel ≥ 4.10 and nft ≥ 0.9, which are standard on any current Debian/Ubuntu/Fedora release.
-
----
-
-### Summary — which option to apply
+### Summary — what to apply
 
 | Deployment | Turnstile disabled | Turnstile enabled |
 |---|---|---|
-| Docker | Option A (`internal: true`) | Option B (FORWARD rules, Cloudflare ACCEPT) |
-| Bare-metal | Option C (OUTPUT DROP all) | Option C (OUTPUT with Cloudflare ACCEPT) |
-| Proxmox LXC (bare-metal inside) | Option C (OUTPUT DROP all) | Option C (OUTPUT with Cloudflare ACCEPT) |
-| Proxmox LXC (Proxmox Firewall) | `policy_out: DROP` in `.fw` | `policy_out: DROP` + Cloudflare ACCEPT rules |
+| Docker | `setup-firewall.sh --mode docker --turnstile no` | `setup-firewall.sh --mode docker --turnstile yes` |
+| Bare-metal, VM | `setup-firewall.sh --mode bare-metal --turnstile no` | `setup-firewall.sh --mode bare-metal --turnstile yes` |
+| Proxmox LXC | `policy_out: DROP` in the guest's `.fw` file | `policy_out: DROP` + Cloudflare and DNS ACCEPT rules |
 
-For Proxmox-specific Firewall and veth FORWARD rules, see [PROXMOX.md — Egress Containment](PROXMOX.md#egress-containment--proxmox-firewall).
+For the Proxmox firewall, see [PROXMOX.md — Egress Containment](PROXMOX.md#egress-containment--proxmox-firewall).
 
 > **A per-container `.fw` file does nothing on its own.** Guest rules are compiled only while the **datacenter** firewall is enabled — `pve-firewall status` must not report `disabled`. Until it is, `policy_out: DROP` is inert and the container's egress is wide open, whatever the file says. Turn it on under **Datacenter → Firewall → Options**, reviewing the host rules first so you do not lock yourself out, or set `enable: 1` under `[OPTIONS]` in `/etc/pve/firewall/cluster.fw`.
 >
 > [`scripts/install-lxc.sh`](../scripts/install-lxc.sh) warns when it finishes against a disabled datacenter firewall — it will not flip the switch itself, because that is a host-wide change affecting every guest. It does keep `firewall=1` on the container's veth regardless of the firewall prompt, so enabling the datacenter firewall later activates the rules without touching the NIC.
 
-
 ---
 
 ## Quick Setup with setup-firewall.sh
 
-Instead of applying rules manually, use the included interactive script. It covers all three modes (Docker, bare-metal, Proxmox veth), both iptables and nftables, and handles rule ordering and persistence automatically.
+The script covers Docker and bare-metal, with iptables or nftables, and owns what it creates: with nftables the table `inet archivum_null`, with iptables the chains `ARCHIVUM-EGRESS`, `ARCHIVUM-HOST` and `ARCHIVUM-INGRESS` and the jumps into them. Every run rebuilds them from the options given, so it is safe to run again with different options. Its rules only drop; they never accept a packet your own firewall or Docker would have refused.
 
 **Interactive:**
 ```bash
@@ -792,33 +818,63 @@ sudo bash scripts/setup-firewall.sh
 **Non-interactive examples:**
 
 ```bash
-# Docker, Turnstile disabled, nftables, persist rules
+# Docker, Turnstile off, tunnel on wg0, applied again at every boot
 sudo bash scripts/setup-firewall.sh \
-  --mode docker --backend nftables --turnstile no \
-  --bridge br-archivum --tunnel-iface wg0 --app-port 3000 --persist
+  --mode docker --turnstile no --tunnel-iface wg0 --persist --yes
 
-# Docker, Turnstile enabled, iptables
+# Docker, Turnstile on, iptables instead of nftables
 sudo bash scripts/setup-firewall.sh \
-  --mode docker --backend iptables --turnstile yes \
-  --bridge br-archivum --tunnel-iface wg0 --persist
+  --mode docker --backend iptables --turnstile yes --tunnel-iface wg0 --persist --yes
 
-# Bare-metal, Turnstile disabled
+# Bare-metal, Turnstile off, the app running as the user "archivum"
 sudo bash scripts/setup-firewall.sh \
-  --mode bare-metal --backend iptables --turnstile no \
-  --app-uid 1001 --tunnel-iface wg0 --persist
+  --mode bare-metal --turnstile no --tunnel-iface wg0 --persist --yes
 
-# Proxmox host: veth FORWARD rules for LXC 200
-sudo bash scripts/setup-firewall.sh \
-  --mode proxmox-veth --backend iptables --turnstile no \
-  --veth veth200i0 --persist
+# See what a run would do, without root and without changing anything
+bash scripts/setup-firewall.sh --mode docker --turnstile yes --tunnel-iface wg0 --dry-run
+
+# Take everything out again
+sudo bash scripts/setup-firewall.sh --remove
 ```
 
-Pass `--dry-run` to print the commands without executing them.
+| Option | Meaning |
+|---|---|
+| `--mode docker` \| `bare-metal` | How the app runs |
+| `--backend iptables` \| `nftables` | Default: nftables when `nft` is installed |
+| `--turnstile yes` \| `no` | Whether the app may reach Cloudflare's challenge endpoints |
+| `--tunnel-iface <iface>` | Inbound guard: only this interface may reach the app port |
+| `--bridge <name>` | Docker: the bridge of the app's network (default `br-archivum`) |
+| `--app-uid <user>` | Bare-metal: the app's user, by name or number (default `archivum`) |
+| `--dns <a,b>` \| `none` | Resolvers the app may query; see [Docker](#docker) for when a container needs one |
+| `--allow <CIDR:PORT>` | One more TCP destination the app may connect to; repeatable |
+| `--persist` | Install `archivum-null-firewall.service`, which applies the same rules at boot |
+| `--remove` | Remove the rules and the unit |
+| `--dry-run` | Print, change nothing |
+| `--yes` | Do not ask for confirmation |
 
 After applying, run the deployment validator:
 
 ```bash
-./scripts/check-deployment.sh --tunnel-iface wg0
+sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 ```
 
 > All script paths above are relative to the repository root. Run them from there.
+
+### Coming from an earlier version of the script
+
+Run the current script once, with the options for your deployment. It finds the rules the earlier version added and removes them, by their exact text:
+
+| Where | What it removes | Why |
+|---|---|---|
+| `FORWARD`, rules for `br-archivum` | The egress rules of Docker mode with iptables | They sat behind Docker's own accept and were never evaluated: the container's egress was open |
+| `DOCKER-USER`, `-i <tunnel> -j ACCEPT` | The accept for the tunnel interface | It made the host forward that interface's packets to every network it has a route to |
+| `INPUT`, rules for the app port | The inbound guard | In Docker mode it never saw the traffic. The new guard sits where the traffic passes |
+| `OUTPUT`, rules for the app's UID | The egress rules of bare-metal mode | They also dropped the app's replies, so the service answered nobody |
+| The table `inet filter`, nftables | The same rules in their nftables form | Replaced by a table of the script's own |
+
+Then deal with what was saved, or the old rules come back at the next boot:
+
+- `netfilter-persistent` or `/etc/iptables/rules.v4`: run `netfilter-persistent save` again.
+- `/etc/nftables.conf`: the earlier `--persist` wrote the whole ruleset over this file, Docker's rules of that moment included. Restore your distribution's default or your own file.
+
+The `proxmox-veth` mode is gone. Its rules matched a guest's veth in the host's `FORWARD` chain, and a guest's traffic is never presented there under that interface: bridged frames either bypass iptables or appear as coming from the bridge. If you applied them, they are dead weight; list them with `iptables -S FORWARD | grep veth` and delete each with `iptables -D`. Use the Proxmox firewall, as [PROXMOX.md](PROXMOX.md#egress-containment--proxmox-firewall) describes.
