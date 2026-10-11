@@ -510,7 +510,8 @@ describe('VaultManager — download counter atomicity', () => {
   it('deletes orphaned vault directories with missing meta.json on init', async () => {
     // Create a vault directory with data.enc but NO meta.json
     // (simulates a crash between writeFile and writeMetadata)
-    const orphanId = 'orphan-no-meta-1234';
+    const orphanId = 'orphan-no-meta-123456789';
+    expect(orphanId).toHaveLength(24);
     const orphanDir = path.join(tempDir, orphanId);
     await fsp.mkdir(orphanDir, { recursive: true });
     await fsp.writeFile(path.join(orphanDir, 'data.enc'), 'leftover-data');
@@ -527,5 +528,63 @@ describe('VaultManager — download counter atomicity', () => {
 
     // The orphan directory should have been removed
     await expect(fsp.access(orphanDir)).rejects.toThrow();
+  });
+
+  it('leaves directories it did not make alone, and says which', async () => {
+    // What a shared directory or a careless bind mount would put next to the vaults
+    await fsp.mkdir(path.join(tempDir, 'photos'));
+    await fsp.writeFile(path.join(tempDir, 'photos', 'a.jpg'), 'not ours');
+    await fsp.mkdir(path.join(tempDir, 'my-project', 'src'), { recursive: true });
+    await fsp.writeFile(path.join(tempDir, 'my-project', 'src', 'main.c'), 'not ours');
+    // An id-shaped name is not enough either, when the content is not a vault's
+    const lookalike = 'abcdefghijklmnopqrstuvwx';
+    await fsp.mkdir(path.join(tempDir, lookalike));
+    await fsp.writeFile(path.join(tempDir, lookalike, 'notes.txt'), 'not ours');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await manager.shutdown();
+    vi.resetModules();
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    const mod = await import('../vault/manager.js');
+    manager = new mod.VaultManager();
+    await manager.init();
+
+    await expect(fsp.readFile(path.join(tempDir, 'photos', 'a.jpg'), 'utf-8')).resolves.toBe('not ours');
+    await expect(fsp.readFile(path.join(tempDir, 'my-project', 'src', 'main.c'), 'utf-8')).resolves.toBe('not ours');
+    await expect(fsp.readFile(path.join(tempDir, lookalike, 'notes.txt'), 'utf-8')).resolves.toBe('not ours');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0][0]).toContain('photos');
+    expect(warn.mock.calls[0][0]).toContain('my-project');
+    expect(warn.mock.calls[0][0]).toContain(lookalike);
+  });
+
+  it('does not take a meta.json it did not write for a vault', async () => {
+    await fsp.mkdir(path.join(tempDir, 'other-tool'));
+    await fsp.writeFile(path.join(tempDir, 'other-tool', 'meta.json'), JSON.stringify({ name: 'something else' }));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await manager.shutdown();
+    vi.resetModules();
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    const mod = await import('../vault/manager.js');
+    manager = new mod.VaultManager();
+    await manager.init();
+
+    expect(manager.getStats().totalVaults).toBe(0);
+    expect(manager.hasVault('other-tool')).toBe(false);
+    await expect(fsp.access(path.join(tempDir, 'other-tool', 'meta.json'))).resolves.toBeUndefined();
+  });
+
+  it('restores its own vaults after a restart', async () => {
+    const vault = await manager.createVault(makeStream('kept-across-restart-'.repeat(3)), 3600, 5);
+
+    await manager.shutdown();
+    vi.resetModules();
+    vi.stubEnv('STORAGE_PATH', tempDir);
+    const mod = await import('../vault/manager.js');
+    manager = new mod.VaultManager();
+    await manager.init();
+
+    expect(manager.getVault(vault.vaultId)).toMatchObject({ ciphertextSize: 60, remainingDownloads: 5 });
   });
 });

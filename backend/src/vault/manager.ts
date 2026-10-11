@@ -31,6 +31,9 @@ const sessionSecret = randomBytes(32);
 // 2 (nameLen) + 510 (MAX_NAME_BYTES) + 2 (mimeLen) + 254 (MAX_MIME_BYTES)
 const MAX_METADATA_HEADER = 768;
 
+// Every vault and upload id is a nanoid of this length.
+const ID_LENGTH = 24;
+
 // The smallest ciphertext a real upload produces: one chunk's IV and tag around the
 // 4 bytes of an empty metadata header (12 + 16 + 4). Anything shorter cannot be
 // decrypted into a file, and zero bytes would even pass for one in the client.
@@ -44,6 +47,19 @@ function quotaExceeded(): Error {
   return Object.assign(
     new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
     { statusCode: 507 }
+  );
+}
+
+/**
+ * Whether what was read from a meta.json is the metadata of the vault in that
+ * directory. A file of that name written by anything else must not become a vault.
+ */
+function isVaultMetadata(meta: VaultMetadata, vaultId: string): boolean {
+  return (
+    meta.vaultId === vaultId &&
+    Number.isFinite(meta.ciphertextSize) &&
+    Number.isFinite(meta.expiresAt) &&
+    Number.isFinite(meta.remainingDownloads)
   );
 }
 
@@ -72,20 +88,33 @@ export class VaultManager {
   private async restoreMetadata(): Promise<void> {
     try {
       const ids = await storage.listVaults();
+      const foreign: string[] = [];
       for (const vaultId of ids) {
         const meta = await storage.readMetadata(vaultId);
-        if (meta) {
+        if (meta && isVaultMetadata(meta, vaultId)) {
           // Check if expired
           if (meta.expiresAt <= Date.now() || meta.remainingDownloads <= 0) {
             await this.deleteVault(vaultId);
           } else {
             vaults.set(vaultId, meta);
           }
-        } else {
+        } else if (vaultId.length === ID_LENGTH && (await storage.holdsOnlyVaultFiles(vaultId))) {
           // Orphaned vault directory (missing or corrupted meta.json) —
           // e.g. crash between writeFile and writeMetadata.  Clean it up.
           await storage.deleteVault(vaultId);
+        } else {
+          // Not something this app made: another tool's directory under a shared
+          // STORAGE_PATH, or a bind mount of a directory that holds more than vaults.
+          // Removing it would delete data that is not the app's to delete.
+          foreign.push(vaultId);
         }
+      }
+      if (foreign.length > 0) {
+        const shown = foreign.slice(0, 5).join(', ');
+        const more = foreign.length > 5 ? ` and ${foreign.length - 5} more` : '';
+        console.warn(
+          `[WARN] STORAGE_PATH holds directories that are not vaults and were left alone: ${shown}${more}. Give the app a directory of its own.`
+        );
       }
     } catch {
       // First run — no vaults exist yet
@@ -164,7 +193,7 @@ export class VaultManager {
     let held = declared;
     reservedBytes += held;
     try {
-      const vaultId = nanoid(24);
+      const vaultId = nanoid(ID_LENGTH);
       const now = Date.now();
 
       const clampedTtl = Math.min(Math.max(ttl, 60), config.MAX_TTL);
@@ -254,7 +283,7 @@ export class VaultManager {
     reservedBytes += totalSize;
     if (clientIp) ipSessionCounts.set(clientIp, (ipSessionCounts.get(clientIp) ?? 0) + 1);
 
-    const uploadId = nanoid(24);
+    const uploadId = nanoid(ID_LENGTH);
     const session: ChunkedUploadSession = {
       uploadId,
       totalSize,
@@ -347,7 +376,7 @@ export class VaultManager {
       );
     }
 
-    const vaultId = nanoid(24);
+    const vaultId = nanoid(ID_LENGTH);
     const now = Date.now();
 
     // Held while the file is moved, so a second complete or a late chunk is refused

@@ -12,6 +12,9 @@ import path from 'node:path';
  */
 const UPLOADS_DIR = '_uploads';
 
+const DATA_FILE = 'data.enc';
+const META_FILE = 'meta.json';
+
 export class LocalStorage implements StorageBackend {
   constructor(private basePath: string) {}
 
@@ -27,11 +30,11 @@ export class LocalStorage implements StorageBackend {
   }
 
   private dataPath(vaultId: string): string {
-    return path.join(this.vaultDir(vaultId), 'data.enc');
+    return path.join(this.vaultDir(vaultId), DATA_FILE);
   }
 
   private metaPath(vaultId: string): string {
-    return path.join(this.vaultDir(vaultId), 'meta.json');
+    return path.join(this.vaultDir(vaultId), META_FILE);
   }
 
   async writeFile(vaultId: string, stream: Readable, maxSize?: number): Promise<number> {
@@ -112,6 +115,15 @@ export class LocalStorage implements StorageBackend {
     }
   }
 
+  async holdsOnlyVaultFiles(vaultId: string): Promise<boolean> {
+    try {
+      const entries = await fsp.readdir(this.vaultDir(vaultId), { withFileTypes: true });
+      return entries.every((e) => e.isFile() && (e.name === DATA_FILE || e.name === META_FILE));
+    } catch {
+      return false;
+    }
+  }
+
   // ── Chunked upload helpers ─────────────────────────────────────────────────
 
   private uploadDir(uploadId: string): string {
@@ -121,7 +133,7 @@ export class LocalStorage implements StorageBackend {
   }
 
   private uploadDataPath(uploadId: string): string {
-    return path.join(this.uploadDir(uploadId), 'data.enc');
+    return path.join(this.uploadDir(uploadId), DATA_FILE);
   }
 
   async appendChunk(

@@ -167,6 +167,29 @@ describe('LocalStorage', () => {
     });
   });
 
+  describe('holdsOnlyVaultFiles', () => {
+    it('should accept a directory with the vault files, some of them, or none', async () => {
+      await storage.writeFile('full', createTestStream('data'));
+      await storage.writeMetadata('full', makeMeta({ vaultId: 'full' }));
+      await storage.writeFile('data-only', createTestStream('data'));
+      await fsp.mkdir(path.join(tempDir, 'empty'));
+
+      expect(await storage.holdsOnlyVaultFiles('full')).toBe(true);
+      expect(await storage.holdsOnlyVaultFiles('data-only')).toBe(true);
+      expect(await storage.holdsOnlyVaultFiles('empty')).toBe(true);
+    });
+
+    it('should refuse a directory that holds anything else', async () => {
+      await storage.writeFile('extra-file', createTestStream('data'));
+      await fsp.writeFile(path.join(tempDir, 'extra-file', 'notes.txt'), 'x');
+      await fsp.mkdir(path.join(tempDir, 'nested', 'data.enc'), { recursive: true });
+
+      expect(await storage.holdsOnlyVaultFiles('extra-file')).toBe(false);
+      expect(await storage.holdsOnlyVaultFiles('nested')).toBe(false);
+      expect(await storage.holdsOnlyVaultFiles('missing')).toBe(false);
+    });
+  });
+
   describe('path traversal protection', () => {
     it('should reject vault IDs with path separators', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

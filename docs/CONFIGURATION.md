@@ -30,7 +30,7 @@ The README covers the variables you usually touch. This page is the complete ref
 | `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
 | `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
 | `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check |
-| `STORAGE_PATH` | `/data/vaults` | File storage path inside container |
+| `STORAGE_PATH` | `/data/vaults` | File storage path inside container. Give the app a directory of its own: it creates, expires and removes what is inside. A directory it does not recognise as a vault is left alone and named in a warning at startup |
 
 ### Chunked upload internals
 
