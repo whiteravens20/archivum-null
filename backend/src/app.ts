@@ -66,7 +66,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Never `true` (trust all) and never a hop count — neither checks who is connecting,
     // so a client reaching the port directly could spoof its IP past rate limiting.
     trustProxy: [...config.TRUST_PROXY],
-    bodyLimit: config.CHUNK_SIZE + 1024 * 64,
+    // Small by default: the JSON bodies this API takes are a few hundred bytes. The
+    // two upload routes carry a limit of their own (routes/vault.ts).
+    bodyLimit: 16 * 1024,
   });
 
   // Security headers
