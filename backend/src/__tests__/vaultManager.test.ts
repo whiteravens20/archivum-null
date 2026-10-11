@@ -242,6 +242,103 @@ describe('VaultManager — download counter atomicity', () => {
     ).rejects.toThrow(/not found/);
   });
 
+  // ------------------------------------------------------------------
+  // One write at a time per upload session
+  // ------------------------------------------------------------------
+
+  it('refuses a chunk while another one of the same upload is being written', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+
+    // The first chunk's stream stays open, so its write is still running...
+    const first = new Readable({ read() {} });
+    first.push(Buffer.alloc(50, 'a'));
+    const writing = manager.appendChunk(session.uploadId, 0, first);
+
+    // ...when the next index arrives. It must not be written alongside it.
+    await expect(
+      manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)))
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    first.push(null);
+    await writing;
+    expect(session.receivedBytes).toBe(50);
+    expect(session.nextChunkIndex).toBe(1);
+
+    // The refused index is still the one expected, and the upload finishes normally
+    await manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)));
+    const meta = await manager.completeChunkedUpload(session.uploadId);
+    expect(meta.ciphertextSize).toBe(100);
+  });
+
+  it('never stores more than the declared size, however many chunks arrive at once', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+
+    const results = await Promise.allSettled(
+      [0, 1, 2, 3].map((index) =>
+        manager.appendChunk(session.uploadId, index, makeStream('x'.repeat(100)))
+      )
+    );
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const stored = await fsp.stat(path.join(tempDir, '_uploads', session.uploadId, 'data.enc'));
+    expect(stored.size).toBe(100);
+    expect(session.receivedBytes).toBe(100);
+
+    const meta = await manager.completeChunkedUpload(session.uploadId);
+    expect(meta.ciphertextSize).toBe(100);
+  });
+
+  it('lets a failed chunk be sent again under the same index', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+
+    // 150 bytes into a 100-byte upload: refused, and nothing of it is kept
+    await expect(
+      manager.appendChunk(session.uploadId, 0, makeStream('x'.repeat(150)))
+    ).rejects.toMatchObject({ statusCode: 413 });
+    expect(session.nextChunkIndex).toBe(0);
+    expect(session.receivedBytes).toBe(0);
+
+    await manager.appendChunk(session.uploadId, 0, makeStream('y'.repeat(100)));
+    const meta = await manager.completeChunkedUpload(session.uploadId);
+    expect(meta.ciphertextSize).toBe(100);
+  });
+
+  it('refuses to complete an upload while one of its chunks is being written', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+
+    const first = new Readable({ read() {} });
+    first.push(Buffer.alloc(100, 'a'));
+    const writing = manager.appendChunk(session.uploadId, 0, first);
+
+    // Not "no chunks received": the session and its data must survive this
+    await expect(
+      manager.completeChunkedUpload(session.uploadId)
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    first.push(null);
+    await writing;
+    const meta = await manager.completeChunkedUpload(session.uploadId);
+    expect(meta.ciphertextSize).toBe(100);
+  });
+
+  it('creates one vault when an upload is completed twice at once', async () => {
+    const session = manager.initChunkedUpload(100, 3600, 5);
+    await manager.appendChunk(session.uploadId, 0, makeStream('z'.repeat(100)));
+
+    const results = await Promise.allSettled([
+      manager.completeChunkedUpload(session.uploadId),
+      manager.completeChunkedUpload(session.uploadId),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { statusCode: 409 },
+    });
+    // The vault, and the now-empty staging directory — nothing half-made beside them
+    const entries = (await fsp.readdir(tempDir)).filter((name) => name !== '_uploads');
+    expect(entries).toHaveLength(1);
+  });
+
   it('caps concurrent open upload sessions per IP', async () => {
     vi.resetModules();
     vi.stubEnv('STORAGE_PATH', tempDir);

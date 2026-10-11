@@ -396,6 +396,35 @@ describe('Vault routes', () => {
     expect(res.json().error).toContain('chunkIndex');
   });
 
+  it('POST /api/vault/upload/:uploadId/chunk answers 409 to a refused chunk and drains it', async () => {
+    let part: Readable | undefined;
+    mockManager.appendChunk.mockImplementationOnce(async (_uploadId, _chunkIndex, stream) => {
+      part = stream;
+      throw Object.assign(
+        new Error('Another request for this upload is still being processed'),
+        { statusCode: 409 }
+      );
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': 'mock-session-token-abc',
+      },
+      payload: buildMultipart(boundary,
+        { chunkIndex: '1' },
+        { name: 'chunk.bin', content: Buffer.alloc(256 * 1024) }
+      ),
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('still being processed');
+    // The manager never read the part; the route must not leave it that way
+    expect(part?.readableFlowing).toBe(true);
+  });
+
   it('POST /api/vault/upload/:uploadId/complete returns 201 with vaultId', async () => {
     const res = await app.inject({
       method: 'POST',
