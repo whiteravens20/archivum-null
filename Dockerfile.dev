@@ -1,9 +1,16 @@
 # ── Development Dockerfile ──
+# One image per service of docker-compose.dev.yml. Each installs its dependencies
+# from the lockfile at build time and runs as the image's non-root user (uid 1000);
+# the Compose file mounts the sources over the copies made here, read-only.
+#
 # Base image pinned by version and digest, the same one the production Dockerfile uses.
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
 
 # Upgrade all Alpine packages to latest patched versions (catches zlib CVE-2026-22184 and any future OS-level CVEs)
 RUN apk upgrade --no-cache
+
+# ── Backend ──
+FROM base AS backend
 
 # Install backend dependencies
 WORKDIR /app/backend
@@ -28,3 +35,21 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health || exit 1
 
 CMD ["npx", "tsx", "watch", "src/index.ts"]
+
+# ── Frontend ──
+FROM base AS frontend
+
+# The dev server writes its cache and its self-signed certificate under
+# node_modules/.vite, so the dependencies are installed by the user that runs it.
+WORKDIR /app/frontend
+RUN chown node:node /app/frontend
+USER node
+COPY --chown=node:node frontend/package.json frontend/package-lock.json* frontend/.npmrc* ./
+RUN npm ci --ignore-scripts
+
+# Copy frontend source (will be overridden by volume mounts in dev)
+COPY --chown=node:node frontend/ ./
+
+EXPOSE 5173
+
+CMD ["npx", "vite", "--host", "0.0.0.0"]

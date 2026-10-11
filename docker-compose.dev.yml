@@ -1,20 +1,29 @@
 # ── Archivum Null — Development Docker Compose ──
-# Less strict security for local development
-# Hot reload, verbose logs, LAN accessible
+# Less strict security for local development: hot reload and verbose logs.
+#
+# Both services are published on this machine only. To reach them from another
+# device on your network, for example a phone, start with DEV_BIND_ADDRESS=0.0.0.0.
+#
+# backend/src, frontend/src and frontend/public are mounted read-only: the containers
+# reload what you edit there and cannot write back into your working tree. Everything
+# else, the dependencies included, is copied or installed when the images are built,
+# so rebuild after changing a package.json, a lockfile, a config file or index.html:
+#   docker compose -f docker-compose.dev.yml up --build
 
 services:
   archivum-backend:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      target: backend
       args:
         - PORT=${PORT:-3000}
     container_name: archivum-dev-backend
     restart: unless-stopped
     ports:
-      - "0.0.0.0:${PORT:-3000}:${PORT:-3000}"
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
     volumes:
-      - ./backend/src:/app/backend/src
+      - ./backend/src:/app/backend/src:ro
       - ./TOS.md:/app/TOS.md:ro
       - vault-data-dev:/data/vaults
     env_file:
@@ -27,22 +36,22 @@ services:
     working_dir: /app/backend
 
   archivum-frontend:
-    image: node:24-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: frontend
     container_name: archivum-dev-frontend
     restart: unless-stopped
     ports:
-      - "0.0.0.0:5173:5173"
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:5173:5173"
     volumes:
-      - ./frontend:/app/frontend
-      - frontend-node-modules:/app/frontend/node_modules
-    working_dir: /app/frontend
-    command: sh -c "npm install -g npm@latest && npm install --ignore-scripts && npm run dev -- --host 0.0.0.0"
+      - ./frontend/src:/app/frontend/src:ro
+      - ./frontend/public:/app/frontend/public:ro
     environment:
       - NODE_ENV=development
-      - VITE_API_TARGET=http://archivum-backend:3000
+      - VITE_API_TARGET=http://archivum-backend:${PORT:-3000}
+    working_dir: /app/frontend
 
 volumes:
   vault-data-dev:
-    driver: local
-  frontend-node-modules:
     driver: local

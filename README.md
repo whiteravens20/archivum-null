@@ -122,6 +122,8 @@ docker compose -f docker-compose.dev.yml up --build
 Frontend: `https://localhost:5173` (self-signed cert — accept the browser warning once)
 Backend API: `http://localhost:3000`
 
+Both are published on this machine only; start with `DEV_BIND_ADDRESS=0.0.0.0` in front of the command to reach them from another device on your network. The containers run as a non-root user and get `backend/src`, `frontend/src` and `frontend/public` read-only, so they reload what you edit and cannot write into your working tree. Dependencies are installed when the images are built: run the command again, with `--build`, after changing a `package.json`, a lockfile, a config file or `index.html`.
+
 The frontend uses HTTPS because WebCrypto refuses to run on insecure origins; the backend stays on HTTP because Vite's dev proxy handles the bridge. In production both sit behind your reverse proxy on TLS.
 
 ## Production
