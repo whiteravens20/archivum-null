@@ -482,6 +482,25 @@ describe('Vault routes', () => {
     expect(part?.readableFlowing).toBe(true);
   });
 
+  it('POST /api/vault/upload/:uploadId/chunk tells a client out of step which chunk is expected', async () => {
+    mockManager.appendChunk.mockRejectedValueOnce(
+      Object.assign(new Error('Expected chunk index 3, got 2'), { statusCode: 400, expectedChunkIndex: 3 })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/upload-abc/chunk',
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': 'mock-session-token-abc',
+      },
+      payload: buildMultipart(boundary, { chunkIndex: '2' }, { name: 'chunk.bin', content: Buffer.from('again') }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Expected chunk index 3, got 2', expectedChunkIndex: 3 });
+  });
+
   it('POST /api/vault/upload/:uploadId/complete returns 201 with vaultId', async () => {
     const res = await app.inject({
       method: 'POST',

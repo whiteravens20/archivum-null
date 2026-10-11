@@ -330,10 +330,14 @@ describe('VaultManager — download counter atomicity', () => {
   it('rejects out-of-order chunk index', async () => {
     const session = manager.initChunkedUpload(100, 3600, 5);
 
-    // Sending chunk index 1 before 0 must fail
+    // Sending chunk index 1 before 0 must fail, and say which index is expected
     await expect(
       manager.appendChunk(session.uploadId, 1, makeStream('data'))
-    ).rejects.toThrow(/Expected chunk index 0/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/Expected chunk index 0/),
+      statusCode: 400,
+      expectedChunkIndex: 0,
+    });
 
     await manager.abortChunkedUpload(session.uploadId);
   });

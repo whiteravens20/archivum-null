@@ -267,4 +267,156 @@ describe('vault API client', () => {
       expect(fetch).not.toHaveBeenCalled();
     });
   });
+
+  describe('uploadVaultChunked', () => {
+    const init = { uploadId: 'up-1', chunkSize: 38, expiresAt: 9999, sessionToken: 'tok' };
+    const created = { vaultId: 'v-1', expiresAt: 9999, maxDownloads: 5, ciphertextSize: 20 };
+    const key = {} as CryptoKey;
+    // 8 bytes of header (the mock above) and 12 of file: 20 bytes, so two crypto chunks
+    // of 10. With a chunk size of 38 from the server, each request carries one of them.
+    const upload = async (signal?: AbortSignal) => {
+      const { uploadVaultChunked } = await import('../api/vault.js');
+      const file = new File(['x'.repeat(12)], 'test.txt', { type: 'text/plain' });
+      return uploadVaultChunked(file, key, 10, 3600, 5, undefined, undefined, signal);
+    };
+
+    function reply(status: number, body: unknown, headers: Record<string, string> = {}) {
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers(headers),
+        json: () => Promise.resolve(body),
+      };
+    }
+    const stored = (index: number) => reply(200, { uploadId: 'up-1', receivedBytes: 10 * (index + 1), nextChunkIndex: index + 1 });
+
+    /** A fetch that answers init, complete and abort, and takes each chunk's answer from a queue. */
+    function mockFetch(chunkAnswers: Array<ReturnType<typeof reply> | Error>, completeAnswer = reply(201, created)) {
+      const calls: string[] = [];
+      globalThis.fetch = vi.fn(async (url: string, options?: RequestInit) => {
+        if (url.endsWith('/upload/init')) {
+          calls.push('init');
+          return reply(201, init);
+        }
+        if (url.endsWith('/chunk')) {
+          calls.push(`chunk ${(options?.body as FormData).get('chunkIndex')}`);
+          const answer = chunkAnswers.shift();
+          if (answer === undefined) throw new Error('a chunk request nobody expected');
+          if (answer instanceof Error) throw answer;
+          return answer;
+        }
+        if (url.endsWith('/complete')) {
+          calls.push('complete');
+          return completeAnswer;
+        }
+        if (options?.method === 'DELETE') {
+          calls.push('abort');
+          return reply(204, null);
+        }
+        throw new Error(`a request nobody expected: ${options?.method} ${url}`);
+      }) as unknown as typeof fetch;
+      return calls;
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should send the chunks in order and complete the upload', async () => {
+      const calls = mockFetch([stored(0), stored(1)]);
+
+      await expect(upload()).resolves.toEqual(created);
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 1', 'complete']);
+    });
+
+    it('should send a chunk again after a network failure', async () => {
+      const calls = mockFetch([new TypeError('Failed to fetch'), stored(0), stored(1)]);
+
+      const result = upload();
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(result).resolves.toEqual(created);
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 0', 'chunk 1', 'complete']);
+    });
+
+    it('should wait as long as the server asks before retrying a rate-limited chunk', async () => {
+      const calls = mockFetch([
+        reply(429, { error: 'Too many requests. Try again later.', retryAfter: 7 }, { 'Retry-After': '7' }),
+        stored(0),
+        stored(1),
+      ]);
+
+      const result = upload();
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(calls).toEqual(['init', 'chunk 0']);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(result).resolves.toEqual(created);
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 0', 'chunk 1', 'complete']);
+    });
+
+    it('should go on when the server already has the chunk whose response was lost', async () => {
+      const calls = mockFetch([
+        new TypeError('Failed to fetch'),
+        reply(400, { error: 'Expected chunk index 1, got 0', expectedChunkIndex: 1 }),
+        stored(1),
+      ]);
+
+      const result = upload();
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(result).resolves.toEqual(created);
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 0', 'chunk 1', 'complete']);
+    });
+
+    it('should not take an out-of-step answer to a first attempt for success', async () => {
+      const calls = mockFetch([reply(400, { error: 'Expected chunk index 1, got 0', expectedChunkIndex: 1 })]);
+
+      await expect(upload()).rejects.toThrow('Expected chunk index 1, got 0');
+      expect(calls).toEqual(['init', 'chunk 0', 'abort']);
+    });
+
+    it('should not retry a refusal that another attempt cannot change', async () => {
+      const calls = mockFetch([reply(413, { error: 'File too large' })]);
+
+      await expect(upload()).rejects.toThrow('File too large');
+      expect(calls).toEqual(['init', 'chunk 0', 'abort']);
+    });
+
+    it('should give up after four attempts and abort the session', async () => {
+      const failure = () => reply(500, { error: 'Internal server error' });
+      const calls = mockFetch([failure(), failure(), failure(), failure()]);
+
+      const result = upload();
+      const outcome = expect(result).rejects.toThrow('Internal server error');
+      await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000);
+
+      await outcome;
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 0', 'chunk 0', 'chunk 0', 'abort']);
+    });
+
+    it('should abort the session when completion fails', async () => {
+      const calls = mockFetch([stored(0), stored(1)], reply(500, { error: 'Internal server error' }));
+
+      await expect(upload()).rejects.toThrow('Internal server error');
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 1', 'complete', 'abort']);
+    });
+
+    it('should stop waiting and abort the session when cancelled during a pause', async () => {
+      const calls = mockFetch([reply(429, { error: 'Too many requests. Try again later.' }, { 'Retry-After': '30' })]);
+      const ac = new AbortController();
+
+      const result = upload(ac.signal);
+      const outcome = expect(result).rejects.toThrow('Upload cancelled');
+      await vi.advanceTimersByTimeAsync(2000);
+      ac.abort(new DOMException('Upload cancelled', 'AbortError'));
+
+      await outcome;
+      expect(calls).toEqual(['init', 'chunk 0', 'abort']);
+    });
+  });
 });

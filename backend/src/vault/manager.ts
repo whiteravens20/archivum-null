@@ -320,9 +320,12 @@ export class VaultManager {
     }
 
     if (chunkIndex !== session.nextChunkIndex) {
+      // The expected index goes out with the error. A client whose response to the
+      // previous chunk was lost sends that chunk again; this tells it the chunk is
+      // already here, so it can go on instead of failing the upload.
       throw Object.assign(
         new Error(`Expected chunk index ${session.nextChunkIndex}, got ${chunkIndex}`),
-        { statusCode: 400 }
+        { statusCode: 400, expectedChunkIndex: session.nextChunkIndex }
       );
     }
 

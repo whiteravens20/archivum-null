@@ -18,9 +18,13 @@ interface UploadParams {
  * in particular, whose messages carry STORAGE_PATH — is logged and hidden behind a 500.
  */
 function sendUploadError(request: FastifyRequest, reply: FastifyReply, err: unknown) {
-  const error = err as Error & { statusCode?: number };
+  const error = err as Error & { statusCode?: number; expectedChunkIndex?: number };
   if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
-    return reply.status(error.statusCode).send({ error: error.message });
+    return reply.status(error.statusCode).send(
+      typeof error.expectedChunkIndex === 'number'
+        ? { error: error.message, expectedChunkIndex: error.expectedChunkIndex }
+        : { error: error.message }
+    );
   }
   request.log.error(err, 'Chunked upload failed');
   return reply.status(500).send({ error: 'Internal server error' });
