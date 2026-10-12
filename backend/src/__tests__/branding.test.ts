@@ -26,10 +26,10 @@ import {
 } from '../static/branding.js';
 
 /** What the environment holds when nothing is configured, and what that parses to. */
-const INPUT = { name: 'Archivum Null', tagline: 'Zero trust file relay', accentColor: '', theme: 'dark' };
+const INPUT = { name: 'Archivum Null', tagline: 'Anonymous encrypted file sharing', accentColor: '', theme: 'dark' };
 const DEFAULTS = {
   name: 'Archivum Null',
-  tagline: 'Zero trust file relay',
+  tagline: 'Anonymous encrypted file sharing',
   accentColor: null,
   theme: 'dark',
 } as const;
@@ -231,6 +231,14 @@ describe('applyBranding', () => {
     expect(punctuated).toContain('content="A — Share safely! Anonymous');
   });
 
+  it('does not say the same thing twice in the description when the tagline is the built-in one', () => {
+    const page = applyBranding(SOURCE_PAGE, DEFAULTS);
+
+    expect(page).toContain(
+      '<meta name="description" content="Archivum Null — anonymous, zero-knowledge encrypted file sharing with expiring vaults." />'
+    );
+  });
+
   it('marks the page with the theme and tints the browser UI to match', () => {
     const dark = applyBranding(SOURCE_PAGE, DEFAULTS);
     const light = applyBranding(SOURCE_PAGE, { ...DEFAULTS, theme: 'light' });
@@ -420,7 +428,7 @@ describe('buildApp — branding on the served page', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('<title>Archivum Null</title>');
     expect(res.body).toContain('<meta name="application-name" content="Archivum Null" />');
-    expect(res.body).toContain('<meta name="brand-tagline" content="Zero trust file relay" />');
+    expect(res.body).toContain('<meta name="brand-tagline" content="Anonymous encrypted file sharing" />');
   });
 
   it('serves the configured name and tagline, escaped', async () => {

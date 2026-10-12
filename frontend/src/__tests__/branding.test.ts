@@ -6,7 +6,7 @@ describe('getBranding', () => {
   it('should fall back to the built-in branding on a page the server has not touched', () => {
     expect(getBranding()).toEqual({
       name: 'Archivum Null',
-      tagline: 'Zero trust file relay',
+      tagline: 'Anonymous encrypted file sharing',
       theme: 'dark',
       logo: '/logo-symbol.webp',
       logoLight: '/logo-symbol-light.webp',

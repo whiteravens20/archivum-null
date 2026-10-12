@@ -1,7 +1,7 @@
 {
   "name": "archivum-null-backend",
   "version": "1.0.0",
-  "description": "Zero trust file relay — backend",
+  "description": "Anonymous encrypted file sharing — backend",
   "private": true,
   "type": "module",
   "engines": {

@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { DEFAULT_TAGLINE } from './static/branding.js';
 
 /** What the Turnstile keys hold when Turnstile is not configured. */
 const TURNSTILE_PLACEHOLDER = '0x0000000000000000000000';
@@ -68,7 +69,7 @@ const envSchema = {
   // Branding — cosmetic. Checked and written into index.html at startup by
   // static/branding.ts; see docs/BRANDING.md.
   BRAND_NAME: process.env.BRAND_NAME?.trim() || 'Archivum Null',
-  BRAND_TAGLINE: process.env.BRAND_TAGLINE?.trim() || 'Zero trust file relay',
+  BRAND_TAGLINE: process.env.BRAND_TAGLINE?.trim() || DEFAULT_TAGLINE,
   // #RRGGBB. Empty keeps the accent built into the stylesheet.
   BRAND_ACCENT_COLOR: process.env.BRAND_ACCENT_COLOR?.trim() || '',
   // dark | light | auto. `auto` follows the visitor's system setting.
