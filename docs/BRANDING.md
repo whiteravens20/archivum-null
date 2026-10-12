@@ -66,7 +66,7 @@ Updating the installation rebuilds the frontend and leaves `branding/` and `.env
 | Variable | Default | Description |
 |---|---|---|
 | `BRAND_NAME` | `Archivum Null` | The name in the browser tab, in the heading of the home and vault pages, in the footer and in the web app manifest. 1 to 64 characters. |
-| `BRAND_TAGLINE` | `Zero trust file relay` | The line under the name on the home page and at the end of the footer. It is also used in the page description. 1 to 120 characters. |
+| `BRAND_TAGLINE` | `Anonymous encrypted file sharing` | The line under the name on the home page and at the end of the footer. A tagline of your own is also used in the page description. 1 to 120 characters. |
 | `BRAND_ACCENT_COLOR` | `#60A5FA` | The accent colour, as six hex digits. See [Accent colour](#accent-colour). |
 | `BRAND_THEME` | `dark` | `dark`, `light` or `auto`. See [Theme](#theme). |
 | `BRANDING_PATH` | `branding` in the install directory (`/app/branding` in the image) | Where the server looks for your logo and icons. You only need this if the default location does not suit you. |
