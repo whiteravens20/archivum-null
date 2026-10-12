@@ -163,9 +163,16 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # Streaming support
+    # Pass uploads and downloads straight through and keep neither on this host's
+    # disk. With request buffering on, nginx stores every upload before the app
+    # sees it, so the app cannot refuse one early. With response buffering on, a
+    # download to a slow client is spooled here, up to 1 GB at nginx's default.
     proxy_request_buffering off;
     proxy_buffering off;
+    # Over HTTP/2 a client may send only as much as this buffer holds before nginx
+    # has passed it on: 64 KB by default, which caps an upload at that much per
+    # round trip. Costs up to 4 MB of memory for each upload in flight.
+    client_body_buffer_size 4m;
 
     # The admin panel and its API: the addresses you administer from, nobody else.
     # Everyone else gets 403 here, before the app's own login is ever reached.
