@@ -73,7 +73,7 @@ IPv4 clients are counted per address, IPv6 clients per /64 — the same applies 
 | Variable | Default | Description |
 |---|---|---|
 | `BRAND_NAME` | `Archivum Null` | Name shown in the browser tab, the page headings, the footer and the web app manifest. 1 to 64 characters. |
-| `BRAND_TAGLINE` | `Zero trust file relay` | Line under the name on the home page and at the end of the footer. 1 to 120 characters. |
+| `BRAND_TAGLINE` | `Anonymous encrypted file sharing` | Line under the name on the home page and at the end of the footer. 1 to 120 characters. |
 | `BRAND_ACCENT_COLOR` | `#60A5FA` | Accent colour as six hex digits (`#RRGGBB`). The label colour of buttons is chosen to match. |
 | `BRAND_THEME` | `dark` | `dark`, `light`, or `auto` to follow the visitor's system colour scheme. |
 | `BRANDING_PATH` | `branding` in the install directory (`/app/branding` in the image) | Directory holding your own logo and icons. Only a fixed list of file names is read from it, at startup. |

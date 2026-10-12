@@ -91,7 +91,7 @@ describe('config', () => {
     vi.resetModules();
     const { config } = await import('../config.js');
     expect(config.BRAND_NAME).toBe('Archivum Null');
-    expect(config.BRAND_TAGLINE).toBe('Zero trust file relay');
+    expect(config.BRAND_TAGLINE).toBe('Anonymous encrypted file sharing');
     expect(config.BRAND_ACCENT_COLOR).toBe('');
     expect(config.BRAND_THEME).toBe('dark');
     expect(config.BRANDING_PATH).toBe('');

@@ -17,7 +17,7 @@ export const HASHED_CSS = 'index-Da10O7nR.css';
 
 export const INDEX_HTML = [
   '<!DOCTYPE html><html lang="en"><head>',
-  '<meta name="description" content="Archivum Null — Zero trust file relay." />',
+  '<meta name="description" content="Archivum Null — anonymous, zero-knowledge encrypted file sharing with expiring vaults." />',
   '<title>Archivum Null</title>',
   `<script type="module" crossorigin src="/assets/${HASHED_JS}"></script>`,
   `<link rel="stylesheet" crossorigin href="/assets/${HASHED_CSS}">`,

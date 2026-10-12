@@ -25,7 +25,7 @@ export function getBranding(): Branding {
   const theme = document.documentElement.dataset.theme;
   return {
     name: meta('application-name') ?? 'Archivum Null',
-    tagline: meta('brand-tagline') ?? 'Zero trust file relay',
+    tagline: meta('brand-tagline') ?? 'Anonymous encrypted file sharing',
     theme: theme === 'light' || theme === 'auto' ? theme : 'dark',
     logo: meta('brand-logo') ?? '/logo-symbol.webp',
     logoLight: meta('brand-logo-light') ?? '/logo-symbol-light.webp',

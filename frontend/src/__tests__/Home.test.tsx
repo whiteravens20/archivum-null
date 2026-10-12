@@ -65,7 +65,7 @@ describe('Home', () => {
         <Home />
       </MemoryRouter>
     );
-    expect(screen.getByText('Zero trust file relay')).toBeInTheDocument();
+    expect(screen.getByText('Anonymous encrypted file sharing')).toBeInTheDocument();
   });
 
   it('should render the configured name and tagline', async () => {

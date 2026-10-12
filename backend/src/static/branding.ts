@@ -125,9 +125,15 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/** The tagline an instance shows when its operator sets none. */
+export const DEFAULT_TAGLINE = 'Anonymous encrypted file sharing';
+
 function describePage(branding: Branding): string {
+  const what = 'anonymous, zero-knowledge encrypted file sharing with expiring vaults.';
+  // The built-in tagline says what that sentence says, so the description does not say it twice.
+  if (branding.tagline === DEFAULT_TAGLINE) return `${branding.name} — ${what}`;
   const lead = /[\p{L}\p{N}]$/u.test(branding.tagline) ? `${branding.tagline}.` : branding.tagline;
-  return `${branding.name} — ${lead} Anonymous, zero-knowledge encrypted file sharing with expiring vaults.`;
+  return `${branding.name} — ${lead} A${what.slice(1)}`;
 }
 
 /** Colours the browser's own UI around the page; `auto` gets one per colour scheme. */
