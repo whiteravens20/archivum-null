@@ -184,7 +184,7 @@ export default function Home() {
       }
 
       // 4. Build vault URL with key + encoded filename in fragment.
-      // Fragment NEVER reaches the server — zero-trust is fully preserved.
+      // Fragment NEVER reaches the server — zero-knowledge is fully preserved.
       // Format: #<key43chars>.<base64url(filename)>
       // '.' is not a valid base64url char, so it acts as an unambiguous separator.
       const encodedName = (() => {
