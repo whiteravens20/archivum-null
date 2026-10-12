@@ -89,9 +89,16 @@ jobs:
       - name: Tests
         run: npm run test
 
+  # The firewall rules are applied for real on the runner, so its release matters
+  # here as nowhere else: the job names its images and runs on both. The run on
+  # 24.04 keeps the name branch protection asks for.
   scripts:
-    name: Scripts
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os == 'ubuntu-24.04' && 'Scripts' || format('Scripts ({0})', matrix.os) }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     permissions:
       contents: read
 

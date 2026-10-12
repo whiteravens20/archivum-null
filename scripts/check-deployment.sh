@@ -6,8 +6,9 @@
 # container cannot open connections of its own.
 #
 # The last part is tested, not read off the rules: the script makes the container
-# try a connection to a public address and one to this host. With the egress rules
-# in place neither leaves the container's bridge.
+# try a connection to a public address, one to this host and one to the reverse
+# proxy named in TRUST_PROXY. With the egress rules in place none of them leaves the
+# container's bridge.
 #
 # Usage:
 #   sudo ./scripts/check-deployment.sh [--tunnel-iface wg0] [--port 3000]
@@ -65,12 +66,26 @@ if [[ -z "$TUNNEL_IFACE" ]]; then
   done
 fi
 
-# ── Load .env for HOST_BIND_ADDRESS ───────────────────────────────────────────
-HOST_BIND_ADDRESS=""
-if [[ -f "$ENV_FILE" ]]; then
-  HOST_BIND_ADDRESS=$(grep -E '^HOST_BIND_ADDRESS=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]' || true)
-fi
-HOST_BIND_ADDRESS="${HOST_BIND_ADDRESS:-}"
+# ── Settings of the deployment ────────────────────────────────────────────────
+# setting <NAME> — the value the container was started with. Compose has read the
+# environment file by then, so its rules for quotes and for a comment after a value
+# are already applied. The file is read only when the container does not carry the
+# variable, and then by those same rules.
+setting() {
+  local value
+  value=$(inspect '{{range .Config.Env}}{{println .}}{{end}}' | sed -n "s/^$1=//p" | tail -1)
+  if [[ -z "$value" && -f "$ENV_FILE" ]]; then
+    value=$(sed -n "s/^$1=//p" "$ENV_FILE" | tail -1)
+    case "$value" in
+      \"*) value="${value#\"}"; value="${value%%\"*}" ;;
+      \'*) value="${value#\'}"; value="${value%%\'*}" ;;
+      *)   value=$(sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//' <<< "$value") ;;
+    esac
+  fi
+  printf '%s' "$value"
+}
+HOST_BIND_ADDRESS=$(setting HOST_BIND_ADDRESS)
+TRUST_PROXY=$(setting TRUST_PROXY)
 
 # ── Check 1: Container is running ─────────────────────────────────────────────
 header "1. Container status"
@@ -211,7 +226,7 @@ fi
 
 # ── Check 6: Firewall rules ────────────────────────────────────────────────────
 # Rules made by setup-firewall.sh: the nftables table "inet archivum_null", or the
-# iptables chain ARCHIVUM-EGRESS entered from DOCKER-USER.
+# iptables chain ARCHIVUM-EGRESS in the mangle table, entered from FORWARD there.
 header "6. Firewall rules"
 # The $name below belongs to Docker's template, not to the shell.
 # shellcheck disable=SC2016
@@ -229,19 +244,24 @@ else
     pass "nftables: table inet archivum_null is loaded"
     nft list table inet archivum_null 2>/dev/null | grep -q 'chain ingress' && GUARD_FOUND=true
   fi
-  if command -v iptables &>/dev/null && iptables -S ARCHIVUM-EGRESS &>/dev/null; then
+  if command -v iptables &>/dev/null && iptables -t mangle -S ARCHIVUM-EGRESS &>/dev/null; then
     RULES_FOUND=true
-    FIRST_RULE=$(iptables -S DOCKER-USER 2>/dev/null | grep '^-A ' | head -1 || true)
-    if iptables -C DOCKER-USER -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null \
-       || iptables -C FORWARD -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null; then
-      pass "iptables: ARCHIVUM-EGRESS is entered for traffic from $BRIDGE"
+    if iptables -t mangle -C FORWARD -i "$BRIDGE" -j ARCHIVUM-EGRESS 2>/dev/null; then
+      pass "iptables: ARCHIVUM-EGRESS in the mangle table is entered for traffic from $BRIDGE"
     else
       fail "iptables: the chain ARCHIVUM-EGRESS exists, but nothing sends traffic from $BRIDGE into it — run setup-firewall.sh again"
     fi
+    iptables -t mangle -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
+  fi
+  # Version 3.2.0 of setup-firewall.sh kept the same chains in the filter table.
+  if command -v iptables &>/dev/null && iptables -S ARCHIVUM-EGRESS &>/dev/null; then
+    RULES_FOUND=true
+    iptables -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
+    warn "iptables: the rules are in the filter table, where version 3.2.0 put them. An ACCEPT that another program (a VPN client, a second firewall) places ahead of them lets traffic pass them by. Run setup-firewall.sh again; it moves them."
+    FIRST_RULE=$(iptables -S DOCKER-USER 2>/dev/null | grep '^-A ' | head -1 || true)
     if [[ "$FIRST_RULE" == *"-j ACCEPT"* ]]; then
       fail "iptables: DOCKER-USER starts with an ACCEPT ($FIRST_RULE) — traffic it matches skips the rules after it"
     fi
-    iptables -S ARCHIVUM-INGRESS &>/dev/null && GUARD_FOUND=true
   fi
   if [[ "$RULES_FOUND" == "false" ]]; then
     fail "No egress rules found — run: sudo bash scripts/setup-firewall.sh --mode docker"
@@ -296,6 +316,37 @@ else
       fail "The container can reach this host ($GATEWAY:22: $HOST_RESULT) — whatever the host listens on is exposed to it"
     fi
   fi
+
+  # The reverse proxy opens connections to the app, never the other way round. Its
+  # address is the one in TRUST_PROXY. It sits on the tunnel, the one network that a
+  # VPN client's own firewall rules are most likely to let traffic into.
+  # A proxy inside the container's own network is left out: what stays on a bridge
+  # is not routed, and no rule on this host could cut it off.
+  ip4_number() { local IFS=. a b c d; read -r a b c d <<< "$1"; echo $(( (a << 24) | (b << 16) | (c << 8) | d )); }
+  in_own_network() {
+    local net prefix mask
+    for net in $(inspect '{{range .NetworkSettings.Networks}}{{.IPAddress}}/{{.IPPrefixLen}} {{end}}'); do
+      prefix="${net#*/}"
+      [[ "${net%/*}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ && "$prefix" =~ ^[0-9]+$ ]] || continue
+      mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+      [[ $(( $(ip4_number "$1") & mask )) -eq $(( $(ip4_number "${net%/*}") & mask )) ]] && return 0
+    done
+    return 1
+  }
+  for PROXY in ${TRUST_PROXY//,/ }; do
+    [[ "$PROXY" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || continue
+    in_own_network "$PROXY" && continue
+    REACHED=""
+    for PROXY_PORT in 443 80 22; do
+      PROXY_RESULT=$(try "$PROXY" "$PROXY_PORT")
+      if ! blocked "$PROXY_RESULT"; then REACHED="$PROXY_PORT: $PROXY_RESULT"; break; fi
+    done
+    if [[ -z "$REACHED" ]]; then
+      pass "The container cannot open a connection to the reverse proxy ($PROXY, ports 443, 80 and 22)"
+    else
+      fail "The container can reach the reverse proxy ($PROXY:$REACHED) — and with it the network the tunnel leads to"
+    fi
+  done
 fi
 
 # ── Check 8: LAN reachability test ────────────────────────────────────────────
