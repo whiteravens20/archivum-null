@@ -490,7 +490,7 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By particip
 
 ## How the code is written and checked
 
-Archivum Null is built using AI coding tools. The tools write most of the code, tests and documentation; the maintainer decides what gets built and is responsible for everything that is merged. The project relies on checks that anyone can inspect, and its releases are verified by a group of human testers.
+Archivum Null is built using AI coding tools. The tools write most of the code, tests and documentation; the maintainer decides what gets built and is responsible for everything that is merged. The project relies on checks that anyone can inspect, and before a release is published a group of human testers tries the release candidate at the maintainer's request.
 
 **What a change goes through**
 
@@ -504,13 +504,6 @@ Archivum Null is built using AI coding tools. The tools write most of the code, 
 - The security design was specified by the maintainer rather than left to a tool's defaults: AES-256-GCM in the browser, the key only in the URL fragment, no plaintext on the server.
 - The [threat model](#threat-model--what-we-protect-against) and its [limitations](#threat-model-limitations) are the maintainer's own assessment.
 - These modules are read line by line by the maintainer whenever they change: `frontend/src/crypto/encrypt.ts`, `backend/src/middleware/basicAuth.ts`, `backend/src/storage/local.ts` (the path traversal guard) and the vault expiry logic in `backend/src/vault/manager.ts`.
-
-**Before a release**
-
-- A release is cut only from `main`, and nothing reaches `main` without passing every check above. That rule binds the maintainer too.
-- The release candidate is built from a clean export and run the way the Compose file runs it. In a real browser, files are encrypted and uploaded, opened from their links in a fresh session and decrypted, and everything the browser sent is searched for the key. What was checked is written into the release pull request ([#196](https://github.com/whiteravens20/archivum-null/pull/196) for v3.1.1).
-- Before a release is published, a group of human testers tries the release candidate at the maintainer's request and reports what they find.
-- Each release image and tarball carries a Sigstore build provenance that `gh attestation verify` checks.
 
 If something looks wrong, open an issue. For a vulnerability, follow [SECURITY.md](SECURITY.md).
 
