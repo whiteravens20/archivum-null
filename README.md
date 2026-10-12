@@ -490,7 +490,7 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By particip
 
 ## How the code is written and checked
 
-Archivum Null is built by one maintainer using AI coding tools. The tools write most of the code, tests and documentation; the maintainer decides what gets built and is responsible for everything that is merged. There is no second human reviewer, so the project relies on checks that anyone can inspect.
+Archivum Null is built using AI coding tools. The tools write most of the code, tests and documentation; the maintainer decides what gets built and is responsible for everything that is merged. The project relies on checks that anyone can inspect.
 
 **What a change goes through**
 
