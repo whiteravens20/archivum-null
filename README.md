@@ -267,7 +267,7 @@ Images are published to `ghcr.io/whiteravens20/archivum-null`.
 | `:dev` | Snapshot build, run by hand from `dev` | ❌ No | Snapshot — development builds, may be broken |
 | `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
 
-> **Only `:main`, `:latest` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`.
+> **Only `:main`, `:latest` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`, and only once the scan of the pushed image has passed.
 > `:latest` usually earns its bad reputation by meaning "the last image built". It cannot mean that here: the release workflow only ever runs on a semver tag, and snapshots are pushed under `:dev` / `:edge` by a different workflow. So `:latest` is simply another name for `:main` — same image, same digest.
 > `:edge` and `:dev` are CI snapshot builds — do not use them for any internet-facing deployment.
 
