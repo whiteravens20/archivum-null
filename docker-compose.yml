@@ -53,6 +53,10 @@ services:
     volumes:
       - vault-data:/data/vaults
       - ./TOS.md:/app/TOS.md:ro
+      # A translation of the terms for an interface language (optional), named by the
+      # language code. Create the file before uncommenting: for a file that does not
+      # exist, Docker mounts an empty directory in its place.
+      # - ./TOS.pl.md:/app/TOS.pl.md:ro
       # Your own logo and icons (optional). Put the files in ./branding and uncomment;
       # docs/BRANDING.md lists the file names the server looks for.
       # - ./branding:/app/branding:ro
