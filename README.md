@@ -461,6 +461,8 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 
 The TOS lives in [TOS.md](TOS.md) at the repository root. The backend converts it from Markdown to HTML once, at startup, and serves the result at `/api/tos`; the frontend shows it at the `/tos` route. Raw HTML in the file is shown as text, and links are kept to web and mail addresses and to paths on the site. Restart after editing the file.
 
+Without a readable TOS.md the server logs a warning at startup, and the footer leaves out its link to the terms. With Docker Compose that happens when `./TOS.md` is missing on the host: Docker then mounts an empty directory in its place.
+
 For visitors in another [interface language](#languages), put a translation beside it, named by the language code: `TOS.pl.md` for Polish. The page shows the translation in the interface language, and `TOS.md` when there is none. All of them come to the page in one response, so the server is not told which one a visitor reads. With Docker Compose, mount each translation the way `TOS.md` is mounted; `docker-compose.yml` has the line to uncomment. The repository ships `TOS.md` alone.
 
 > **Legal notice:** The included TOS is a placeholder template and does not constitute legal advice. Consult a qualified lawyer before deploying a public service.
