@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadTerms, renderTerms } from '../static/terms.js';
+import { loadTerms, markNoTerms, renderTerms } from '../static/terms.js';
 
 describe('renderTerms', () => {
   it('should convert the formatting a terms document uses', () => {
@@ -157,9 +157,35 @@ describe('loadTerms', () => {
     warn.mockRestore();
   });
 
-  it('should serve nothing without TOS.md, translations or not', () => {
+  it('should serve nothing without TOS.md, translations or not, and say so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     write('TOS.pl.md', '# Regulamin');
 
     expect(loadTerms(dir)).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('TOS.md cannot be read'));
+    warn.mockRestore();
+  });
+
+  it('should serve nothing when TOS.md is a directory, and say so', () => {
+    // What Docker mounts when ./TOS.md is missing on the host
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fs.mkdirSync(path.join(dir, 'TOS.md'));
+
+    expect(loadTerms(dir)).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('TOS.md cannot be read'));
+    warn.mockRestore();
+  });
+});
+
+describe('markNoTerms', () => {
+  it('should put the tag in the head, once', () => {
+    const page = markNoTerms('<html><head>\n  <title>X</title>\n  </head><body></body></html>');
+
+    expect(page.match(/<meta name="terms" content="none" \/>/g)).toHaveLength(1);
+    expect(page.indexOf('name="terms"')).toBeLessThan(page.indexOf('</head>'));
+  });
+
+  it('should leave a page without a head as it is', () => {
+    expect(markNoTerms('<p>no head</p>')).toBe('<p>no head</p>');
   });
 });

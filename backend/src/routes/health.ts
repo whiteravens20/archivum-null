@@ -13,6 +13,8 @@ const TERMS_DIR = path.join(__dirname, '../../..');
 // and removes repeated syscall overhead. Converted here, not in the browser: see
 // static/terms.ts. Null when TOS.md is absent — the route returns 404.
 const terms = loadTerms(TERMS_DIR);
+/** Whether there are terms to show; without them the page is marked (static/terms.ts). */
+export const termsServed = terms !== null;
 
 export async function healthRoutes(app: FastifyInstance): Promise<void> {
   // Public runtime configuration for the frontend.

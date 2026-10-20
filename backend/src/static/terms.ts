@@ -75,6 +75,7 @@ export function loadTerms(dir: string): Terms | null {
   try {
     markdown = fs.readFileSync(path.join(dir, 'TOS.md'), 'utf-8');
   } catch {
+    console.warn('[WARN] TOS.md cannot be read as a file. The footer leaves out its link to the terms, and /tos says they could not be loaded.');
     return null;
   }
 
@@ -96,5 +97,14 @@ export function loadTerms(dir: string): Terms | null {
     }
   }
   return { terms: renderTerms(markdown), translations };
+}
+
+/**
+ * Mark a page served without terms. The footer reads the tag and leaves out its link to
+ * them, which would lead only to an error. Written into index.html once, at startup, as
+ * the branding is: the Content-Security-Policy allows no inline script to say it with.
+ */
+export function markNoTerms(indexHtml: string): string {
+  return indexHtml.replace(/[ \t]*<\/head>/i, (end) => `    <meta name="terms" content="none" />\n${end}`);
 }
 

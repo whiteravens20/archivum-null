@@ -9,6 +9,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type * as Terms from '../static/terms.js';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -429,6 +430,27 @@ describe('buildApp — branding on the served page', () => {
     expect(res.body).toContain('<title>Archivum Null</title>');
     expect(res.body).toContain('<meta name="application-name" content="Archivum Null" />');
     expect(res.body).toContain('<meta name="brand-tagline" content="Anonymous encrypted file sharing" />');
+  });
+
+  it('marks the page when there are no terms, for the footer to leave out its link', async () => {
+    vi.doMock('../static/terms.js', async (importOriginal) => ({
+      ...(await importOriginal<typeof Terms>()),
+      loadTerms: () => null,
+    }));
+    try {
+      const res = await (await start()).inject({ method: 'GET', url: '/' });
+
+      expect(res.body).toContain('<meta name="terms" content="none" />');
+      expect(res.body.indexOf('name="terms"')).toBeLessThan(res.body.indexOf('</head>'));
+    } finally {
+      vi.doUnmock('../static/terms.js');
+    }
+  });
+
+  it('leaves a page with terms unmarked', async () => {
+    const res = await (await start()).inject({ method: 'GET', url: '/' });
+
+    expect(res.body).not.toContain('name="terms"');
   });
 
   it('serves the configured name and tagline, escaped', async () => {
