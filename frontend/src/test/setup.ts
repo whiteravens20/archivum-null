@@ -6,4 +6,5 @@ afterEach(() => {
   if (typeof document === 'undefined') return;
   document.head.replaceChildren();
   document.documentElement.removeAttribute('data-theme');
+  document.documentElement.removeAttribute('lang');
 });

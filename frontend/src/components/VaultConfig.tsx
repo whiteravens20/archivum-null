@@ -1,3 +1,5 @@
+import { useI18n, type PluralKey } from '../i18n/i18n.ts';
+
 interface VaultConfigProps {
   ttl: number;
   maxDownloads: number;
@@ -6,14 +8,14 @@ interface VaultConfigProps {
   disabled?: boolean;
 }
 
-const TTL_OPTIONS = [
-  { label: '5 min', value: 300 },
-  { label: '30 min', value: 1800 },
-  { label: '1 hour', value: 3600 },
-  { label: '6 hours', value: 21600 },
-  { label: '24 hours', value: 86400 },
-  { label: '3 days', value: 259200 },
-  { label: '7 days', value: 604800 },
+const TTL_OPTIONS: { value: number; count: number; unit: PluralKey }[] = [
+  { value: 300, count: 5, unit: 'vaultConfig.minutes' },
+  { value: 1800, count: 30, unit: 'vaultConfig.minutes' },
+  { value: 3600, count: 1, unit: 'vaultConfig.hours' },
+  { value: 21600, count: 6, unit: 'vaultConfig.hours' },
+  { value: 86400, count: 24, unit: 'vaultConfig.hours' },
+  { value: 259200, count: 3, unit: 'vaultConfig.days' },
+  { value: 604800, count: 7, unit: 'vaultConfig.days' },
 ];
 
 const DOWNLOAD_OPTIONS = [1, 3, 5, 10, 25, 50, 100];
@@ -25,11 +27,12 @@ export default function VaultConfig({
   onMaxDownloadsChange,
   disabled,
 }: VaultConfigProps) {
+  const { t, plural } = useI18n();
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label className="block text-xs text-vault-muted mb-2 uppercase tracking-wider">
-          Expires after
+          {t('vaultConfig.expiresAfter')}
         </label>
         <select
           value={ttl}
@@ -41,7 +44,7 @@ export default function VaultConfig({
         >
           {TTL_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
-              {opt.label}
+              {plural(opt.unit, opt.count)}
             </option>
           ))}
         </select>
@@ -49,7 +52,7 @@ export default function VaultConfig({
 
       <div>
         <label className="block text-xs text-vault-muted mb-2 uppercase tracking-wider">
-          Max downloads
+          {t('vaultConfig.maxDownloads')}
         </label>
         <select
           value={maxDownloads}
@@ -61,7 +64,7 @@ export default function VaultConfig({
         >
           {DOWNLOAD_OPTIONS.map((n) => (
             <option key={n} value={n}>
-              {n} {n === 1 ? 'download' : 'downloads'}
+              {plural('vaultConfig.downloads', n)}
             </option>
           ))}
         </select>

@@ -4,6 +4,15 @@
  * the tests show, where no backend has touched the page.
  */
 
+import { en } from './i18n/messages/en.ts';
+
+/**
+ * The tagline of an instance whose operator sets none, the same as the server's. The
+ * pages show it in the visitor's language; a tagline of the operator's own is shown as
+ * they wrote it.
+ */
+export const DEFAULT_TAGLINE = en['brand.tagline'];
+
 /** `auto` follows the visitor's system setting. */
 export type Theme = 'dark' | 'light' | 'auto';
 
@@ -25,7 +34,7 @@ export function getBranding(): Branding {
   const theme = document.documentElement.dataset.theme;
   return {
     name: meta('application-name') ?? 'Archivum Null',
-    tagline: meta('brand-tagline') ?? 'Anonymous encrypted file sharing',
+    tagline: meta('brand-tagline') ?? DEFAULT_TAGLINE,
     theme: theme === 'light' || theme === 'auto' ? theme : 'dark',
     logo: meta('brand-logo') ?? '/logo-symbol.webp',
     logoLight: meta('brand-logo-light') ?? '/logo-symbol-light.webp',

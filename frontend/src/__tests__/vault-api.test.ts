@@ -58,7 +58,17 @@ describe('vault API client', () => {
       });
 
       const { getVaultInfo } = await import('../api/vault.js');
-      await expect(getVaultInfo('bad-id')).rejects.toThrow('Vault not found');
+      const result = getVaultInfo('bad-id');
+      await expect(result).rejects.toThrow('Vault not found');
+      // The pages choose what to say from the status, not from the server's words
+      await expect(result).rejects.toMatchObject({ name: 'ApiError', status: 404 });
+    });
+
+    it('should report a request that got no answer without a status', async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+      const { getVaultInfo } = await import('../api/vault.js');
+      await expect(getVaultInfo('x')).rejects.toMatchObject({ name: 'ApiError', status: null });
     });
 
     it('should throw generic error when JSON parsing fails', async () => {
@@ -108,7 +118,9 @@ describe('vault API client', () => {
       });
 
       const { downloadVault } = await import('../api/vault.js');
-      await expect(downloadVault('bad-id')).rejects.toThrow('Download failed');
+      const result = downloadVault('bad-id');
+      await expect(result).rejects.toThrow('Download failed');
+      await expect(result).rejects.toMatchObject({ name: 'ApiError', status: 404 });
     });
   });
 
@@ -177,6 +189,7 @@ describe('vault API client', () => {
       (XhrCtor._instance.onerror as () => void)();
 
       await expect(promise).rejects.toThrow('Network error');
+      await expect(promise).rejects.toMatchObject({ name: 'ApiError', status: null });
     });
 
     it('should reject on non-201 response', async () => {
@@ -195,6 +208,7 @@ describe('vault API client', () => {
       (XhrCtor._instance.onload as () => void)();
 
       await expect(promise).rejects.toThrow('File too large');
+      await expect(promise).rejects.toMatchObject({ name: 'ApiError', status: 413 });
     });
 
     it('should call onProgress during upload', async () => {
@@ -396,7 +410,30 @@ describe('vault API client', () => {
       await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000);
 
       await outcome;
+      await expect(result).rejects.toMatchObject({ name: 'ApiError', status: 500 });
       expect(calls).toEqual(['init', 'chunk 0', 'chunk 0', 'chunk 0', 'chunk 0', 'abort']);
+    });
+
+    it('should report a chunk that never got an answer without a status', async () => {
+      const lost = () => new TypeError('Failed to fetch');
+      const calls = mockFetch([lost(), lost(), lost(), lost()]);
+
+      const result = upload();
+      const outcome = expect(result).rejects.toMatchObject({ name: 'ApiError', status: null });
+      await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000);
+
+      await outcome;
+      expect(calls).toEqual(['init', 'chunk 0', 'chunk 0', 'chunk 0', 'chunk 0', 'abort']);
+    });
+
+    it('should pass a cancellation on as it is, not as a request without an answer', async () => {
+      const ac = new AbortController();
+      ac.abort(new DOMException('Upload cancelled', 'AbortError'));
+      globalThis.fetch = vi.fn((_url: string, options?: RequestInit) =>
+        Promise.reject(options?.signal?.reason)
+      ) as unknown as typeof fetch;
+
+      await expect(upload(ac.signal)).rejects.toMatchObject({ name: 'AbortError' });
     });
 
     it('should abort the session when completion fails', async () => {

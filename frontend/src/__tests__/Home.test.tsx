@@ -127,6 +127,48 @@ describe('Home', () => {
     expect(screen.getByText(/AES-256-GCM/)).toBeInTheDocument();
   });
 
+  describe('a failed upload', () => {
+    async function uploadAndFail(err: unknown) {
+      const { uploadVault } = await import('../api/vault.js');
+      vi.mocked(uploadVault).mockRejectedValue(err);
+      const { default: Home } = await import('../pages/Home.js');
+      const { container } = render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>
+      );
+      await act(async () => {
+        fireEvent.change(container.querySelector('input[type="file"]')!, {
+          target: { files: [new File(['x'], 'test.txt')] },
+        });
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Encrypt & Upload' }));
+      });
+    }
+
+    it('should say why from the status, not from what the server wrote', async () => {
+      const { ApiError } = await import('../api/errors.js');
+      await uploadAndFail(new ApiError(507, 'Storage quota exceeded. Please try again later or contact the administrator.'));
+      expect(
+        await screen.findByText('The server is out of storage space. Try again later or contact the administrator.')
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Storage quota exceeded/)).not.toBeInTheDocument();
+    });
+
+    it('should say the server could not be reached when no answer came', async () => {
+      const { ApiError } = await import('../api/errors.js');
+      await uploadAndFail(new ApiError(null, 'Network error during upload'));
+      expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument();
+    });
+
+    it('should not show the text of an error that is not a refused request', async () => {
+      await uploadAndFail(new DOMException('The requested file could not be read', 'NotReadableError'));
+      expect(await screen.findByText('The upload failed. Try again.')).toBeInTheDocument();
+      expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument();
+    });
+  });
+
   describe('runtime configuration', () => {
     async function renderWithConfigResponse(response: unknown) {
       const fetchMock = vi.fn().mockResolvedValue(response);

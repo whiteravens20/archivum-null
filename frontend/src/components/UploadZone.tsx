@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { formatBytes } from '../format.ts';
+import { useI18n } from '../i18n/i18n.ts';
 
 interface UploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -8,8 +9,9 @@ interface UploadZoneProps {
 }
 
 export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZoneProps) {
+  const { t, locale } = useI18n();
   const [isDragOver, setIsDragOver] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<'uploadZone.tooLarge' | 'uploadZone.empty' | 'uploadZone.unreadable' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Counter-based drag tracking: avoids false dragleave when cursor crosses child elements.
   // Every dragenter increments, every dragleave decrements — isDragOver only clears at 0.
@@ -19,11 +21,11 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
     (file: File) => {
       setError(null);
       if (file.size > maxSize) {
-        setError(`File too large — maximum allowed size is ${formatBytes(maxSize)}`);
+        setError('uploadZone.tooLarge');
         return;
       }
       if (file.size === 0) {
-        setError('File is empty');
+        setError('uploadZone.empty');
         return;
       }
       onFileSelect(file);
@@ -81,13 +83,13 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
         if (entry?.isFile) {
           (entry as FileSystemFileEntry).file(
             (f) => validateAndSelect(f),
-            () => setError('Could not read the dropped file — try using the file picker instead'),
+            () => setError('uploadZone.unreadable'),
           );
           return;
         }
       }
 
-      setError('Could not read the dropped file — try using the file picker instead');
+      setError('uploadZone.unreadable');
     },
     [disabled, validateAndSelect]
   );
@@ -125,15 +127,17 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
           {isDragOver ? '↓' : '◈'}
         </div>
         <p className="text-vault-text-soft">
-          {isDragOver ? 'Drop file here' : 'Drop file or click to select'}
+          {isDragOver ? t('uploadZone.dropHere') : t('uploadZone.prompt')}
         </p>
         <p className="text-xs text-vault-subtle">
-          Max size: {formatBytes(maxSize)} · Encrypted client-side before upload
+          {t('uploadZone.hint', { size: formatBytes(maxSize, locale) })}
         </p>
       </div>
 
       {error && (
-        <p className="mt-3 text-vault-danger text-sm pointer-events-none">{error}</p>
+        <p className="mt-3 text-vault-danger text-sm pointer-events-none">
+          {t(error, { size: formatBytes(maxSize, locale) })}
+        </p>
       )}
     </div>
   );
