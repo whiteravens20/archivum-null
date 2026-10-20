@@ -404,7 +404,7 @@ Branding is cosmetic only: no setting takes a URL, nothing is loaded from anothe
 
 The interface is in English and Polish. A page opens in the first of the browser's preferred languages that it has, and in English otherwise. The switch at the bottom of every page, the admin panel's included, changes the language on the spot: an upload under way, a chosen file and a solved CAPTCHA stay as they are. The choice lives in the open page only. It is not put into the address, a cookie or the browser's storage, so the server never learns it, and a reload starts from the browser's languages again.
 
-The built-in tagline is translated; a tagline of the operator's own and the terms of service are shown as written. To correct a translation or add a language, see [CONTRIBUTING.md](CONTRIBUTING.md#translations).
+The built-in tagline is translated, and a tagline of the operator's own is shown as written. The terms of service are shown in the interface language when the operator has translated them, see [Terms of Service](#terms-of-service). To correct a translation or add a language, see [CONTRIBUTING.md](CONTRIBUTING.md#translations).
 
 ## Security
 
@@ -461,6 +461,8 @@ This is the zero-knowledge guarantee: **a server compromise exposes only encrypt
 
 The TOS lives in [TOS.md](TOS.md) at the repository root. The backend converts it from Markdown to HTML once, at startup, and serves the result at `/api/tos`; the frontend shows it at the `/tos` route. Raw HTML in the file is shown as text, and links are kept to web and mail addresses and to paths on the site. Restart after editing the file.
 
+For visitors in another [interface language](#languages), put a translation beside it, named by the language code: `TOS.pl.md` for Polish. The page shows the translation in the interface language, and `TOS.md` when there is none. All of them come to the page in one response, so the server is not told which one a visitor reads. With Docker Compose, mount each translation the way `TOS.md` is mounted; `docker-compose.yml` has the line to uncomment. The repository ships `TOS.md` alone.
+
 > **Legal notice:** The included TOS is a placeholder template and does not constitute legal advice. Consult a qualified lawyer before deploying a public service.
 
 ## Zero-Knowledge Disclaimer
@@ -479,6 +481,7 @@ Before exposing this service publicly:
 
 - [ ] Replace [TOS.md](TOS.md) with a legally reviewed document for your jurisdiction
 - [ ] Add your contact information to TOS.md (`Replace with your contact information`)
+- [ ] If you translated the terms (`TOS.pl.md`), change the translation whenever TOS.md changes
 - [ ] Set a strong `ADMIN_PASSWORD` — never leave it as the default
 - [ ] Set `HOST_BIND_ADDRESS` to your tunnel IP — never expose port 3000 publicly
 - [ ] Set `MAX_TOTAL_STORAGE` to what the disk under the vaults can spare — without it, uploads are limited only by that disk

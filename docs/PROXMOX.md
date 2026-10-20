@@ -231,7 +231,7 @@ bash install-lxc.sh --update <vmid>
 bash -c "$(wget -qLO - https://github.com/whiteravens20/archivum-null/raw/main/scripts/install-lxc.sh)" -- --update <vmid>
 ```
 
-It offers a snapshot, stops the service, checks out the newest release tag, rebuilds, and starts the service again. Your `.env`, your `TOS.md` and the vaults are kept. A second run with nothing new does nothing.
+It offers a snapshot, stops the service, checks out the newest release tag, rebuilds, and starts the service again. Your `.env`, your `TOS.md` with any translations of it, and the vaults are kept. A second run with nothing new does nothing.
 
 **An install made by an earlier version of the installer is migrated by the same command.** Those ran the app as root, from the development branch, with a world-readable `.env`. After the update the app runs as `archivum` under the sandboxed unit, from a release tag, and the vaults are still there. Two things the update leaves to you, and tells you about: a storage quota, if `MAX_TOTAL_STORAGE` is still `0`, and the inbound side of the firewall file.
 
