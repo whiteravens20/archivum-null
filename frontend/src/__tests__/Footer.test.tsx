@@ -84,4 +84,15 @@ describe('Footer', () => {
     expect(link).toBeInTheDocument();
     expect(link.closest('a')).toHaveAttribute('href', '/tos');
   });
+
+  it('should leave out the Terms of Service link when the instance has no terms', () => {
+    setBrandingTags({ terms: 'none' });
+    render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>
+    );
+    expect(screen.queryByText('Terms of Service')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Source' })).toBeInTheDocument();
+  });
 });

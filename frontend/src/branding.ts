@@ -30,6 +30,14 @@ function meta(name: string): string | undefined {
   return document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content || undefined;
 }
 
+/**
+ * Whether the instance has terms of service. The server marks a page it serves without
+ * them (backend/src/static/terms.ts), and the footer then leaves out its link.
+ */
+export function hasTerms(): boolean {
+  return meta('terms') !== 'none';
+}
+
 export function getBranding(): Branding {
   const theme = document.documentElement.dataset.theme;
   return {

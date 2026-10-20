@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DEFAULT_TAGLINE, getBranding } from '../branding.ts';
+import { DEFAULT_TAGLINE, getBranding, hasTerms } from '../branding.ts';
 import { isLanguage, LANGUAGE_NAMES, LANGUAGES, useI18n } from '../i18n/i18n.ts';
 
 export default function Footer() {
@@ -24,13 +24,17 @@ export default function Footer() {
           >
             {t('footer.source')}
           </a>
-          <span className="text-vault-secondary/50">|</span>
-          <Link
-            to="/tos"
-            className="hover:text-vault-accent-ink transition-colors"
-          >
-            {t('footer.terms')}
-          </Link>
+          {hasTerms() && (
+            <>
+              <span className="text-vault-secondary/50">|</span>
+              <Link
+                to="/tos"
+                className="hover:text-vault-accent-ink transition-colors"
+              >
+                {t('footer.terms')}
+              </Link>
+            </>
+          )}
         </div>
         <span>{closing}</span>
       </div>
