@@ -1,8 +1,9 @@
 import { createContext, createElement, Fragment, useContext, type ReactNode } from 'react';
 import { en } from './messages/en.ts';
+import { pl } from './messages/pl.ts';
 
 /** The interface languages. English is the source the others translate. */
-export const LANGUAGES = ['en'] as const;
+export const LANGUAGES = ['en', 'pl'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 type En = typeof en;
@@ -29,7 +30,7 @@ export type Message = {
   [K in TextKey]: [Placeholders<En[K]>] extends [never] ? { key: K } : { key: K; vars: Vars<K> };
 }[TextKey];
 
-const MESSAGES: Record<Language, Messages> = { en };
+export const MESSAGES: Record<Language, Messages> = { en, pl };
 
 export interface Translator {
   lang: Language;
