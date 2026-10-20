@@ -1,24 +1,18 @@
 import type { FastifyInstance } from 'fastify';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
-import { renderTerms } from '../static/terms.js';
+import { loadTerms } from '../static/terms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TOS_PATH = path.join(__dirname, '../../../TOS.md');
+/** Where TOS.md and its translations are: the repository root, /app in the image. */
+const TERMS_DIR = path.join(__dirname, '../../..');
 
 // Read TOS once at module load — static file, no per-request I/O needed.
 // Eliminates the CodeQL js/missing-rate-limiting finding (file access in handler)
-// and removes repeated syscall overhead.
-let tosMarkdown: string | null = null;
-try {
-  tosMarkdown = fs.readFileSync(TOS_PATH, 'utf-8');
-} catch {
-  // TOS file absent — route will return 404
-}
-// Converted here, not in the browser: see static/terms.ts.
-const tosHtml = tosMarkdown === null ? null : renderTerms(tosMarkdown);
+// and removes repeated syscall overhead. Converted here, not in the browser: see
+// static/terms.ts. Null when TOS.md is absent — the route returns 404.
+const terms = loadTerms(TERMS_DIR);
 
 export async function healthRoutes(app: FastifyInstance): Promise<void> {
   // Public runtime configuration for the frontend.
@@ -48,9 +42,9 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/tos', async (_request, reply) => {
-    if (tosHtml === null) {
+    if (terms === null) {
       return reply.status(404).send({ error: 'TOS not found' });
     }
-    return reply.type('text/html; charset=utf-8').send(tosHtml);
+    return reply.send(terms);
   });
 }

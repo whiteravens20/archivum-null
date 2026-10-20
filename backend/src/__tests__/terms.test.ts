@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderTerms } from '../static/terms.js';
+import { loadTerms, renderTerms } from '../static/terms.js';
 
 describe('renderTerms', () => {
   it('should convert the formatting a terms document uses', () => {
@@ -100,5 +101,65 @@ describe('renderTerms', () => {
     expect(html).toMatch(/^<h1>Terms of Service/);
     expect(html.match(/<h2>/g)).toHaveLength(10);
     expect(html).not.toMatch(/<script/i);
+  });
+});
+
+describe('loadTerms', () => {
+  let dir: string;
+  const write = (name: string, text: string) => fs.writeFileSync(path.join(dir, name), text);
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'terms-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('should take the translations beside TOS.md, each by its language code', () => {
+    write('TOS.md', '# Terms');
+    write('TOS.pl.md', '# Regulamin');
+
+    expect(loadTerms(dir)).toEqual({
+      terms: '<h1>Terms</h1>\n',
+      translations: { pl: '<h1>Regulamin</h1>\n' },
+    });
+  });
+
+  it('should take no other file for a translation', () => {
+    write('TOS.md', '# Terms');
+    for (const name of ['TOS.PL.md', 'TOS.pl-PL.md', 'TOS.pol.md', 'TOS.p.md', 'TOS.pl.md.bak', 'TOS.pl.txt', 'tos.pl.md']) {
+      write(name, '# Not a translation');
+    }
+
+    expect(loadTerms(dir)?.translations).toEqual({});
+  });
+
+  it('should convert a translation the way it converts TOS.md', () => {
+    write('TOS.md', '# Terms');
+    write('TOS.pl.md', 'Przed <script>alert(1)</script> po. [link](javascript:alert(1))');
+
+    const html = loadTerms(dir)!.translations.pl;
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('should skip a translation that is not a file, and say so', () => {
+    // What Docker leaves for a bind mount whose file does not exist
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    write('TOS.md', '# Terms');
+    fs.mkdirSync(path.join(dir, 'TOS.de.md'));
+    write('TOS.pl.md', '# Regulamin');
+
+    expect(Object.keys(loadTerms(dir)!.translations)).toEqual(['pl']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('TOS.de.md'));
+    warn.mockRestore();
+  });
+
+  it('should serve nothing without TOS.md, translations or not', () => {
+    write('TOS.pl.md', '# Regulamin');
+
+    expect(loadTerms(dir)).toBeNull();
   });
 });

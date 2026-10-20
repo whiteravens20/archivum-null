@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Marked } from 'marked';
 import { escapeHtml } from './branding.js';
 
@@ -50,3 +52,49 @@ const marked = new Marked({
 export function renderTerms(markdown: string): string {
   return marked.parse(markdown, { async: false });
 }
+
+/** The terms an instance serves, as HTML. */
+export interface Terms {
+  /** TOS.md, in whatever language the operator wrote it. */
+  terms: string;
+  /** A translation of it per language code: `pl` for TOS.pl.md. */
+  translations: Record<string, string>;
+}
+
+/** A translation is named for a two-letter language code, the way the interface languages are. */
+const TRANSLATION = /^TOS\.([a-z]{2})\.md$/;
+
+/**
+ * Read TOS.md and the translations beside it from a directory, and convert them. Null
+ * when there is no TOS.md. All of them go to the page in one response, which shows the
+ * translation in the interface language, or TOS.md when there is none: asking for one
+ * language would tell the server which language the visitor chose.
+ */
+export function loadTerms(dir: string): Terms | null {
+  let markdown: string;
+  try {
+    markdown = fs.readFileSync(path.join(dir, 'TOS.md'), 'utf-8');
+  } catch {
+    return null;
+  }
+
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(dir).sort();
+  } catch {
+    // A directory that can be read from but not listed: TOS.md alone
+  }
+  const translations: Record<string, string> = {};
+  for (const name of names) {
+    const lang = TRANSLATION.exec(name)?.[1];
+    if (!lang) continue;
+    try {
+      translations[lang] = renderTerms(fs.readFileSync(path.join(dir, name), 'utf-8'));
+    } catch {
+      // Docker creates a directory for a bind mount whose file does not exist
+      console.warn(`[WARN] ${name} cannot be read as a file. The terms are served without this translation.`);
+    }
+  }
+  return { terms: renderTerms(markdown), translations };
+}
+
