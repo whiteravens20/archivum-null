@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { formatBytes } from '../format.ts';
-import { useI18n } from '../i18n/i18n.ts';
+import { formatBytes, formatDuration } from '../format.ts';
+import { useI18n, type Message } from '../i18n/i18n.ts';
 
 interface VaultMeta {
   vaultId: string;
@@ -36,21 +36,16 @@ interface VersionInfo {
   uptime: number;
 }
 
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
+/** The setting that turns the update check on, named where the panel says it is off. */
+const UPDATE_CHECK_SETTING = 'UPDATE_CHECK_ENABLED=true';
 
 export default function Admin() {
-  const { locale } = useI18n();
+  const { t, rich, message, locale } = useI18n();
   const [stats, setStats] = useState<Stats | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [vaults, setVaults] = useState<VaultMeta[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // Kept as a message, so a change of language translates it on screen too
+  const [error, setError] = useState<Message | null>(null);
   const [loading, setLoading] = useState(true);
   const [auth, setAuth] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
@@ -77,12 +72,12 @@ export default function Admin() {
       ]);
 
       if (statsRes.status === 401 || vaultsRes.status === 401) {
-        setError('Authentication failed');
+        setError({ key: 'admin.authFailed' });
         return false;
       }
 
       if (statsRes.status === 403) {
-        setError('Admin panel is disabled. Set ADMIN_PASSWORD in environment.');
+        setError({ key: 'admin.disabled' });
         return true;
       }
 
@@ -94,18 +89,19 @@ export default function Admin() {
           return true;
         }
         // The body says which limit it is: failed logins, or requests in general
+        // (backend/src/middleware/rateLimit.ts). Only that is taken from it; the words
+        // shown are the panel's own.
         const body: unknown = await limited.json().catch(() => null);
-        const reason =
-          typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
-            ? body.error.replace(/\s*Try again later\.?$/, '')
-            : 'Too many requests.';
-        setError(`${reason} Try again in ${retryAfter} s.`);
+        const lockedOut =
+          typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string' &&
+          body.error.startsWith('Too many failed login attempts');
+        setError({ key: lockedOut ? 'admin.lockedOut' : 'admin.rateLimited', vars: { seconds: retryAfter } });
         return false;
       }
 
       if (!statsRes.ok || !vaultsRes.ok) {
         const status = !statsRes.ok ? statsRes.status : vaultsRes.status;
-        setError(`Backend unavailable (${status}). Is the backend container running?`);
+        setError({ key: 'admin.backendUnavailable', vars: { status } });
         return true;
       }
 
@@ -114,8 +110,9 @@ export default function Admin() {
       setError(null);
       setRateLimited(null);
       signedIn.current = true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch');
+    } catch {
+      // No answer, or one that is not JSON
+      setError({ key: 'admin.noAnswer' });
     } finally {
       setLoading(false);
     }
@@ -181,18 +178,18 @@ export default function Admin() {
   if (!authenticated) {
     return (
       <div className="max-w-sm mx-auto px-4 py-20">
-        <h1 className="text-xl font-bold text-center mb-6 text-vault-heading">Admin Panel</h1>
+        <h1 className="text-xl font-bold text-center mb-6 text-vault-heading">{t('admin.title')}</h1>
         <form onSubmit={handleLogin} className="space-y-4">
           <input
             type="text"
-            placeholder="Username"
+            placeholder={t('admin.username')}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="w-full bg-vault-secondary border border-vault-line rounded px-3 py-2 text-sm text-vault-text focus:outline-none focus:border-vault-accent-ink"
           />
           <input
             type="password"
-            placeholder="Password"
+            placeholder={t('admin.password')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full bg-vault-secondary border border-vault-line rounded px-3 py-2 text-sm text-vault-text focus:outline-none focus:border-vault-accent-ink"
@@ -201,9 +198,9 @@ export default function Admin() {
             type="submit"
             className="w-full py-2 bg-vault-accent text-vault-on-accent rounded font-medium hover:bg-vault-accent/90"
           >
-            Login
+            {t('admin.login')}
           </button>
-          {error && <p className="text-vault-danger text-sm text-center">{error}</p>}
+          {error && <p className="text-vault-danger text-sm text-center">{message(error)}</p>}
         </form>
       </div>
     );
@@ -213,25 +210,24 @@ export default function Admin() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-xl font-bold text-vault-heading">Admin Panel</h1>
-          <p className="text-xs text-vault-subtle">Operational monitoring</p>
+          <h1 className="text-xl font-bold text-vault-heading">{t('admin.title')}</h1>
+          <p className="text-xs text-vault-subtle">{t('admin.subtitle')}</p>
         </div>
-        <a href="/" className="text-sm text-vault-accent-ink hover:underline">← Home</a>
+        <a href="/" className="text-sm text-vault-accent-ink hover:underline">{t('common.home')}</a>
       </div>
 
       {loading ? (
-        <p className="text-vault-subtle animate-pulse">Loading...</p>
+        <p className="text-vault-subtle animate-pulse">{t('admin.loading')}</p>
       ) : error ? (
         <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-4 text-vault-danger">
-          {error}
+          {message(error)}
         </div>
       ) : (
         <>
           {/* A poll the server refused: the figures stay, with a word on why they are not fresh */}
           {rateLimited !== null && (
             <div className="mb-6 rounded-lg border border-vault-warning-fill/30 bg-vault-warning-fill/10 p-4 text-sm text-vault-warning-strong">
-              The server is rate limiting this panel. The figures below are the last it sent.
-              They refresh by themselves once the limit lifts, in about {rateLimited} s.
+              {t('admin.rateLimitedNotice', { seconds: rateLimited })}
             </div>
           )}
 
@@ -241,12 +237,15 @@ export default function Admin() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-vault-warning-strong">
-                    Update available — {version.latest}
+                    {t('admin.updateAvailable', { version: version.latest })}
                   </p>
                   <p className="text-xs text-vault-muted mt-0.5">
-                    This instance runs {version.current}
-                    {version.publishedAt &&
-                      ` · released ${new Date(version.publishedAt).toLocaleDateString()}`}
+                    {version.publishedAt
+                      ? t('admin.runsReleased', {
+                          version: version.current,
+                          date: new Date(version.publishedAt).toLocaleDateString(locale),
+                        })
+                      : t('admin.runs', { version: version.current })}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 whitespace-nowrap">
@@ -257,7 +256,7 @@ export default function Admin() {
                       rel="noopener noreferrer"
                       className="text-xs font-medium text-vault-warning-strong hover:underline"
                     >
-                      View changes →
+                      {t('admin.viewChanges')}
                     </a>
                   )}
                   {version.releaseUrl && (
@@ -267,7 +266,7 @@ export default function Admin() {
                       rel="noopener noreferrer"
                       className="text-xs text-vault-muted hover:text-vault-text hover:underline"
                     >
-                      Release notes
+                      {t('admin.releaseNotes')}
                     </a>
                   )}
                 </div>
@@ -279,17 +278,18 @@ export default function Admin() {
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">Active Vaults</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">{t('admin.activeVaults')}</p>
                 <p className="text-lg font-bold text-vault-text">{stats.activeVaults}</p>
               </div>
 
               {/* Storage card — shows quota bar when limit is set */}
               <div className="bg-vault-secondary/50 rounded-lg p-4 sm:col-span-1">
-                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">Storage</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">{t('admin.storage')}</p>
                 {stats.storageQuotaBytes > 0 ? (() => {
                   const pct = Math.min(100, (stats.totalStorageBytes / stats.storageQuotaBytes) * 100);
                   const isNearFull = pct >= 90;
                   const isFull = pct >= 100;
+                  const percent = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(pct);
                   return (
                     <>
                       <p className={`text-lg font-bold ${isFull ? 'text-vault-danger' : isNearFull ? 'text-vault-warning' : 'text-vault-text'}`}>
@@ -304,7 +304,7 @@ export default function Admin() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-vault-subtle mt-1">{pct.toFixed(1)}% used</p>
+                      <p className="text-[10px] text-vault-subtle mt-1">{t('admin.storageUsed', { percent })}</p>
                     </>
                   );
                 })() : (
@@ -316,7 +316,7 @@ export default function Admin() {
               </div>
 
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">Version</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">{t('admin.version')}</p>
                 <p
                   className={`text-lg font-bold ${
                     version?.updateAvailable ? 'text-vault-warning' : 'text-vault-text'
@@ -325,15 +325,17 @@ export default function Admin() {
                   {version?.current ?? '—'}
                 </p>
                 <p className="text-[10px] text-vault-subtle mt-1">
-                  {version ? `● Online · up ${formatUptime(version.uptime)}` : '● Online'}
+                  {version
+                    ? t('admin.onlineFor', { uptime: formatDuration(version.uptime, t) })
+                    : t('admin.online')}
                 </p>
                 {version && !version.enabled && (
                   <p className="text-[10px] text-vault-faint mt-1">
-                    Update check off — set <code>UPDATE_CHECK_ENABLED=true</code>
+                    {rich('admin.updateCheckOff', { setting: <code>{UPDATE_CHECK_SETTING}</code> })}
                   </p>
                 )}
                 {version?.enabled && version.updateAvailable === false && (
-                  <p className="text-[10px] text-vault-subtle mt-1">Up to date</p>
+                  <p className="text-[10px] text-vault-subtle mt-1">{t('admin.upToDate')}</p>
                 )}
                 {version?.enabled && version.error && (
                   <p className="text-[10px] text-vault-subtle mt-1">{version.error}</p>
@@ -345,10 +347,10 @@ export default function Admin() {
           {/* Vault list */}
           <div className="bg-vault-secondary/30 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-vault-secondary text-xs text-vault-subtle uppercase tracking-wider">
-              Active Vaults ({vaults.length})
+              {t('admin.vaultList', { count: vaults.length })}
             </div>
             {vaults.length === 0 ? (
-              <p className="p-6 text-sm text-vault-subtle text-center">No active vaults</p>
+              <p className="p-6 text-sm text-vault-subtle text-center">{t('admin.noVaults')}</p>
             ) : (
               <div className="divide-y divide-vault-secondary/50">
                 {vaults.map((v) => (
@@ -360,25 +362,29 @@ export default function Admin() {
                         </span>
                       </div>
                       <div className="text-xs text-vault-subtle mt-0.5">
-                        {formatBytes(v.ciphertextSize, locale)} · {v.remainingDownloads}/{v.maxDownloads} DL ·
-                        Expires {new Date(v.expiresAt).toLocaleString()}
+                        {t('admin.vaultDetails', {
+                          size: formatBytes(v.ciphertextSize, locale),
+                          remaining: v.remainingDownloads,
+                          max: v.maxDownloads,
+                          date: new Date(v.expiresAt).toLocaleString(locale),
+                        })}
                       </div>
                     </div>
                     <div className="ml-4 flex items-center gap-2 whitespace-nowrap">
                       {pendingDelete === v.vaultId ? (
                         <>
-                          <span className="text-xs text-vault-muted">Confirm?</span>
+                          <span className="text-xs text-vault-muted">{t('admin.confirm')}</span>
                           <button
                             onClick={() => handleDeleteConfirmed(v.vaultId)}
                             className="text-xs text-vault-danger hover:text-vault-danger-strong font-medium"
                           >
-                            Yes
+                            {t('admin.yes')}
                           </button>
                           <button
                             onClick={() => setPendingDelete(null)}
                             className="text-xs text-vault-subtle hover:text-vault-text-soft"
                           >
-                            Cancel
+                            {t('admin.cancel')}
                           </button>
                         </>
                       ) : (
@@ -386,7 +392,7 @@ export default function Admin() {
                           onClick={() => setPendingDelete(v.vaultId)}
                           className="text-xs text-vault-danger hover:text-vault-danger-strong"
                         >
-                          Delete
+                          {t('admin.delete')}
                         </button>
                       )}
                     </div>

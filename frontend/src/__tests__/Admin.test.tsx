@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import type * as Format from '../format.js';
 
 // Mock formatBytes before importing Admin
-vi.mock('../format.js', () => ({
+vi.mock('../format.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof Format>()),
   formatBytes: (n: number) => `${n} B`,
 }));
 
@@ -112,6 +114,21 @@ describe('Admin page', () => {
         screen.getByText(/Admin panel is disabled/)
       ).toBeInTheDocument();
     });
+  });
+
+  it('should say the server gave no answer when the request fails', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const { default: Admin } = await import('../pages/Admin.js');
+    render(<Admin />);
+    fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'pass' } });
+    fireEvent.click(screen.getByText('Login'));
+
+    expect(
+      await screen.findByText('Could not get an answer from the server. Is the backend container running?')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
   });
 
   it('should show "No active vaults" when vault list is empty', async () => {
@@ -237,6 +254,15 @@ describe('Admin page — rate limited by the server', () => {
     expect(await screen.findByText('Too many failed login attempts. Try again in 42 s.')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
     expect(screen.queryByText(/Backend unavailable/)).not.toBeInTheDocument();
+  });
+
+  it('tells a general rate limit on the login apart from a lockout', async () => {
+    globalThis.fetch = vi.fn(() => tooMany('Too many requests. Try again later.', 30)) as unknown as typeof fetch;
+
+    await login();
+
+    expect(await screen.findByText('Too many requests. Try again in 30 s.')).toBeInTheDocument();
+    expect(screen.queryByText(/failed login/)).not.toBeInTheDocument();
   });
 });
 
