@@ -236,7 +236,7 @@ The linter fails on text written straight into JSX, as the content of an element
 
 ### What stays as it is
 
-Error texts from the server stay in English, and the pages show their own message for each HTTP status instead; the admin panel's note on a failed update check is the one server text shown, in English. The operator's terms of service and a tagline of their own are shown as written. `src/crypto` and `src/api` do not import from `src/i18n`, which the linter checks. The language is never read from or written to the address, a cookie or the browser's storage.
+Error texts from the server stay in English, and the pages show their own message for each HTTP status instead; the admin panel's note on a failed update check is the one server text shown, in English. A tagline of the operator's own is shown as written, and the terms of service are the operator's files: `TOS.md`, and beside it a translation such as `TOS.pl.md` for each interface language they want. `src/crypto` and `src/api` do not import from `src/i18n`, which the linter checks. The language is never read from or written to the address, a cookie or the browser's storage.
 
 ---
 

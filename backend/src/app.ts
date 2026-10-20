@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import { config, validateConfig } from './config.js';
 import { vaultRoutes } from './routes/vault.js';
 import { adminRoutes } from './routes/admin.js';
-import { healthRoutes } from './routes/health.js';
+import { healthRoutes, termsServed } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { vaultManager } from './vault/manager.js';
@@ -19,6 +19,7 @@ import {
   parseBranding,
 } from './static/branding.js';
 import { loadBrandingAssets } from './static/brandingAssets.js';
+import { markNoTerms } from './static/terms.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -155,7 +156,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       config.BRANDING_PATH || path.join(__dirname, '..', '..', 'branding'),
       (warning) => app.log.warn(warning)
     );
-    const indexHtml = applyBranding(assetCloak.indexHtml, branding, brandingAssets);
+    const branded = applyBranding(assetCloak.indexHtml, branding, brandingAssets);
+    const indexHtml = termsServed ? branded : markNoTerms(branded);
     for (const warning of brandingWarnings(branding)) app.log.warn(warning);
     if (brandingAssets.files.size > 0) {
       app.log.info({ files: [...brandingAssets.files.keys()] }, 'Serving the operator\'s branding files');
