@@ -36,7 +36,7 @@ export const pl: Messages = {
   'upload.forbidden': 'Serwer odmówił przyjęcia pliku. Odśwież stronę i spróbuj ponownie.',
   'upload.expired': 'Sesja przesyłania wygasła. Spróbuj ponownie.',
   'upload.tooLarge': 'Plik jest większy, niż przyjmuje ten serwer.',
-  'upload.rateLimited': 'Zbyt wiele przesyłań z Twojego połączenia. Odczekaj chwilę i spróbuj ponownie.',
+  'upload.rateLimited': 'Wysłano zbyt wiele żądań. Odczekaj chwilę i spróbuj ponownie.',
   'upload.storageFull': 'Na serwerze zabrakło miejsca. Spróbuj później albo skontaktuj się z administratorem.',
   'upload.serverError': 'Serwer nie mógł zapisać pliku. Spróbuj ponownie później.',
   'upload.failed': 'Przesyłanie nie powiodło się. Spróbuj ponownie.',
