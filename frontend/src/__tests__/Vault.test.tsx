@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { setBrandingTags } from '../test/brandingTags.js';
+import { ApiError } from '../api/errors.js';
+import type * as Format from '../format.js';
 
 // Mock crypto and API modules
 const mockImportKey = vi.fn();
@@ -16,7 +18,8 @@ vi.mock('../crypto/encrypt.js', () => ({
   PER_CHUNK_OVERHEAD: 28,
 }));
 
-vi.mock('../format.js', () => ({
+vi.mock('../format.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof Format>()),
   formatBytes: (n: number) => `${n} B`,
 }));
 
@@ -58,12 +61,25 @@ describe('Vault page', () => {
   });
 
   it('should show error when vault is not found', async () => {
-    mockGetVaultInfo.mockRejectedValue(new Error('Vault not found'));
+    mockGetVaultInfo.mockRejectedValue(new ApiError(404, 'Vault not found or expired'));
     renderVault('bad-id');
     await waitFor(() => {
       expect(screen.getByText('Vault unavailable')).toBeInTheDocument();
     });
-    expect(screen.getByText('Vault not found')).toBeInTheDocument();
+    expect(screen.getByText('Vault not found or expired')).toBeInTheDocument();
+  });
+
+  it('should say why from the status, not from what the server wrote', async () => {
+    mockGetVaultInfo.mockRejectedValue(new ApiError(429, 'Too many requests. Try again later.'));
+    renderVault('busy');
+    expect(await screen.findByText('Too many requests. Wait a moment and try again.')).toBeInTheDocument();
+    expect(screen.queryByText(/Try again later/)).not.toBeInTheDocument();
+  });
+
+  it('should say the server could not be reached when no answer came', async () => {
+    mockGetVaultInfo.mockRejectedValue(new ApiError(null, 'Failed to fetch'));
+    renderVault('offline');
+    expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument();
   });
 
   it('should show vault info when loaded', async () => {
@@ -154,6 +170,18 @@ describe('Vault page', () => {
       expect(screen.getByText(/empty or has been tampered with/)).toBeInTheDocument();
       expect(screen.queryByText(/decrypted and downloaded successfully/)).not.toBeInTheDocument();
       expect(mockDecryptChunk).not.toHaveBeenCalled();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('should report a key that does not decrypt the vault, not the browser\'s words for it', async () => {
+      await openVault({ ciphertextSize: 128, chunkPlaintextSize: 100 });
+      mockDownloadVault.mockResolvedValue(new Blob([new Uint8Array(128)]));
+      mockDecryptChunk.mockRejectedValue(new DOMException('The operation failed for an operation-specific reason', 'OperationError'));
+
+      fireEvent.click(screen.getByText('Decrypt & Download'));
+
+      expect(await screen.findByText('Decryption failed. The link may be incomplete or altered.')).toBeInTheDocument();
+      expect(screen.queryByText(/operation-specific/)).not.toBeInTheDocument();
       expect(URL.createObjectURL).not.toHaveBeenCalled();
     });
 

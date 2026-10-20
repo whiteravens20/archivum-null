@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../i18n/i18n.ts';
 
+/** The page around the terms is translated; the terms are the operator's file, in their language. */
 export default function Tos() {
+  const { t } = useI18n();
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
@@ -17,12 +20,12 @@ export default function Tos() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-12">
       <div className="mb-8">
-        <a href="/" className="text-sm text-vault-accent-ink hover:underline">← Home</a>
+        <a href="/" className="text-sm text-vault-accent-ink hover:underline">{t('common.home')}</a>
       </div>
       {error ? (
-        <p className="text-vault-danger text-sm">Failed to load Terms of Service.</p>
+        <p className="text-vault-danger text-sm">{t('tos.failed')}</p>
       ) : content === null ? (
-        <p className="text-vault-subtle animate-pulse text-sm">Loading…</p>
+        <p className="text-vault-subtle animate-pulse text-sm">{t('tos.loading')}</p>
       ) : (
         <article className="prose prose-sm max-w-none
           prose-headings:text-vault-heading prose-headings:font-semibold

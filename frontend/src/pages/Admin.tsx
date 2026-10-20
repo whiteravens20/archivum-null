@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { formatBytes } from '../format.ts';
+import { useI18n } from '../i18n/i18n.ts';
 
 interface VaultMeta {
   vaultId: string;
@@ -45,6 +46,7 @@ function formatUptime(seconds: number): string {
 }
 
 export default function Admin() {
+  const { locale } = useI18n();
   const [stats, setStats] = useState<Stats | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [vaults, setVaults] = useState<VaultMeta[]>([]);
@@ -291,8 +293,8 @@ export default function Admin() {
                   return (
                     <>
                       <p className={`text-lg font-bold ${isFull ? 'text-vault-danger' : isNearFull ? 'text-vault-warning' : 'text-vault-text'}`}>
-                        {formatBytes(stats.totalStorageBytes)}
-                        <span className="text-xs font-normal text-vault-subtle ml-1">/ {formatBytes(stats.storageQuotaBytes)}</span>
+                        {formatBytes(stats.totalStorageBytes, locale)}
+                        <span className="text-xs font-normal text-vault-subtle ml-1">/ {formatBytes(stats.storageQuotaBytes, locale)}</span>
                       </p>
                       <div className="mt-2 h-1.5 rounded-full bg-vault-secondary overflow-hidden">
                         <div
@@ -307,7 +309,7 @@ export default function Admin() {
                   );
                 })() : (
                   <p className="text-lg font-bold text-vault-text">
-                    {formatBytes(stats.totalStorageBytes)}
+                    {formatBytes(stats.totalStorageBytes, locale)}
                     <span className="text-xs font-normal text-vault-subtle ml-1">/ ∞</span>
                   </p>
                 )}
@@ -358,7 +360,7 @@ export default function Admin() {
                         </span>
                       </div>
                       <div className="text-xs text-vault-subtle mt-0.5">
-                        {formatBytes(v.ciphertextSize)} · {v.remainingDownloads}/{v.maxDownloads} DL ·
+                        {formatBytes(v.ciphertextSize, locale)} · {v.remainingDownloads}/{v.maxDownloads} DL ·
                         Expires {new Date(v.expiresAt).toLocaleString()}
                       </div>
                     </div>

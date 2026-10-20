@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
-import { getBranding } from '../branding.ts';
+import { DEFAULT_TAGLINE, getBranding } from '../branding.ts';
+import { useI18n } from '../i18n/i18n.ts';
 
 export default function Footer() {
-  const { name, tagline } = getBranding();
+  const { name, tagline: brandTagline } = getBranding();
+  const { t } = useI18n();
+  const tagline = brandTagline === DEFAULT_TAGLINE ? t('brand.tagline') : brandTagline;
   // The tagline closes the footer as a sentence, unless it brings its own punctuation.
   const closing = /[\p{L}\p{N}]$/u.test(tagline) ? `${tagline}.` : tagline;
 
@@ -19,14 +22,14 @@ export default function Footer() {
             rel="noopener noreferrer"
             className="hover:text-vault-accent-ink transition-colors"
           >
-            Source
+            {t('footer.source')}
           </a>
           <span className="text-vault-secondary/50">|</span>
           <Link
             to="/tos"
             className="hover:text-vault-accent-ink transition-colors"
           >
-            Terms of Service
+            {t('footer.terms')}
           </Link>
         </div>
         <span>{closing}</span>

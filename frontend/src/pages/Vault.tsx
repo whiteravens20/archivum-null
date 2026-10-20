@@ -1,20 +1,48 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getVaultInfo, downloadVault, type VaultInfo } from '../api/vault.ts';
+import { ApiError } from '../api/errors.ts';
 import { importKey, decryptChunk, parseMetadataHeader, PER_CHUNK_OVERHEAD, sanitizeFilename } from '../crypto/encrypt.ts';
-import { formatBytes } from '../format.ts';
+import { formatBytes, formatDuration } from '../format.ts';
 import ProgressBar from '../components/ProgressBar.tsx';
 import Logo from '../components/Logo.tsx';
 import { getBranding } from '../branding.ts';
+import { useI18n } from '../i18n/i18n.ts';
 
 type Stage = 'loading' | 'ready' | 'downloading' | 'decrypting' | 'done' | 'error';
 
+type VaultProblem =
+  | 'vault.noId'
+  | 'vault.notFound'
+  | 'vault.rateLimited'
+  | 'vault.serverError'
+  | 'vault.failed'
+  | 'vault.corrupt'
+  | 'vault.empty'
+  | 'vault.decryptFailed'
+  | 'common.unreachable';
+
+/** What to tell the visitor when the vault cannot be had: by the HTTP status the server refused it with. */
+function requestProblem(err: unknown): VaultProblem {
+  if (!(err instanceof ApiError)) return 'vault.failed';
+  if (err.status === null) return 'common.unreachable';
+  if (err.status === 404) return 'vault.notFound';
+  if (err.status === 429) return 'vault.rateLimited';
+  if (err.status >= 500) return 'vault.serverError';
+  return 'vault.failed';
+}
+
+/** Shown in the warning about misleading names. */
+const MISLEADING_EXTENSION = '.pdf.exe';
+
 export default function Vault() {
   const { name } = getBranding();
+  const { t, rich, locale } = useI18n();
   const { vaultId } = useParams<{ vaultId: string }>();
   const [info, setInfo] = useState<VaultInfo | null>(null);
   const [stage, setStage] = useState<Stage>(() => (vaultId ? 'loading' : 'error'));
-  const [error, setError] = useState<string | null>(() => (vaultId ? null : 'No vault ID'));
+  // Kept as a message key, so a change of language translates it on screen too
+  const [error, setError] = useState<VaultProblem | null>(() => (vaultId ? null : 'vault.noId'));
   const [progress, setProgress] = useState(0);
   const [decryptedFilename, setDecryptedFilename] = useState<string | null>(null);
 
@@ -47,10 +75,15 @@ export default function Vault() {
         setStage('ready');
       })
       .catch((err) => {
-        setError(err.message);
+        setError(requestProblem(err));
         setStage('error');
       });
   }, [vaultId]);
+
+  const fail = (problem: VaultProblem) => {
+    setStage('error');
+    setError(problem);
+  };
 
   const handleDownload = async () => {
     if (!vaultId || !keyFragment || !info) return;
@@ -74,12 +107,14 @@ export default function Vault() {
       // bytes at all, the loop below would not run once, nothing would be
       // authenticated, and an empty file would pass for a successful download.
       if (!Number.isSafeInteger(chunkPT) || chunkPT <= 0) {
-        throw new Error('The vault metadata is corrupted');
+        fail('vault.corrupt');
+        return;
       }
       const chunkCT = chunkPT + PER_CHUNK_OVERHEAD;
       const numChunks = Math.ceil(encryptedBlob.size / chunkCT);
       if (numChunks < 1) {
-        throw new Error('The vault is empty or has been tampered with');
+        fail('vault.empty');
+        return;
       }
       const contentParts: BlobPart[] = [];
       let filename = 'file';
@@ -126,8 +161,9 @@ export default function Vault() {
         .then(setInfo)
         .catch(() => {}); // non-fatal: vault may already be deleted
     } catch (err) {
-      setStage('error');
-      setError(err instanceof Error ? err.message : 'Decryption failed');
+      // A refused request has a status. Anything else went wrong between the
+      // ciphertext and the file: the key, the header, a chunk that does not decrypt.
+      fail(err instanceof ApiError ? requestProblem(err) : 'vault.decryptFailed');
     }
   };
 
@@ -152,26 +188,26 @@ export default function Vault() {
           </h1>
         </a>
         <p className="text-vault-subtle text-xs tracking-[0.15em] uppercase font-mono">
-          Vault retrieval
+          {t('vault.subtitle')}
         </p>
       </div>
 
       {stage === 'loading' && (
         <div className="text-center py-12">
-          <div className="text-vault-subtle animate-pulse">Loading vault...</div>
+          <div className="text-vault-subtle animate-pulse">{t('vault.loading')}</div>
         </div>
       )}
 
       {stage === 'error' && (
         <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-6 text-center">
           <div className="text-2xl mb-3 opacity-40">⊘</div>
-          <p className="text-vault-danger font-medium mb-1">Vault unavailable</p>
-          <p className="text-xs text-vault-subtle">{error}</p>
+          <p className="text-vault-danger font-medium mb-1">{t('vault.unavailable')}</p>
+          {error && <p className="text-xs text-vault-subtle">{t(error)}</p>}
           <a
             href="/"
             className="inline-block mt-4 text-sm text-vault-accent-ink hover:underline"
           >
-            ← Create a new vault
+            {t('vault.createNew')}
           </a>
         </div>
       )}
@@ -182,44 +218,52 @@ export default function Vault() {
           <div className="bg-vault-secondary/50 rounded-lg p-6 space-y-4">
             {fragmentFilename && (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-vault-subtle uppercase tracking-wider">File</span>
+                <span className="text-xs text-vault-subtle uppercase tracking-wider">{t('vault.file')}</span>
                 <span className="text-sm text-vault-text truncate ml-4 max-w-[60%] text-right font-mono">
                   {fragmentFilename}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-xs text-vault-subtle uppercase tracking-wider">Size</span>
-              <span className="text-sm text-vault-text-soft">{formatBytes(info.ciphertextSize)}</span>
+              <span className="text-xs text-vault-subtle uppercase tracking-wider">{t('vault.size')}</span>
+              <span className="text-sm text-vault-text-soft">{formatBytes(info.ciphertextSize, locale)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-vault-subtle uppercase tracking-wider">Downloads left</span>
+              <span className="text-xs text-vault-subtle uppercase tracking-wider">{t('vault.downloadsLeft')}</span>
               <span className="text-sm text-vault-text-soft">{info.remainingDownloads}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-vault-subtle uppercase tracking-wider">Expires in</span>
-              <span className="text-sm text-vault-text-soft">{formatDuration(timeRemaining)}</span>
+              <span className="text-xs text-vault-subtle uppercase tracking-wider">{t('vault.expiresIn')}</span>
+              <span className="text-sm text-vault-text-soft">
+                {timeRemaining > 0 ? formatDuration(timeRemaining, t) : t('vault.expired')}
+              </span>
             </div>
           </div>
 
           {/* Sender trust warning */}
           <div className="bg-vault-warning-fill/10 border border-vault-warning-fill/20 rounded-lg p-3 text-xs text-vault-warning/90 space-y-1">
-            <p className="font-medium">⚠ Security notice</p>
+            <p className="font-medium">{t('vault.notice')}</p>
             <ul className="list-disc list-inside space-y-0.5 text-vault-warning-soft">
-              <li>The file name and type are set by the sender and cannot be verified by the server.</li>
-              <li>Do not open files from untrusted senders. Scan downloaded files with antivirus software before opening.</li>
-              <li>Be cautious of misleading file extensions (e.g. <span className="font-mono">.pdf.exe</span>).</li>
+              <li>{t('vault.notice.sender')}</li>
+              <li>{t('vault.notice.scan')}</li>
+              <li>
+                {rich('vault.notice.extensions', {
+                  example: <span className="font-mono">{MISLEADING_EXTENSION}</span>,
+                })}
+              </li>
             </ul>
           </div>
 
           {/* Filename mismatch warning */}
           {decryptedFilename && fragmentFilename && decryptedFilename !== fragmentFilename && (
             <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-xs text-vault-danger space-y-1">
-              <p className="font-medium">⚠ Filename mismatch detected</p>
+              <p className="font-medium">{t('vault.mismatch')}</p>
               <p>
-                The link indicated <span className="font-mono">&quot;{fragmentFilename}&quot;</span> but
-                the decrypted file is actually <span className="font-mono">&quot;{decryptedFilename}&quot;</span>.
-                The link may have been tampered with.
+                {/* Both names come from the sender: they go in as text, never as markup */}
+                {rich('vault.mismatch.detail', {
+                  expected: <span className="font-mono">&quot;{fragmentFilename}&quot;</span>,
+                  actual: <span className="font-mono">&quot;{decryptedFilename}&quot;</span>,
+                })}
               </p>
             </div>
           )}
@@ -227,8 +271,7 @@ export default function Vault() {
           {/* Key warning */}
           {!keyFragment && (
             <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
-              ⚠ No decryption key found in URL. The key must be in the URL fragment (#).
-              Without it the file cannot be decrypted, so the download is disabled.
+              {t('vault.noKey')}
             </div>
           )}
 
@@ -236,14 +279,14 @@ export default function Vault() {
           {(stage === 'downloading' || stage === 'decrypting') && (
             <ProgressBar
               progress={progress}
-              label={stage === 'downloading' ? 'Downloading...' : 'Decrypting...'}
+              label={stage === 'downloading' ? t('vault.downloading') : t('vault.decrypting')}
             />
           )}
 
           {/* Done */}
           {stage === 'done' && (
             <div className="bg-vault-success-fill/10 border border-vault-success-fill/20 rounded-lg p-3 text-sm text-vault-success text-center">
-              ✓ File decrypted and downloaded successfully
+              {t('vault.done')}
             </div>
           )}
 
@@ -256,31 +299,21 @@ export default function Vault() {
                        disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {stage === 'ready'
-              ? 'Decrypt & Download'
+              ? t('vault.decryptAndDownload')
               : stage === 'downloading'
-              ? 'Downloading...'
+              ? t('vault.downloading')
               : stage === 'decrypting'
-              ? 'Decrypting...'
+              ? t('vault.decrypting')
               : stage === 'done'
-              ? 'Download again'
-              : 'Processing...'}
+              ? t('vault.downloadAgain')
+              : t('common.processing')}
           </button>
 
           <p className="text-xs text-vault-subtle text-center">
-            Decryption happens entirely in your browser. The server never sees the key.
+            {t('vault.footnote')}
           </p>
         </div>
       )}
     </div>
   );
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds <= 0) return 'Expired';
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
 }
