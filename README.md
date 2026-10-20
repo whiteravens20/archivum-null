@@ -400,6 +400,12 @@ BRAND_THEME=auto
 
 Branding is cosmetic only: no setting takes a URL, nothing is loaded from another origin, and no security header changes. [docs/BRANDING.md](docs/BRANDING.md) lists every setting and the file names the server looks for.
 
+## Languages
+
+The interface is in English and Polish. A page opens in the first of the browser's preferred languages that it has, and in English otherwise. The switch at the bottom of every page, the admin panel's included, changes the language on the spot: an upload under way, a chosen file and a solved CAPTCHA stay as they are. The choice lives in the open page only. It is not put into the address, a cookie or the browser's storage, so the server never learns it, and a reload starts from the browser's languages again.
+
+The built-in tagline is translated; a tagline of the operator's own and the terms of service are shown as written. To correct a translation or add a language, see [CONTRIBUTING.md](CONTRIBUTING.md#translations).
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for the full security checklist.
