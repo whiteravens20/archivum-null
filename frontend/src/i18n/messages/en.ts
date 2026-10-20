@@ -15,6 +15,7 @@ export const en = {
 
   'footer.source': 'Source',
   'footer.terms': 'Terms of Service',
+  'footer.language': 'Language',
 
   'home.tag.noAccounts': 'No accounts',
   'home.tag.noCookies': 'No cookies',

@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import { createTranslator, LANGUAGES, MESSAGES, type PluralKey, type TextKey } from '../i18n/i18n.js';
 
 describe('translator', () => {
-  const { t, plural, rich, message } = createTranslator('en', 'en');
+  const { t, plural, rich, message } = createTranslator('en', 'en', () => {});
 
   it('should give the message for a key, with its values filled in', () => {
     expect(t('vault.subtitle')).toBe('Vault retrieval');
@@ -100,7 +100,7 @@ describe.each(LANGUAGES.filter((lang) => lang !== 'en'))('the %s translation', (
 });
 
 describe('Polish', () => {
-  const { t, plural } = createTranslator('pl', 'pl');
+  const { t, plural } = createTranslator('pl', 'pl', () => {});
 
   it('should choose the plural form by the count', () => {
     expect([1, 2, 5, 12, 22, 25].map((n) => plural('vaultConfig.downloads', n))).toEqual([

@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
 import { DEFAULT_TAGLINE, getBranding } from '../branding.ts';
-import { useI18n } from '../i18n/i18n.ts';
+import { isLanguage, LANGUAGE_NAMES, LANGUAGES, useI18n } from '../i18n/i18n.ts';
 
 export default function Footer() {
   const { name, tagline: brandTagline } = getBranding();
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const tagline = brandTagline === DEFAULT_TAGLINE ? t('brand.tagline') : brandTagline;
   // The tagline closes the footer as a sentence, unless it brings its own punctuation.
   const closing = /[\p{L}\p{N}]$/u.test(tagline) ? `${tagline}.` : tagline;
@@ -34,6 +34,21 @@ export default function Footer() {
         </div>
         <span>{closing}</span>
       </div>
+      {/* The choice lasts until the page is reloaded; it is not stored anywhere */}
+      <select
+        value={lang}
+        onChange={(e) => {
+          if (isLanguage(e.target.value)) setLang(e.target.value);
+        }}
+        aria-label={t('footer.language')}
+        className="mt-3 bg-vault-bg text-vault-subtle hover:text-vault-accent-ink transition-colors cursor-pointer focus:outline-none focus-visible:text-vault-accent-ink"
+      >
+        {LANGUAGES.map((code) => (
+          <option key={code} value={code} lang={code}>
+            {LANGUAGE_NAMES[code]}
+          </option>
+        ))}
+      </select>
     </footer>
   );
 }

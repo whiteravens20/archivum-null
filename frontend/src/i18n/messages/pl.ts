@@ -9,6 +9,7 @@ export const pl: Messages = {
 
   'footer.source': 'Kod źródłowy',
   'footer.terms': 'Regulamin',
+  'footer.language': 'Język',
 
   'home.tag.noAccounts': 'Bez kont',
   'home.tag.noCookies': 'Bez ciasteczek',

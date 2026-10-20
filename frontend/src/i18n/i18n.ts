@@ -6,6 +6,49 @@ import { pl } from './messages/pl.ts';
 export const LANGUAGES = ['en', 'pl'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
+/** Each language under its own name, the way the switcher offers it. */
+export const LANGUAGE_NAMES: Record<Language, string> = { en: 'English', pl: 'Polski' };
+
+export function isLanguage(value: string): value is Language {
+  return (LANGUAGES as readonly string[]).includes(value);
+}
+
+/** The language of a tag such as `pl-PL`: its first subtag. */
+const primary = (tag: string) => tag.split('-')[0].toLowerCase();
+
+/**
+ * The languages the browser asks for, most wanted first. The interface language is
+ * chosen from these alone: never from the address, a cookie or storage.
+ */
+export function browserLanguages(): readonly string[] {
+  return navigator.languages.length > 0 ? navigator.languages : [navigator.language];
+}
+
+/** The first of the visitor's languages the interface has, or English. */
+export function detectLanguage(preferred: readonly string[]): Language {
+  for (const tag of preferred) {
+    const lang = primary(tag);
+    if (isLanguage(lang)) return lang;
+  }
+  return 'en';
+}
+
+/**
+ * The locale numbers and dates are written in: the visitor's own variant of the
+ * language when the browser names one (`en-GB` puts the day first), else the language.
+ */
+export function localeFor(lang: Language, preferred: readonly string[]): string {
+  for (const tag of preferred) {
+    if (primary(tag) !== lang) continue;
+    try {
+      return Intl.getCanonicalLocales(tag)[0];
+    } catch {
+      // Not a well-formed tag; the next one may be
+    }
+  }
+  return lang;
+}
+
 type En = typeof en;
 
 /** The forms of a message that depends on a number, one per plural category it can fall into. */
@@ -45,11 +88,13 @@ export interface Translator {
    */
   rich<K extends TextKey>(key: K, slots: Readonly<Record<Placeholders<En[K]>, ReactNode>>): ReactNode;
   message(message: Message): string;
+  /** Switch the interface to another language. */
+  setLang(lang: Language): void;
 }
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
-export function createTranslator(lang: Language, locale: string): Translator {
+export function createTranslator(lang: Language, locale: string, setLang: (lang: Language) => void): Translator {
   const messages = MESSAGES[lang];
   const numbers = new Intl.NumberFormat(locale);
   const plurals = new Intl.PluralRules(lang);
@@ -95,11 +140,12 @@ export function createTranslator(lang: Language, locale: string): Translator {
     message(message) {
       return t(message.key, 'vars' in message ? message.vars : {});
     },
+    setLang,
   };
 }
 
 // What a component gets outside a provider, the tests among them: English.
-const I18nContext = createContext<Translator>(createTranslator('en', 'en'));
+export const I18nContext = createContext<Translator>(createTranslator('en', 'en', () => {}));
 
 export function useI18n(): Translator {
   return useContext(I18nContext);

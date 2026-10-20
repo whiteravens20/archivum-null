@@ -40,7 +40,7 @@ describe('formatBytes', () => {
 });
 
 describe('formatDuration', () => {
-  const { t } = createTranslator('en', 'en');
+  const { t } = createTranslator('en', 'en', () => {});
 
   it('should give a time span in its two largest units', () => {
     expect(formatDuration(1244994, t)).toBe('14d 9h');
