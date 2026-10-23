@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useI18n } from '../i18n/i18n.ts';
 
 interface VaultLinkProps {
   url: string;
 }
 
 export default function VaultLink({ url }: VaultLinkProps) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -28,7 +30,7 @@ export default function VaultLink({ url }: VaultLinkProps) {
   return (
     <div className="space-y-3">
       <label className="block text-xs text-vault-muted uppercase tracking-wider">
-        Vault Link (contains decryption key)
+        {t('vaultLink.label')}
       </label>
 
       <div className="flex gap-2">
@@ -45,14 +47,12 @@ export default function VaultLink({ url }: VaultLinkProps) {
           className="px-4 py-2 bg-vault-accent text-vault-on-accent rounded text-sm font-medium
                      hover:bg-vault-accent/90 transition-colors whitespace-nowrap"
         >
-          {copied ? '✓ Copied' : 'Copy'}
+          {copied ? t('vaultLink.copied') : t('vaultLink.copy')}
         </button>
       </div>
 
       <div className="text-xs text-vault-warning/80 bg-vault-warning/5 border border-vault-warning/20 rounded p-3">
-        ⚠ This link contains the encryption key in the URL fragment (#). 
-        The key is never sent to the server. Anyone with this link can decrypt the file. 
-        Store it securely or share via an encrypted channel.
+        {t('vaultLink.warning')}
       </div>
     </div>
   );

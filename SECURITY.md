@@ -106,9 +106,13 @@ from becoming an attack surface:
 ### Client-Side Defenses
 
 - [x] Filename sanitization — `sanitizeFilename()` replaces path separators (`/`, `\`); strips control characters, line and paragraph separators, every Unicode format character and everything Unicode marks as ignorable by default (bidirectional overrides and isolates, zero-width characters and joiners, fillers, variation selectors, tags), matched by property rather than from a list; strips leading dots together with the whitespace around them, and trailing whitespace; truncates to 255 characters without cutting one in half; falls back to `"file"` when the result is empty
-- [x] No Markdown parser in the browser — the terms of service are converted to HTML on the server, once at startup; raw HTML in them is shown as text, and a link keeps its address only when that plainly is a web or mail address or a path on the site. The page that handles the key carries no parser and none of its dependencies
+- [x] No Markdown parser in the browser — the terms of service and their translations are converted to HTML on the server, once at startup; raw HTML in them is shown as text, and a link keeps its address only when that plainly is a web or mail address or a path on the site. The page that handles the key carries no parser and none of its dependencies
 - [x] A download with no chunks is reported as corrupted — nothing is saved, where an empty file used to pass for a successful download
 - [x] Filename mismatch detection — on download, the decrypted filename from the encrypted payload is compared to the one encoded in the URL fragment; a visible warning is shown if they differ, indicating possible link tampering
+- [x] Interface language from the browser's language list and the switch in the page only — never read from or written to the address, a cookie or browser storage; a choice made in the page lasts until it is reloaded and is sent to no one. The terms of service come with every translation in one response, so showing them in the chosen language asks the server for nothing
+- [x] Translations are part of the single frontend script — none is fetched at runtime, and no message comes from the server or from a link
+- [x] Values put into a message (the file names from the link and from the decrypted payload, the version strings from the server) are inserted in one pass as text, so a name such as `{actual}` or `$&` shows as itself; markup inside a sentence is built in the code, and no message is parsed as HTML
+- [x] Errors are shown in the page's own words, chosen by the HTTP status — the text of a server's error response is not displayed. The one server text the interface shows is the admin panel's note on a failed update check
 
 ### Container Security
 

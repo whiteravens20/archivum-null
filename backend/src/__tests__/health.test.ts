@@ -81,13 +81,16 @@ describe('GET /api/tos', () => {
     const res = await app.inject({ method: 'GET', url: '/api/tos' });
 
     expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toMatch(/text\/html/);
-    expect(res.body).toMatch(/^<h1>Terms of Service/);
-    expect(res.body).toContain('<h2>1. Service Description</h2>');
-    expect(res.body).toContain('<li>');
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    const { terms, translations } = res.json();
+    expect(terms).toMatch(/^<h1>Terms of Service/);
+    expect(terms).toContain('<h2>1. Service Description</h2>');
+    expect(terms).toContain('<li>');
     // Formatting is in the markup now, not in the text
-    expect(res.body).not.toContain('## ');
-    expect(res.body).not.toContain('**');
+    expect(terms).not.toContain('## ');
+    expect(terms).not.toContain('**');
+    // The repository has no translation of its own
+    expect(translations).toEqual({});
 
     await app.close();
   });

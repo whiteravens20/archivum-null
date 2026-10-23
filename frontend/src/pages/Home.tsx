@@ -7,8 +7,10 @@ import Turnstile from '../components/Turnstile.tsx';
 import Logo from '../components/Logo.tsx';
 import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
-import { getBranding } from '../branding.ts';
+import { ApiError } from '../api/errors.ts';
+import { DEFAULT_TAGLINE, getBranding } from '../branding.ts';
 import { formatBytes } from '../format.ts';
+import { useI18n, type TextKey } from '../i18n/i18n.ts';
 
 const TTL_OPTION_VALUES = [300, 1800, 3600, 21600, 86400, 259200, 604800];
 const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
@@ -69,8 +71,37 @@ function parseRuntimeConfig(raw: unknown): RuntimeConfig | null {
 
 type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
+const TAGS = ['home.tag.noAccounts', 'home.tag.noCookies', 'home.tag.noTracking', 'home.tag.zeroKnowledge'] as const;
+
+type UploadProblem = Extract<TextKey, `upload.${string}`> | 'common.unreachable';
+
+/** What to tell the visitor when an upload fails: by the HTTP status the server refused it with. */
+function uploadProblem(err: unknown): UploadProblem {
+  if (!(err instanceof ApiError)) return 'upload.failed';
+  switch (err.status) {
+    case null:
+      return 'common.unreachable';
+    case 400:
+      return 'upload.rejected';
+    case 403:
+      return 'upload.forbidden';
+    case 404:
+      return 'upload.expired';
+    case 413:
+      return 'upload.tooLarge';
+    case 429:
+      return 'upload.rateLimited';
+    case 507:
+      return 'upload.storageFull';
+    default:
+      // 409 is a chunk the server was still busy with, after every retry
+      return err.status >= 500 || err.status === 409 ? 'upload.serverError' : 'upload.failed';
+  }
+}
+
 export default function Home() {
   const { name, tagline } = getBranding();
+  const { t, locale } = useI18n();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
   const [file, setFile] = useState<File | null>(null);
   const [ttl, setTtl] = useState(DEFAULT_CONFIG.defaultTtl);
@@ -93,10 +124,11 @@ export default function Home() {
   }, []);
   const [progress, setProgress] = useState(0);
   const [vaultUrl, setVaultUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Errors are kept as message keys, so a change of language translates one on screen too
+  const [error, setError] = useState<UploadProblem | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
   const [captchaVerified, setCaptchaVerified] = useState(false);
-  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<'home.captchaFailed' | 'home.captchaExpired' | null>(null);
   // The file whose CAPTCHA has been pending for a while. Kept per file, so the hint
   // it drives goes away by itself when another file is chosen.
   const [captchaSlowFor, setCaptchaSlowFor] = useState<File | null>(null);
@@ -119,12 +151,12 @@ export default function Home() {
   }, []);
 
   const handleCaptchaError = useCallback(() => {
-    setCaptchaError('CAPTCHA verification failed — please reload and try again');
+    setCaptchaError('home.captchaFailed');
     setCaptchaVerified(false);
   }, []);
 
   const handleCaptchaExpire = useCallback(() => {
-    setCaptchaError('CAPTCHA expired — please reload and try again');
+    setCaptchaError('home.captchaExpired');
     setCaptchaVerified(false);
     setTurnstileToken(undefined);
   }, []);
@@ -143,7 +175,7 @@ export default function Home() {
   const handleUpload = useCallback(async () => {
     if (!file) return;
     if (file.size > runtimeConfig.maxFileSize) {
-      setError(`File exceeds maximum size of ${formatBytes(runtimeConfig.maxFileSize)}`);
+      setError('upload.fileTooLarge');
       return;
     }
 
@@ -204,7 +236,7 @@ export default function Home() {
         return;
       }
       setStage('error');
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(uploadProblem(err));
     } finally {
       abortRef.current = null;
     }
@@ -225,15 +257,15 @@ export default function Home() {
           {name}
         </h1>
         <p className="text-vault-muted text-sm tracking-[0.15em] uppercase font-mono">
-          {tagline}
+          {tagline === DEFAULT_TAGLINE ? t('brand.tagline') : tagline}
         </p>
         <div className="mt-4 flex justify-center gap-2 flex-wrap">
-          {['No accounts', 'No cookies', 'No tracking', 'Zero-knowledge'].map((tag) => (
+          {TAGS.map((tag) => (
             <span
               key={tag}
               className="text-[10px] uppercase tracking-widest text-vault-subtle border border-vault-line-soft rounded px-2 py-0.5"
             >
-              {tag}
+              {t(tag)}
             </span>
           ))}
         </div>
@@ -245,9 +277,9 @@ export default function Home() {
           <div className="bg-vault-secondary/50 border border-vault-success-fill/20 rounded-lg p-6">
             <div className="text-center mb-6">
               <div className="text-3xl mb-2">◈</div>
-              <p className="text-vault-success font-medium">Vault created</p>
+              <p className="text-vault-success font-medium">{t('home.created')}</p>
               <p className="text-xs text-vault-subtle mt-1">
-                File encrypted and uploaded successfully
+                {t('home.createdDetail')}
               </p>
             </div>
             <VaultLink url={vaultUrl} />
@@ -257,7 +289,7 @@ export default function Home() {
             onClick={handleReset}
             className="w-full py-2 text-sm text-vault-muted hover:text-vault-text transition-colors"
           >
-            Create another vault
+            {t('home.createAnother')}
           </button>
         </div>
       ) : (
@@ -275,7 +307,7 @@ export default function Home() {
               <div className="bg-vault-secondary/50 rounded-lg p-4 flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="text-sm text-vault-text truncate">{file.name}</p>
-                  <p className="text-xs text-vault-subtle">{formatBytes(file.size)}</p>
+                  <p className="text-xs text-vault-subtle">{formatBytes(file.size, locale)}</p>
                 </div>
                 {stage === 'idle' && (
                   <button
@@ -306,14 +338,13 @@ export default function Home() {
 
               {captchaSlow && (
                 <div className="bg-vault-warning-fill/10 border border-vault-warning-fill/20 rounded-lg p-3 text-sm text-vault-warning-soft">
-                  Still waiting for the CAPTCHA. If a challenge is shown above, complete it.
-                  If nothing appears, reload the page.
+                  {t('home.captchaSlow')}
                 </div>
               )}
 
               {captchaError && (
                 <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
-                  {captchaError}
+                  {t(captchaError)}
                 </div>
               )}
 
@@ -321,20 +352,20 @@ export default function Home() {
                 <>
                   <ProgressBar
                     progress={progress}
-                    label="Encrypting & uploading..."
+                    label={t('home.uploading')}
                   />
                   <button
                     onClick={handleCancel}
                     className="w-full py-2 text-sm text-vault-danger hover:text-vault-danger-strong border border-vault-danger-fill/30 rounded-lg transition-colors"
                   >
-                    Cancel upload
+                    {t('home.cancel')}
                   </button>
                 </>
               )}
 
               {error && (
                 <div className="bg-vault-danger-fill/10 border border-vault-danger-fill/30 rounded-lg p-3 text-sm text-vault-danger">
-                  {error}
+                  {t(error, { size: formatBytes(runtimeConfig.maxFileSize, locale) })}
                 </div>
               )}
 
@@ -343,7 +374,7 @@ export default function Home() {
                   onClick={handleReset}
                   className="w-full py-3 text-sm text-vault-muted hover:text-vault-text border border-vault-line-soft rounded-lg transition-colors"
                 >
-                  ← Return to main page
+                  {t('home.returnToMain')}
                 </button>
               ) : (
                 <button
@@ -355,9 +386,9 @@ export default function Home() {
                 >
                   {stage === 'idle'
                     ? (runtimeConfig.turnstileEnabled && !captchaVerified
-                        ? 'Waiting for CAPTCHA...'
-                        : 'Encrypt & Upload')
-                    : 'Processing...'}
+                        ? t('home.waitingForCaptcha')
+                        : t('home.encryptAndUpload'))
+                    : t('common.processing')}
                 </button>
               )}
             </>
@@ -366,20 +397,20 @@ export default function Home() {
           {/* How it works */}
           <div className="mt-12 border-t border-vault-secondary pt-8">
             <h2 className="text-xs uppercase tracking-widest text-vault-subtle mb-4">
-              How it works
+              {t('home.howItWorks')}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-vault-muted">
               <div className="bg-vault-secondary/30 rounded p-4">
                 <div className="text-vault-accent-ink font-mono text-lg mb-2">01</div>
-                <p>File is encrypted in your browser using AES-256-GCM before upload.</p>
+                <p>{t('home.step1')}</p>
               </div>
               <div className="bg-vault-secondary/30 rounded p-4">
                 <div className="text-vault-accent-ink font-mono text-lg mb-2">02</div>
-                <p>Only the ciphertext is sent to the server. The key stays in the URL fragment.</p>
+                <p>{t('home.step2')}</p>
               </div>
               <div className="bg-vault-secondary/30 rounded p-4">
                 <div className="text-vault-accent-ink font-mono text-lg mb-2">03</div>
-                <p>Vault auto-deletes after TTL expires or download limit is reached.</p>
+                <p>{t('home.step3')}</p>
               </div>
             </div>
           </div>

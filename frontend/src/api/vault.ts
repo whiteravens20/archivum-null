@@ -5,6 +5,7 @@ import {
   countChunks,
   PER_CHUNK_OVERHEAD,
 } from '../crypto/encrypt.ts';
+import { ApiError } from './errors.ts';
 
 const API_BASE = '/api';
 
@@ -58,6 +59,19 @@ async function readVirtualRange(
   }
 
   return result;
+}
+
+/**
+ * fetch, with a request that got no answer at all reported as an ApiError without a
+ * status. A cancelled request is passed on as it is.
+ */
+async function request(...args: Parameters<typeof fetch>): Promise<Response> {
+  try {
+    return await fetch(...args);
+  } catch (err) {
+    if (args[1]?.signal?.aborted) throw err;
+    throw new ApiError(null, err instanceof Error ? err.message : 'Network error');
+  }
 }
 
 // ── Single-request upload ───────────────────────────────────────────────────
@@ -123,16 +137,16 @@ export async function uploadVault(
     xhr.onload = () => {
       if (xhr.status === 201) {
         try { resolve(JSON.parse(xhr.responseText)); }
-        catch { reject(new Error('Invalid response from server after upload')); }
+        catch { reject(new ApiError(xhr.status, 'Invalid response from server after upload')); }
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.error || `Upload failed (${xhr.status})`));
-        } catch { reject(new Error(`Upload failed (${xhr.status}) – backend unreachable`)); }
+          reject(new ApiError(xhr.status, err.error || `Upload failed (${xhr.status})`));
+        } catch { reject(new ApiError(xhr.status, `Upload failed (${xhr.status}) – backend unreachable`)); }
       }
     };
 
-    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.onerror = () => reject(new ApiError(null, 'Network error during upload'));
 
     if (signal) {
       signal.addEventListener('abort', () => {
@@ -146,19 +160,19 @@ export async function uploadVault(
 }
 
 export async function getVaultInfo(vaultId: string): Promise<VaultInfo> {
-  const res = await fetch(`${API_BASE}/vault/${encodeURIComponent(vaultId)}`);
+  const res = await request(`${API_BASE}/vault/${encodeURIComponent(vaultId)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(err.error || `Failed to get vault info (${res.status})`);
+    throw new ApiError(res.status, err.error || `Failed to get vault info (${res.status})`);
   }
   return res.json();
 }
 
 export async function downloadVault(vaultId: string): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/vault/${encodeURIComponent(vaultId)}/download`);
+  const res = await request(`${API_BASE}/vault/${encodeURIComponent(vaultId)}/download`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Download failed' }));
-    throw new Error(err.error || `Download failed (${res.status})`);
+    throw new ApiError(res.status, err.error || `Download failed (${res.status})`);
   }
   return res.blob();
 }
@@ -224,7 +238,7 @@ async function sendChunk(
       const form = new FormData();
       form.append('chunkIndex', String(chunkIndex));
       form.append('file', data, 'chunk.bin');
-      response = await fetch(
+      response = await request(
         `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`,
         { method: 'POST', body: form, signal, headers: { 'x-session-token': sessionToken } },
       );
@@ -241,7 +255,7 @@ async function sendChunk(
       // The server expects the chunk after this one: it stored this chunk on an earlier
       // attempt, and only the response to that attempt was lost.
       if (attempt > 1 && body?.expectedChunkIndex === chunkIndex + 1) return;
-      throw new Error(body?.error || `Chunk ${chunkIndex} upload failed (400)`);
+      throw new ApiError(400, body?.error || `Chunk ${chunkIndex} upload failed (400)`);
     }
 
     const retryable =
@@ -249,7 +263,7 @@ async function sendChunk(
     if (!retryable || attempt === CHUNK_ATTEMPTS) {
       if (response === null) throw networkError;
       const body = await response.json().catch(() => ({ error: 'Chunk upload failed' }));
-      throw new Error(body.error || `Chunk ${chunkIndex} upload failed (${response.status})`);
+      throw new ApiError(response.status, body.error || `Chunk ${chunkIndex} upload failed (${response.status})`);
     }
 
     await pause(retryDelay(response, attempt), signal);
@@ -288,7 +302,7 @@ export async function uploadVaultChunked(
   const initHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
   if (turnstileToken) initHeaders['x-turnstile-token'] = turnstileToken;
 
-  const initRes = await fetch(`${API_BASE}/vault/upload/init`, {
+  const initRes = await request(`${API_BASE}/vault/upload/init`, {
     method: 'POST',
     headers: initHeaders,
     body: JSON.stringify({ totalSize: totalEncrypted, ttl, maxDownloads, chunkPlaintextSize }),
@@ -297,7 +311,7 @@ export async function uploadVaultChunked(
 
   if (!initRes.ok) {
     const err = await initRes.json().catch(() => ({ error: 'Upload init failed' }));
-    throw new Error(err.error || `Upload init failed (${initRes.status})`);
+    throw new ApiError(initRes.status, err.error || `Upload init failed (${initRes.status})`);
   }
 
   const { uploadId, chunkSize: httpChunkSize, sessionToken } = (await initRes.json()) as ChunkInitResponse;
@@ -330,14 +344,14 @@ export async function uploadVaultChunked(
     }
 
     // 3. Complete
-    const completeRes = await fetch(
+    const completeRes = await request(
       `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/complete`,
       { method: 'POST', signal, headers: { 'x-session-token': sessionToken } },
     );
 
     if (!completeRes.ok) {
       const err = await completeRes.json().catch(() => ({ error: 'Upload finalization failed' }));
-      throw new Error(err.error || `Upload finalization failed (${completeRes.status})`);
+      throw new ApiError(completeRes.status, err.error || `Upload finalization failed (${completeRes.status})`);
     }
 
     return (await completeRes.json()) as VaultCreateResponse;

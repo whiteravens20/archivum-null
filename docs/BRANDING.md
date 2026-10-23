@@ -122,7 +122,7 @@ The server log shows what was picked up. A line `Serving the operator's branding
 ## What does not change
 
 - The **Source link** in the footer stays. See [ATTRIBUTION.md](../ATTRIBUTION.md).
-- The **terms of service** are a separate file, [TOS.md](../TOS.md), and mention the project name. Edit it to match your instance.
+- The **terms of service** are a separate file, [TOS.md](../TOS.md), and mention the project name. Edit it to match your instance, and a translation of it such as `TOS.pl.md` if you added one ([README](../README.md#terms-of-service)).
 - Fonts, layout and all other texts.
 
 ## How it works

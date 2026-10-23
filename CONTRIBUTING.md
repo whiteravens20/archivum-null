@@ -22,6 +22,11 @@ Thank you for considering a contribution to Archivum Null. This project handles 
     - [Naming conventions](#naming-conventions)
     - [Dependencies](#dependencies)
     - [Commits](#commits)
+  - [Translations](#translations)
+    - [Correcting a translation](#correcting-a-translation)
+    - [Adding text to the interface](#adding-text-to-the-interface)
+    - [Adding a language](#adding-a-language)
+    - [What stays as it is](#what-stays-as-it-is)
   - [Testing Requirements](#testing-requirements)
     - [Run the full suite](#run-the-full-suite)
     - [Coverage](#coverage)
@@ -137,6 +142,7 @@ frontend/src/
   branding.ts        # name, tagline, theme and logo the server wrote into the page
   components/        # reusable UI components
   crypto/            # client-side AES-256-GCM (WebCrypto)
+  i18n/              # interface languages: the messages, and the choice of language
   pages/             # route-level React pages
   __tests__/         # component and unit tests (Vitest + Testing Library)
 ```
@@ -203,6 +209,34 @@ security: validate turnstile hostname before token verification
 ```
 
 Keep commits focused — one logical change per commit. Avoid mixing refactors with feature changes in the same commit.
+
+---
+
+## Translations
+
+The interface text lives in `frontend/src/i18n/messages/`, one file per language. `en.ts` is the source: every other file has the same keys, and `npm run typecheck` fails while one is missing. A `{name}` in a message is a value the code puts in, and a translation keeps every one of them. A message that depends on a number has a form for each plural category of the language, as `Intl.PluralRules` names them: English has `one` and `other`, Polish `one`, `few`, `many` and `other`. The frontend tests check every language against English for both.
+
+### Correcting a translation
+
+Change the message in that language's file, keep its placeholders, and run `npm test` in `frontend/`.
+
+### Adding text to the interface
+
+1. Add the key to `en.ts`, then to every other language file.
+2. Show it with `t('key')` from `useI18n()`. A count that changes the wording goes through `plural('key', count)`, and markup inside a sentence, such as a `<code>` element, through `rich('key', { name: <code>…</code> })`. A message is plain text: nothing in it is read as HTML.
+3. Keep an error that is shown later in state as its key, not as text, so that it follows a change of language.
+
+The linter fails on text written straight into JSX, as the content of an element or as `alt`, `aria-label`, `label`, `placeholder` or `title`.
+
+### Adding a language
+
+1. Create `messages/<code>.ts`, named by the language's ISO 639-1 code, the way `pl.ts` is made: `export const <code>: Messages = { … }` with every key of `en.ts`. Give each plural message the forms that `new Intl.PluralRules('<code>').resolvedOptions().pluralCategories` lists.
+2. In `frontend/src/i18n/i18n.ts`, add the code to `LANGUAGES`, the language's name in the language itself to `LANGUAGE_NAMES`, and the file to `MESSAGES`.
+3. Run the tests, then look at every page in the new language, at phone width too: a translation is often longer than the English.
+
+### What stays as it is
+
+Error texts from the server stay in English, and the pages show their own message for each HTTP status instead; the admin panel's note on a failed update check is the one server text shown, in English. A tagline of the operator's own is shown as written, and the terms of service are the operator's files: `TOS.md`, and beside it a translation such as `TOS.pl.md` for each interface language they want. `src/crypto` and `src/api` do not import from `src/i18n`, which the linter checks. The language is never read from or written to the address, a cookie or the browser's storage.
 
 ---
 
