@@ -167,7 +167,6 @@ describe('loadTerms', () => {
   });
 
   it('should serve nothing when TOS.md is a directory, and say so', () => {
-    // What Docker mounts when ./TOS.md is missing on the host
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     fs.mkdirSync(path.join(dir, 'TOS.md'));
 
