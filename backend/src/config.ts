@@ -10,7 +10,8 @@ export const MAX_DOWNLOADS_PER_VAULT = 1000;
 
 /**
  * How many times a client's own limit a group of clients may use together: an IPv6 /48
- * in every limit. A limit per client says nothing about someone who can be many clients.
+ * in every limit, and all clients together in failed admin logins. A limit per client
+ * says nothing about someone who can be many clients.
  */
 export const SHARED_LIMIT_FACTOR = 10;
 

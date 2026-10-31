@@ -21,7 +21,11 @@ function safeCompare(supplied: string, expected: string): boolean {
 
 /** A login that failed: counted against the client, then refused. */
 function refuse(request: FastifyRequest, reply: FastifyReply, error: string): void {
-  recordAdminAuthFailure(clientKey(request.ip));
+  if (recordAdminAuthFailure(clientKey(request.ip))) {
+    request.log.warn(
+      'Failed admin logins from all clients together reached their limit: the admin panel refuses everyone until the rate-limit window ends. Someone may be guessing the password from many addresses.',
+    );
+  }
   reply.header('WWW-Authenticate', 'Basic realm="Archivum Null Admin"');
   reply.status(401).send({ error });
 }

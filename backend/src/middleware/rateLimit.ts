@@ -22,7 +22,8 @@ import { requestPath } from './requestPath.js';
  * X-Forwarded-For manually; that would bypass the trust chain and allow
  * clients to spoof their IP. Buckets are keyed by `clientKey()`, which groups
  * IPv6 clients by /64 so rotating addresses inside one allocation gains nothing.
- * On top of that a whole /48 shares a higher limit, see `networkKey()`.
+ * On top of that a whole /48 shares a higher limit, see `networkKey()`, and failed admin
+ * logins from all clients together have one too.
  */
 export interface RateBucket {
   count: number;
@@ -41,6 +42,9 @@ const apiBuckets = new Map<string, RateBucket>();
 const uploadBuckets = new Map<string, RateBucket>();
 const downloadBuckets = new Map<string, RateBucket>();
 const adminBuckets = new Map<string, RateBucket>();
+
+/** The bucket of failed admin logins from all clients together. No client key looks like it. */
+const ALL_CLIENTS = 'all';
 
 /**
  * Drop the buckets whose window has ended. Every bucket of a process lasts as long as the
@@ -132,11 +136,32 @@ function checkLimit(
 }
 
 /**
- * Count one failed admin login against a client. Called by basicAuth, the only place
- * that knows a login failed. `ip` is the client key, as produced by `clientKey()`.
+ * Count one failed admin login against a client and against all clients together. Called
+ * by basicAuth, the only place that knows a login failed. `ip` is the client key, as
+ * produced by `clientKey()`. The limit for all clients is also the most a /48 can reach,
+ * so a /48 needs no count of its own here. Returns whether this failure closed the panel
+ * for everyone, which happens once per window.
  */
-export function recordAdminAuthFailure(ip: string): void {
-  currentBucket(adminBuckets, ip, config.RATE_LIMIT_WINDOW * 1000, Date.now()).count++;
+export function recordAdminAuthFailure(ip: string): boolean {
+  const now = Date.now();
+  const windowMs = config.RATE_LIMIT_WINDOW * 1000;
+  currentBucket(adminBuckets, ip, windowMs, now).count++;
+
+  const all = currentBucket(adminBuckets, ALL_CLIENTS, windowMs, now);
+  all.count++;
+  return all.count === config.RATE_LIMIT_ADMIN_MAX * SHARED_LIMIT_FACTOR;
+}
+
+/** The bucket that keeps this client out of the admin routes at the moment, if one does. */
+function adminLockout(client: string, now: number): RateBucket | undefined {
+  const own = adminBuckets.get(client);
+  if (own && own.resetAt > now && own.count >= config.RATE_LIMIT_ADMIN_MAX) return own;
+
+  const all = adminBuckets.get(ALL_CLIENTS);
+  const ceiling = config.RATE_LIMIT_ADMIN_MAX * SHARED_LIMIT_FACTOR;
+  if (all && all.resetAt > now && all.count >= ceiling) return all;
+
+  return undefined;
 }
 
 export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
@@ -169,11 +194,13 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     // poll as often as the general tier allows. Once the failures reach the limit,
     // every admin request from that client is refused until the window ends, a correct
     // password included: guessing must not go on, or learn anything, while locked out.
+    // Failures from all clients together have a higher limit, which closes the panel for
+    // everyone: a password can be guessed from many addresses as well as from one.
     if (pathname.startsWith('/api/admin')) {
       const now = Date.now();
-      const failures = adminBuckets.get(client);
-      if (failures && failures.resetAt > now && failures.count >= config.RATE_LIMIT_ADMIN_MAX) {
-        tooManyRequests(reply, failures, now, 'Too many failed login attempts. Try again later.');
+      const lockout = adminLockout(client, now);
+      if (lockout) {
+        tooManyRequests(reply, lockout, now, 'Too many failed login attempts. Try again later.');
         return;
       }
     }

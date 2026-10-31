@@ -259,7 +259,7 @@ describe('Rate-limit middleware', () => {
   });
 
   describe('what many clients get together', () => {
-    // A /48 gets ten times a client's limit.
+    // A /48 and all clients together get ten times a client's limit.
     const download = (remoteAddress: string) =>
       app.inject({ method: 'GET', url: '/api/vault/test-id/download', remoteAddress });
 
@@ -298,6 +298,39 @@ describe('Rate-limit middleware', () => {
         expect((await health(`2001:db8:1:${i.toString(16)}::1`)).statusCode).toBe(200);
       }
       expect((await health('2001:db8:1:ff::1')).statusCode).toBe(429);
+    });
+
+    it('should close the admin routes for everyone at ten times the limit of a client', async () => {
+      // Admin limit is 2, so 20 failed logins from all clients together.
+      for (let i = 0; i < 19; i++) {
+        expect(recordAdminAuthFailure(`203.0.113.${i}`)).toBe(false);
+      }
+      expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(200);
+
+      // The twentieth says so, once.
+      expect(recordAdminAuthFailure('203.0.113.100')).toBe(true);
+      expect(recordAdminAuthFailure('203.0.113.101')).toBe(false);
+
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
+      expect(res.statusCode).toBe(429);
+      expect(res.json().error).toContain('failed login attempts');
+      expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+
+      // Nothing outside the panel is touched.
+      expect((await app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
+    });
+
+    it('should open the admin routes again when the window ends', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        for (let i = 0; i < 20; i++) recordAdminAuthFailure(`203.0.113.${i}`);
+        expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(429);
+
+        vi.setSystemTime(Date.now() + 61_000);
+        expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

@@ -200,6 +200,22 @@ describe('basicAuth', () => {
       expect(recordAdminAuthFailure).toHaveBeenCalledExactlyOnceWith('2001:db8:1:2::/64');
     });
 
+    it('should tell the operator when failed logins closed the panel for everyone', async () => {
+      const auth = await loadAuth();
+      const warn = vi.fn();
+      const request = { ...createMockRequest(encodeBasicAuth('admin', 'wrong')), log: { warn } };
+
+      recordAdminAuthFailure.mockReturnValueOnce(false);
+      await auth(request, createMockReply());
+      expect(warn).not.toHaveBeenCalled();
+
+      recordAdminAuthFailure.mockReturnValueOnce(true);
+      await auth(request, createMockReply());
+      expect(warn).toHaveBeenCalledOnce();
+      // No client's address goes into the log.
+      expect(warn.mock.calls[0]).toEqual([expect.not.stringContaining('203.0.113.5')]);
+    });
+
     it('should not count a successful login', async () => {
       const auth = await loadAuth();
       const reply = createMockReply();
