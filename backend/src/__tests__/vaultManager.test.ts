@@ -633,6 +633,108 @@ describe('VaultManager — download counter atomicity', () => {
 
       await capped.shutdown();
     });
+
+    describe('sessions left idle', () => {
+      const CLEANUP = 60_000;
+      let idle: number;
+
+      beforeEach(async () => {
+        vi.resetModules();
+        vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+        idle = (await import('../vault/manager.js')).UPLOAD_SESSION_IDLE_MS;
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('drops a session that gets no chunk, with its reservation and its slot', async () => {
+        const capped = await startManager({
+          MAX_UPLOAD_SESSIONS_PER_IP: '1',
+          MAX_TOTAL_STORAGE: '100',
+        });
+        const ip = '203.0.113.23';
+
+        const session = capped.initChunkedUpload(100, 3600, 1, undefined, ip);
+        expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, '198.51.100.9')).toThrow(
+          /Storage quota exceeded/,
+        );
+
+        await vi.advanceTimersByTimeAsync(idle + CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(100))),
+        ).rejects.toMatchObject({ statusCode: 404 });
+        expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).not.toThrow();
+
+        await capped.shutdown();
+      });
+
+      it('leaves a session alone before the idle time is up', async () => {
+        const capped = await startManager({});
+        const session = capped.initChunkedUpload(100, 3600, 1);
+
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(100))),
+        ).resolves.toMatchObject({ receivedBytes: 100 });
+
+        await capped.shutdown();
+      });
+
+      it('starts the idle time again with every chunk', async () => {
+        const capped = await startManager({});
+        const session = capped.initChunkedUpload(100, 3600, 1);
+
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+        await capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(50)));
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50))),
+        ).resolves.toMatchObject({ receivedBytes: 100 });
+
+        await capped.shutdown();
+      });
+
+      it('does not take a chunk still being written for idleness, however slow', async () => {
+        const capped = await startManager({});
+        const session = capped.initChunkedUpload(100, 3600, 1);
+
+        const slow = new Readable({ read() {} });
+        slow.push(Buffer.alloc(50, 'a'));
+        const writing = capped.appendChunk(session.uploadId, 0, slow);
+
+        await vi.advanceTimersByTimeAsync(idle + 2 * CLEANUP);
+        slow.push(Buffer.alloc(50, 'b'));
+        slow.push(null);
+        await expect(writing).resolves.toMatchObject({ receivedBytes: 100 });
+
+        await expect(capped.completeChunkedUpload(session.uploadId)).resolves.toMatchObject({
+          ciphertextSize: 100,
+        });
+
+        await capped.shutdown();
+      });
+
+      it('still ends a busy session when its time is up', async () => {
+        const capped = await startManager({ UPLOAD_SESSION_TTL: String((idle / 1000) * 2) });
+        const session = capped.initChunkedUpload(200, 3600, 1);
+
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+        await capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(50)));
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+        await capped.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)));
+        await vi.advanceTimersByTimeAsync(2 * CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 2, makeStream('c'.repeat(50))),
+        ).rejects.toMatchObject({ statusCode: 404 });
+
+        await capped.shutdown();
+      });
+    });
   });
 
   // ------------------------------------------------------------------

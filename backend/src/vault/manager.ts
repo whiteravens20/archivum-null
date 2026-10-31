@@ -31,6 +31,14 @@ let reservedBytes = 0;
  */
 const ipSessionCounts = new Map<string, number>();
 
+/**
+ * A chunked session gets no new chunk for this long, and it is dropped along with its
+ * reservation. A session otherwise holds its whole declared size against the quota until
+ * UPLOAD_SESSION_TTL, without a byte being sent. A chunk still being written does not count
+ * as idle, however slow the link, so what this has to outlast is the pause between chunks.
+ */
+export const UPLOAD_SESSION_IDLE_MS = 15 * 60_000;
+
 /** HMAC secret generated at startup — used to sign upload session tokens. */
 const sessionSecret = randomBytes(32);
 
@@ -141,7 +149,11 @@ export class VaultManager {
       .map(([id]) => this.deleteVault(id));
 
     const expiredSessions = Array.from(uploadSessions.entries())
-      .filter(([, session]) => session.expiresAt <= now)
+      .filter(
+        ([, session]) =>
+          session.expiresAt <= now ||
+          (!session.writing && session.lastActivityAt + UPLOAD_SESSION_IDLE_MS <= now),
+      )
       .map(([id, session]) => {
         this.releaseSessionAccounting(session);
         uploadSessions.delete(id);
@@ -338,6 +350,7 @@ export class VaultManager {
       expiresAt: Date.now() + config.UPLOAD_SESSION_TTL * 1000,
       clientIp,
       clientNetwork,
+      lastActivityAt: Date.now(),
     };
     uploadSessions.set(uploadId, session);
     return session;
@@ -391,6 +404,7 @@ export class VaultManager {
       session.nextChunkIndex += 1;
     } finally {
       session.writing = false;
+      session.lastActivityAt = Date.now();
     }
 
     return session;

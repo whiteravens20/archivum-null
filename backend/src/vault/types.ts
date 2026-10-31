@@ -29,6 +29,8 @@ export interface ChunkedUploadSession {
   clientIp?: string;
   /** The wider network of that client, when it has one: it shares a cap as well. */
   clientNetwork?: string | null;
+  /** When the session was opened, or a chunk last finished (ms). */
+  lastActivityAt: number;
   /** Set while a chunk is being written or the upload is being finalised. */
   writing?: boolean;
 }
