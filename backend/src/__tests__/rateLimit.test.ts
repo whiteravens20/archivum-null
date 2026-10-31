@@ -256,3 +256,39 @@ describe('Rate-limit middleware', () => {
     expect((await download('2001:db8:1:3::1')).statusCode).toBe(200);
   });
 });
+
+describe('Rate-limit middleware, a client with no address', () => {
+  it('should tell the operator once, without repeating what was sent', async () => {
+    vi.resetModules();
+    const warn = vi.fn();
+    const logger = {
+      warn,
+      info: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      fatal: vi.fn(),
+      trace: vi.fn(),
+      level: 'info',
+      child: () => logger,
+    };
+    const app = Fastify({ loggerInstance: logger as never, trustProxy: true });
+    const { rateLimitPlugin } = await import('../middleware/rateLimit.js');
+    await rateLimitPlugin(app);
+    app.get('/api/health', async () => ({ status: 'ok' }));
+    await app.ready();
+
+    for (const value of ['203.0.113.7:51234', 'secret-looking-string']) {
+      await app.inject({
+        method: 'GET',
+        url: '/api/health',
+        headers: { 'x-forwarded-for': value },
+      });
+    }
+    await app.inject({ method: 'GET', url: '/api/health', remoteAddress: '198.51.100.1' });
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0])).toContain('X-Forwarded-For');
+    expect(String(warn.mock.calls[0])).not.toContain('203.0.113.7');
+    await app.close();
+  });
+});

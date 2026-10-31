@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config.js';
-import { clientKey } from './clientKey.js';
+import { clientKey, UNKNOWN_CLIENT } from './clientKey.js';
 import { requestPath } from './requestPath.js';
 
 /**
@@ -106,6 +106,7 @@ export function recordAdminAuthFailure(ip: string): void {
 
 export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
   const windowMs = config.RATE_LIMIT_WINDOW * 1000;
+  let reportedUnknownClient = false;
 
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     const pathname = requestPath(request);
@@ -113,6 +114,15 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
 
     // `request.ip` is already resolved via Fastify's trustProxy chain.
     const ip = clientKey(request.ip);
+
+    // Without the value: it is whatever a client wrote. A proxy that adds a port to the
+    // address would otherwise put all visitors in one bucket with nothing to say why.
+    if (ip === UNKNOWN_CLIENT && !reportedUnknownClient) {
+      reportedUnknownClient = true;
+      request.log.warn(
+        'A client address that came through the proxy is not an IP address, and such clients share one rate-limit bucket. Check what the reverse proxy sends in X-Forwarded-For.',
+      );
+    }
 
     // Tier 1 — general API limit (guards /api/tos file I/O, vault GET, etc.)
     if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;

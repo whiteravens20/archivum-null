@@ -243,6 +243,29 @@ describe('buildApp wiring — client IP resolution behind TRUST_PROXY', () => {
     expect((await get(PROXY, '203.0.113.1')).statusCode).toBe(429);
   });
 
+  it('takes the address the proxy added, not what the client wrote before it', async () => {
+    // nginx's $proxy_add_x_forwarded_for appends to what the client sent. The rightmost
+    // entry is the one the proxy vouches for: changing the rest must not buy a new bucket.
+    expect((await get(PROXY, '192.0.2.1, 203.0.113.1')).statusCode).toBe(200);
+    expect((await get(PROXY, '192.0.2.2, 203.0.113.1')).statusCode).toBe(429);
+    expect((await get(PROXY, '10.0.0.1, 8.8.8.8, 203.0.113.1')).statusCode).toBe(429);
+  });
+
+  it('gives a forwarded value that is no address no bucket of its own', async () => {
+    expect((await get(PROXY, 'not-an-address-1')).statusCode).toBe(200);
+    expect((await get(PROXY, 'not-an-address-2')).statusCode).toBe(429);
+    expect((await get(PROXY, '203.0.113.1:51234')).statusCode).toBe(429);
+    expect((await get(PROXY, '203.0.113.2:51234')).statusCode).toBe(429);
+    // A real address is still a client of its own.
+    expect((await get(PROXY, '203.0.113.3')).statusCode).toBe(200);
+  });
+
+  it('counts one IPv4 client as one, however its address is written', async () => {
+    expect((await get(PROXY, '203.0.113.7')).statusCode).toBe(200);
+    expect((await get(PROXY, '::ffff:203.0.113.7')).statusCode).toBe(429);
+    expect((await get(PROXY, '::ffff:cb00:7107')).statusCode).toBe(429);
+  });
+
   it('ignores X-Forwarded-For from an untrusted peer', async () => {
     expect((await get('198.51.100.7', '203.0.113.1')).statusCode).toBe(200);
     // A spoofed header must not buy the direct client a fresh bucket.
