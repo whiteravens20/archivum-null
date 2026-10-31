@@ -59,10 +59,7 @@ export default function Admin() {
   // refused; after it, the panel keeps what it has and waits.
   const signedIn = useRef(false);
 
-  const authHeader = useCallback(
-    () => ({ Authorization: `Basic ${auth}` }),
-    [auth]
-  );
+  const authHeader = useCallback(() => ({ Authorization: `Basic ${auth}` }), [auth]);
 
   const fetchData = useCallback(async (): Promise<boolean> => {
     try {
@@ -93,9 +90,15 @@ export default function Admin() {
         // shown are the panel's own.
         const body: unknown = await limited.json().catch(() => null);
         const lockedOut =
-          typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string' &&
+          typeof body === 'object' &&
+          body !== null &&
+          'error' in body &&
+          typeof body.error === 'string' &&
           body.error.startsWith('Too many failed login attempts');
-        setError({ key: lockedOut ? 'admin.lockedOut' : 'admin.rateLimited', vars: { seconds: retryAfter } });
+        setError({
+          key: lockedOut ? 'admin.lockedOut' : 'admin.rateLimited',
+          vars: { seconds: retryAfter },
+        });
         return false;
       }
 
@@ -148,15 +151,21 @@ export default function Admin() {
       }
     };
     void poll();
-    const interval = setInterval(() => { void poll(); }, 10_000);
+    const interval = setInterval(() => {
+      void poll();
+    }, 10_000);
     return () => clearInterval(interval);
   }, [authenticated, fetchData]);
 
   useEffect(() => {
     if (!authenticated) return;
-    const check = async () => { await fetchVersion(); };
+    const check = async () => {
+      await fetchVersion();
+    };
     void check();
-    const interval = setInterval(() => { void check(); }, 600_000);
+    const interval = setInterval(() => {
+      void check();
+    }, 600_000);
     return () => clearInterval(interval);
   }, [authenticated, fetchVersion]);
 
@@ -178,7 +187,9 @@ export default function Admin() {
   if (!authenticated) {
     return (
       <div className="max-w-sm mx-auto px-4 py-20">
-        <h1 className="text-xl font-bold text-center mb-6 text-vault-heading">{t('admin.title')}</h1>
+        <h1 className="text-xl font-bold text-center mb-6 text-vault-heading">
+          {t('admin.title')}
+        </h1>
         <form onSubmit={handleLogin} className="space-y-4">
           <input
             type="text"
@@ -213,7 +224,9 @@ export default function Admin() {
           <h1 className="text-xl font-bold text-vault-heading">{t('admin.title')}</h1>
           <p className="text-xs text-vault-subtle">{t('admin.subtitle')}</p>
         </div>
-        <a href="/" className="text-sm text-vault-accent-ink hover:underline">{t('common.home')}</a>
+        <a href="/" className="text-sm text-vault-accent-ink hover:underline">
+          {t('common.home')}
+        </a>
       </div>
 
       {loading ? (
@@ -278,36 +291,58 @@ export default function Admin() {
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">{t('admin.activeVaults')}</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">
+                  {t('admin.activeVaults')}
+                </p>
                 <p className="text-lg font-bold text-vault-text">{stats.activeVaults}</p>
               </div>
 
               {/* Storage card — shows quota bar when limit is set */}
               <div className="bg-vault-secondary/50 rounded-lg p-4 sm:col-span-1">
-                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">{t('admin.storage')}</p>
-                {stats.storageQuotaBytes > 0 ? (() => {
-                  const pct = Math.min(100, (stats.totalStorageBytes / stats.storageQuotaBytes) * 100);
-                  const isNearFull = pct >= 90;
-                  const isFull = pct >= 100;
-                  const percent = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(pct);
-                  return (
-                    <>
-                      <p className={`text-lg font-bold ${isFull ? 'text-vault-danger' : isNearFull ? 'text-vault-warning' : 'text-vault-text'}`}>
-                        {formatBytes(stats.totalStorageBytes, locale)}
-                        <span className="text-xs font-normal text-vault-subtle ml-1">/ {formatBytes(stats.storageQuotaBytes, locale)}</span>
-                      </p>
-                      <div className="mt-2 h-1.5 rounded-full bg-vault-secondary overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            isFull ? 'bg-vault-danger-fill' : isNearFull ? 'bg-vault-warning-fill' : 'bg-vault-accent'
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-vault-subtle mt-1">{t('admin.storageUsed', { percent })}</p>
-                    </>
-                  );
-                })() : (
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">
+                  {t('admin.storage')}
+                </p>
+                {stats.storageQuotaBytes > 0 ? (
+                  (() => {
+                    const pct = Math.min(
+                      100,
+                      (stats.totalStorageBytes / stats.storageQuotaBytes) * 100,
+                    );
+                    const isNearFull = pct >= 90;
+                    const isFull = pct >= 100;
+                    const percent = new Intl.NumberFormat(locale, {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    }).format(pct);
+                    return (
+                      <>
+                        <p
+                          className={`text-lg font-bold ${isFull ? 'text-vault-danger' : isNearFull ? 'text-vault-warning' : 'text-vault-text'}`}
+                        >
+                          {formatBytes(stats.totalStorageBytes, locale)}
+                          <span className="text-xs font-normal text-vault-subtle ml-1">
+                            / {formatBytes(stats.storageQuotaBytes, locale)}
+                          </span>
+                        </p>
+                        <div className="mt-2 h-1.5 rounded-full bg-vault-secondary overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              isFull
+                                ? 'bg-vault-danger-fill'
+                                : isNearFull
+                                  ? 'bg-vault-warning-fill'
+                                  : 'bg-vault-accent'
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-vault-subtle mt-1">
+                          {t('admin.storageUsed', { percent })}
+                        </p>
+                      </>
+                    );
+                  })()
+                ) : (
                   <p className="text-lg font-bold text-vault-text">
                     {formatBytes(stats.totalStorageBytes, locale)}
                     <span className="text-xs font-normal text-vault-subtle ml-1">/ ∞</span>
@@ -316,7 +351,9 @@ export default function Admin() {
               </div>
 
               <div className="bg-vault-secondary/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">{t('admin.version')}</p>
+                <p className="text-[10px] uppercase tracking-widest text-vault-subtle mb-1">
+                  {t('admin.version')}
+                </p>
                 <p
                   className={`text-lg font-bold ${
                     version?.updateAvailable ? 'text-vault-warning' : 'text-vault-text'
@@ -354,7 +391,10 @@ export default function Admin() {
             ) : (
               <div className="divide-y divide-vault-secondary/50">
                 {vaults.map((v) => (
-                  <div key={v.vaultId} className="px-4 py-3 flex items-center justify-between text-sm">
+                  <div
+                    key={v.vaultId}
+                    className="px-4 py-3 flex items-center justify-between text-sm"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="flex gap-3 items-baseline">
                         <span className="text-vault-accent-ink font-mono text-xs truncate max-w-[200px]">

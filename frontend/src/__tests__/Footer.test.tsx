@@ -9,7 +9,7 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Archivum Null')).toBeInTheDocument();
   });
@@ -18,7 +18,7 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Anonymous encrypted file sharing.')).toBeInTheDocument();
   });
@@ -28,7 +28,7 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Acme Drop')).toBeInTheDocument();
     expect(screen.getByText('Files, sealed.')).toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Share it safely!')).toBeInTheDocument();
   });
@@ -50,11 +50,11 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('link', { name: 'Source' })).toHaveAttribute(
       'href',
-      'https://github.com/whiteravens20/archivum-null'
+      'https://github.com/whiteravens20/archivum-null',
     );
   });
 
@@ -62,13 +62,13 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const link = screen.getByText('Source');
     expect(link).toBeInTheDocument();
     expect(link.closest('a')).toHaveAttribute(
       'href',
-      'https://github.com/whiteravens20/archivum-null'
+      'https://github.com/whiteravens20/archivum-null',
     );
     expect(link.closest('a')).toHaveAttribute('target', '_blank');
     expect(link.closest('a')).toHaveAttribute('rel', 'noopener noreferrer');
@@ -78,7 +78,7 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const link = screen.getByText('Terms of Service');
     expect(link).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('Footer', () => {
     render(
       <MemoryRouter>
         <Footer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.queryByText('Terms of Service')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Source' })).toBeInTheDocument();

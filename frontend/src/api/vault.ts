@@ -104,7 +104,12 @@ export async function uploadVault(
     const start = i * chunkPlaintextSize;
     const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
     const plaintext = await readVirtualRange(header, file, start, end);
-    const encrypted = await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i, i === numCryptoChunks - 1);
+    const encrypted = await encryptChunk(
+      plaintext as Uint8Array<ArrayBuffer>,
+      key,
+      i,
+      i === numCryptoChunks - 1,
+    );
     encryptedParts.push(new Blob([encrypted]));
     onProgress?.(((i + 1) / numCryptoChunks) * 0.3);
   }
@@ -136,13 +141,18 @@ export async function uploadVault(
 
     xhr.onload = () => {
       if (xhr.status === 201) {
-        try { resolve(JSON.parse(xhr.responseText)); }
-        catch { reject(new ApiError(xhr.status, 'Invalid response from server after upload')); }
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new ApiError(xhr.status, 'Invalid response from server after upload'));
+        }
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
           reject(new ApiError(xhr.status, err.error || `Upload failed (${xhr.status})`));
-        } catch { reject(new ApiError(xhr.status, `Upload failed (${xhr.status}) – backend unreachable`)); }
+        } catch {
+          reject(new ApiError(xhr.status, `Upload failed (${xhr.status}) – backend unreachable`));
+        }
       }
     };
 
@@ -211,9 +221,10 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
 /** How long to wait before sending a chunk again: what the server asks for, or a growing pause. */
 function retryDelay(response: Response | null, attempt: number): number {
   const retryAfter = Number(response?.headers.get('Retry-After'));
-  const wanted = Number.isFinite(retryAfter) && retryAfter > 0
-    ? retryAfter * 1000
-    : RETRY_BASE_MS * 2 ** (attempt - 1);
+  const wanted =
+    Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : RETRY_BASE_MS * 2 ** (attempt - 1);
   return Math.min(wanted, RETRY_MAX_MS);
 }
 
@@ -238,10 +249,12 @@ async function sendChunk(
       const form = new FormData();
       form.append('chunkIndex', String(chunkIndex));
       form.append('file', data, 'chunk.bin');
-      response = await request(
-        `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`,
-        { method: 'POST', body: form, signal, headers: { 'x-session-token': sessionToken } },
-      );
+      response = await request(`${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}/chunk`, {
+        method: 'POST',
+        body: form,
+        signal,
+        headers: { 'x-session-token': sessionToken },
+      });
     } catch (err) {
       if (signal?.aborted) throw err;
       networkError = err;
@@ -251,7 +264,10 @@ async function sendChunk(
 
     if (response?.status === 400) {
       // The body is whatever the server sent; only the one field is looked at.
-      const body = (await response.json().catch(() => null)) as { error?: string; expectedChunkIndex?: number } | null;
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        expectedChunkIndex?: number;
+      } | null;
       // The server expects the chunk after this one: it stored this chunk on an earlier
       // attempt, and only the response to that attempt was lost.
       if (attempt > 1 && body?.expectedChunkIndex === chunkIndex + 1) return;
@@ -259,11 +275,17 @@ async function sendChunk(
     }
 
     const retryable =
-      response === null || response.status === 409 || response.status === 429 || response.status >= 500;
+      response === null ||
+      response.status === 409 ||
+      response.status === 429 ||
+      response.status >= 500;
     if (!retryable || attempt === CHUNK_ATTEMPTS) {
       if (response === null) throw networkError;
       const body = await response.json().catch(() => ({ error: 'Chunk upload failed' }));
-      throw new ApiError(response.status, body.error || `Chunk ${chunkIndex} upload failed (${response.status})`);
+      throw new ApiError(
+        response.status,
+        body.error || `Chunk ${chunkIndex} upload failed (${response.status})`,
+      );
     }
 
     await pause(retryDelay(response, attempt), signal);
@@ -272,10 +294,10 @@ async function sendChunk(
 
 /** Ask the server to abort a chunked upload session and delete partial data. */
 async function abortUploadSession(uploadId: string, sessionToken: string): Promise<void> {
-  await fetch(
-    `${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}`,
-    { method: 'DELETE', headers: { 'x-session-token': sessionToken } },
-  );
+  await fetch(`${API_BASE}/vault/upload/${encodeURIComponent(uploadId)}`, {
+    method: 'DELETE',
+    headers: { 'x-session-token': sessionToken },
+  });
 }
 
 /**
@@ -314,7 +336,11 @@ export async function uploadVaultChunked(
     throw new ApiError(initRes.status, err.error || `Upload init failed (${initRes.status})`);
   }
 
-  const { uploadId, chunkSize: httpChunkSize, sessionToken } = (await initRes.json()) as ChunkInitResponse;
+  const {
+    uploadId,
+    chunkSize: httpChunkSize,
+    sessionToken,
+  } = (await initRes.json()) as ChunkInitResponse;
 
   // 2. Encrypt + upload crypto chunks grouped into HTTP chunks
   const encryptedChunkSize = chunkPlaintextSize + PER_CHUNK_OVERHEAD;
@@ -333,7 +359,14 @@ export async function uploadVaultChunked(
         const start = i * chunkPlaintextSize;
         const end = Math.min(start + chunkPlaintextSize, totalPlaintext);
         const plaintext = await readVirtualRange(header, file, start, end);
-        parts.push(await encryptChunk(plaintext as Uint8Array<ArrayBuffer>, key, i, i === numCryptoChunks - 1));
+        parts.push(
+          await encryptChunk(
+            plaintext as Uint8Array<ArrayBuffer>,
+            key,
+            i,
+            i === numCryptoChunks - 1,
+          ),
+        );
       }
 
       await sendChunk(uploadId, sessionToken, httpChunkIdx, new Blob(parts), signal);
@@ -351,7 +384,10 @@ export async function uploadVaultChunked(
 
     if (!completeRes.ok) {
       const err = await completeRes.json().catch(() => ({ error: 'Upload finalization failed' }));
-      throw new ApiError(completeRes.status, err.error || `Upload finalization failed (${completeRes.status})`);
+      throw new ApiError(
+        completeRes.status,
+        err.error || `Upload finalization failed (${completeRes.status})`,
+      );
     }
 
     return (await completeRes.json()) as VaultCreateResponse;

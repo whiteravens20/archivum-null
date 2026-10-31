@@ -193,7 +193,10 @@ describe('basicAuth', () => {
 
     it('should count IPv6 clients by their /64, like every other limit', async () => {
       const auth = await loadAuth();
-      await auth(createMockRequest(encodeBasicAuth('admin', 'wrong'), '2001:db8:1:2:aaaa:bbbb:cccc:dddd'), createMockReply());
+      await auth(
+        createMockRequest(encodeBasicAuth('admin', 'wrong'), '2001:db8:1:2:aaaa:bbbb:cccc:dddd'),
+        createMockReply(),
+      );
       expect(recordAdminAuthFailure).toHaveBeenCalledExactlyOnceWith('2001:db8:1:2::/64');
     });
 

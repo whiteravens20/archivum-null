@@ -81,10 +81,10 @@ Contributions we will **not accept**:
 
 ### Requirements
 
-| Tool | Version |
-|---|---|
-| Node.js | ≥ 24.0.0 |
-| npm | bundled with Node.js |
+| Tool                    | Version                              |
+| ----------------------- | ------------------------------------ |
+| Node.js                 | ≥ 24.0.0                             |
+| npm                     | bundled with Node.js                 |
 | Docker & Docker Compose | optional — for containerised testing |
 
 ### Local start (no Docker)
@@ -192,13 +192,13 @@ No type errors are accepted.
 
 ### Naming conventions
 
-| Context | Convention |
-|---|---|
-| Files | `camelCase.ts` / `PascalCase.tsx` for React components |
-| Variables / functions | `camelCase` |
-| Types / interfaces | `PascalCase` |
-| Constants | `UPPER_SNAKE_CASE` |
-| Environment variables | `UPPER_SNAKE_CASE` |
+| Context               | Convention                                             |
+| --------------------- | ------------------------------------------------------ |
+| Files                 | `camelCase.ts` / `PascalCase.tsx` for React components |
+| Variables / functions | `camelCase`                                            |
+| Types / interfaces    | `PascalCase`                                           |
+| Constants             | `UPPER_SNAKE_CASE`                                     |
+| Environment variables | `UPPER_SNAKE_CASE`                                     |
 
 ### Dependencies
 

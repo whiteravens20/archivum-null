@@ -68,7 +68,7 @@ services:
     # on all interfaces inside the container's own network namespace; Docker's
     # port mapping is the actual enforcement boundary.
     ports:
-      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
+      - '${HOST_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}'
 
     # The app resolves a name only to verify Turnstile or to check for updates.
     # With both off, uncomment this to leave the container without a resolver:
@@ -91,7 +91,7 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: "1.0"
+          cpus: '1.0'
           # Processes and threads together. Without a limit here the ceiling is
           # whatever the host hands every container, usually thousands.
           pids: 256
@@ -100,7 +100,11 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health"]
+      test:
+        [
+          'CMD-SHELL',
+          'wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -108,10 +112,10 @@ services:
 
     # Logging
     logging:
-      driver: "json-file"
+      driver: 'json-file'
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
 
     # Network: dedicated bridge — container is isolated from the default docker
     # network and any unrelated containers on the host.

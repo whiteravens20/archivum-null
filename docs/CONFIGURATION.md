@@ -8,89 +8,89 @@ The README covers the variables you usually touch. This page is the complete ref
 
 ### Required
 
-| Variable | Default | Description |
-|---|---|---|
-| `ADMIN_PASSWORD` | — | Admin panel password (**required**) |
+| Variable         | Default | Description                         |
+| ---------------- | ------- | ----------------------------------- |
+| `ADMIN_PASSWORD` | —       | Admin panel password (**required**) |
 
 ### Network & binding
 
-| Variable | Default | Description |
-|---|---|---|
-| `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod |
-| `BIND_ADDRESS` | `0.0.0.0` | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace) |
-| `PORT` | `3000` | Server port |
-| `TRUST_PROXY` | `loopback` | Reverse proxies allowed to set `X-Forwarded-For`, given as the address the app sees them connect from: comma-separated IPs, CIDR ranges, or the named ranges `loopback`, `linklocal`, `uniquelocal`. Empty trusts no proxy. If the proxy is not listed, every client shares the proxy's IP and one rate-limit bucket; listing anything beyond the proxy lets clients that reach the port directly spoof their IP and bypass rate limiting. Behind Docker, send one request through the proxy and use the `peer` address from the `Ignored X-Forwarded-For` warning in the container log — logged once, and only for a private address, since request logs carry no client addresses. Hop counts (the old `TRUST_PROXY=1`) and `/0` ranges are rejected at startup — fastify 5.12.1 dropped hop-count trust ([GHSA-3m5p-2c4r-xxw2](https://github.com/advisories/GHSA-3m5p-2c4r-xxw2)). |
+| Variable            | Default     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HOST_BIND_ADDRESS` | `127.0.0.1` | **Docker only** — host interface Docker publishes the port on; set to your tunnel/WireGuard IP in prod                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `BIND_ADDRESS`      | `0.0.0.0`   | **Bare-metal only** — address Fastify binds to directly; Docker overrides this to `0.0.0.0` (container network namespace)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `PORT`              | `3000`      | Server port                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `TRUST_PROXY`       | `loopback`  | Reverse proxies allowed to set `X-Forwarded-For`, given as the address the app sees them connect from: comma-separated IPs, CIDR ranges, or the named ranges `loopback`, `linklocal`, `uniquelocal`. Empty trusts no proxy. If the proxy is not listed, every client shares the proxy's IP and one rate-limit bucket; listing anything beyond the proxy lets clients that reach the port directly spoof their IP and bypass rate limiting. Behind Docker, send one request through the proxy and use the `peer` address from the `Ignored X-Forwarded-For` warning in the container log — logged once, and only for a private address, since request logs carry no client addresses. Hop counts (the old `TRUST_PROXY=1`) and `/0` ranges are rejected at startup — fastify 5.12.1 dropped hop-count trust ([GHSA-3m5p-2c4r-xxw2](https://github.com/advisories/GHSA-3m5p-2c4r-xxw2)). |
 
 ### Upload limits & vault policy
 
-| Variable | Default | Description |
-|---|---|---|
-| `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) — enforced by the backend |
-| `DEFAULT_TTL` | `86400` | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`. |
-| `MAX_TTL` | `604800` | Maximum vault TTL in seconds (7 d). Must be > 0. |
-| `DEFAULT_MAX_DOWNLOADS` | `10` | Default max downloads per vault. Must be > 0. |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check, and the server warns about it at startup. `.env.example` sets 10 GiB and the quick-start Compose file 1 GiB. Size it to the disk the vaults are on: a named Docker volume lives on the host's filesystem, and a full one stops Docker and everything else that uses it. |
-| `STORAGE_PATH` | `/data/vaults` | File storage path inside container. Give the app a directory of its own: it creates, expires and removes what is inside. A directory it does not recognise as a vault is left alone and named in a warning at startup |
+| Variable                | Default         | Description                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MAX_FILE_SIZE`         | `104857600`     | Max upload size in bytes (100 MB) — enforced by the backend                                                                                                                                                                                                                                                                                                                                                                |
+| `DEFAULT_TTL`           | `86400`         | Default vault TTL in seconds (24 h). Must be ≤ `MAX_TTL`.                                                                                                                                                                                                                                                                                                                                                                  |
+| `MAX_TTL`               | `604800`        | Maximum vault TTL in seconds (7 d). Must be > 0.                                                                                                                                                                                                                                                                                                                                                                           |
+| `DEFAULT_MAX_DOWNLOADS` | `10`            | Default max downloads per vault. Must be > 0.                                                                                                                                                                                                                                                                                                                                                                              |
+| `MAX_TOTAL_STORAGE`     | `0` (unlimited) | Global storage quota in bytes — new uploads are rejected with HTTP 507 when total active vault storage exceeds this limit; `0` disables the check, and the server warns about it at startup. `.env.example` sets 10 GiB and the quick-start Compose file 1 GiB. Size it to the disk the vaults are on: a named Docker volume lives on the host's filesystem, and a full one stops Docker and everything else that uses it. |
+| `STORAGE_PATH`          | `/data/vaults`  | File storage path inside container. Give the app a directory of its own: it creates, expires and removes what is inside. A directory it does not recognise as a vault is left alone and named in a warning at startup                                                                                                                                                                                                      |
 
 ### Chunked upload internals
 
-| Variable | Default | Description |
-|---|---|---|
-| `CHUNK_SIZE` | `10485760` | Chunk size in bytes for the chunked upload protocol (default 10 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. Smaller chunks work better for homelab/Tailscale/VPS setups with limited bandwidth. |
-| `CRYPTO_CHUNK_SIZE` | `5242852` | Crypto chunk size in bytes — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV, and its index and a last-chunk marker as AAD. The default is `min(5 MB, CHUNK_SIZE)` less the 28 bytes a chunk gains when encrypted, so that whole encrypted chunks fill a request of `CHUNK_SIZE`: two of them at the defaults. Smaller values reduce peak memory; larger values reduce per-chunk overhead. Vaults keep the chunk size they were uploaded with. |
-| `UPLOAD_SESSION_TTL` | `3600` | How long an incomplete chunked upload session stays alive, in seconds (default 60 min). It has to cover the largest file you allow on the slowest link you expect: 1 GB at 5 Mbps takes about 27 minutes |
-| `MAX_UPLOAD_SESSIONS_PER_IP` | `10` | Max concurrent open chunked-upload sessions a single client IP may hold (`0` = unlimited, not recommended). Each open session reserves its declared size against `MAX_TOTAL_STORAGE`; without this cap a single IP could open many sessions and never complete them, tying up the storage quota and blocking legitimate uploads until the sessions expire. |
+| Variable                     | Default    | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CHUNK_SIZE`                 | `10485760` | Chunk size in bytes for the chunked upload protocol (default 10 MB) — each HTTP request stays below this limit, which lets uploads pass through Cloudflare's 100 MB per-request cap. Also used by the frontend as the threshold for switching to the chunked upload flow. Smaller chunks work better for homelab/Tailscale/VPS setups with limited bandwidth.                                                                                                                     |
+| `CRYPTO_CHUNK_SIZE`          | `5242852`  | Crypto chunk size in bytes — each plaintext chunk is encrypted independently with AES-256-GCM using a unique IV, and its index and a last-chunk marker as AAD. The default is `min(5 MB, CHUNK_SIZE)` less the 28 bytes a chunk gains when encrypted, so that whole encrypted chunks fill a request of `CHUNK_SIZE`: two of them at the defaults. Smaller values reduce peak memory; larger values reduce per-chunk overhead. Vaults keep the chunk size they were uploaded with. |
+| `UPLOAD_SESSION_TTL`         | `3600`     | How long an incomplete chunked upload session stays alive, in seconds (default 60 min). It has to cover the largest file you allow on the slowest link you expect: 1 GB at 5 Mbps takes about 27 minutes                                                                                                                                                                                                                                                                          |
+| `MAX_UPLOAD_SESSIONS_PER_IP` | `10`       | Max concurrent open chunked-upload sessions a single client IP may hold (`0` = unlimited, not recommended). Each open session reserves its declared size against `MAX_TOTAL_STORAGE`; without this cap a single IP could open many sessions and never complete them, tying up the storage quota and blocking legitimate uploads until the sessions expire.                                                                                                                        |
 
 ### Rate limiting
 
 IPv4 clients are counted per address, IPv6 clients per /64 — the same applies to `MAX_UPLOAD_SESSIONS_PER_IP`.
 
-| Variable | Default | Description |
-|---|---|---|
-| `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
-| `RATE_LIMIT_MAX` | `10` | Max new-upload requests per window per IP — counts `POST /api/vault` and `POST /api/vault/upload/init` (chunked upload start); individual chunk/complete requests are not counted |
-| `RATE_LIMIT_API_MAX` | `120` | Max general API requests per window per IP |
-| `RATE_LIMIT_DOWNLOAD_MAX` | `30` | Max download requests per window per IP |
-| `RATE_LIMIT_ADMIN_MAX` | `10` | Max failed admin logins per window per IP. Once reached, every request to `/api/admin` from that client is refused until the window ends, a correct password included. Requests that carry valid credentials are not counted, so the admin panel's own polling never runs into it |
+| Variable                  | Default | Description                                                                                                                                                                                                                                                                       |
+| ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RATE_LIMIT_WINDOW`       | `60`    | Rate limit window in seconds                                                                                                                                                                                                                                                      |
+| `RATE_LIMIT_MAX`          | `10`    | Max new-upload requests per window per IP — counts `POST /api/vault` and `POST /api/vault/upload/init` (chunked upload start); individual chunk/complete requests are not counted                                                                                                 |
+| `RATE_LIMIT_API_MAX`      | `120`   | Max general API requests per window per IP                                                                                                                                                                                                                                        |
+| `RATE_LIMIT_DOWNLOAD_MAX` | `30`    | Max download requests per window per IP                                                                                                                                                                                                                                           |
+| `RATE_LIMIT_ADMIN_MAX`    | `10`    | Max failed admin logins per window per IP. Once reached, every request to `/api/admin` from that client is refused until the window ends, a correct password included. Requests that carry valid credentials are not counted, so the admin panel's own polling never runs into it |
 
 ### Cloudflare Turnstile
 
-| Variable | Default | Description |
-|---|---|---|
+| Variable             | Default                    | Description                                                                                                                  |
+| -------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `TURNSTILE_SITE_KEY` | `0x0000000000000000000000` | Cloudflare Turnstile **public** site key — served to the browser at runtime via `GET /api/config`; never exposed as a secret |
-| `TURNSTILE_SECRET` | — | Cloudflare Turnstile secret key |
-| `TURNSTILE_HOSTNAME` | — | Expected hostname in Turnstile response (e.g. `example.com`); leave empty to skip |
+| `TURNSTILE_SECRET`   | —                          | Cloudflare Turnstile secret key                                                                                              |
+| `TURNSTILE_HOSTNAME` | —                          | Expected hostname in Turnstile response (e.g. `example.com`); leave empty to skip                                            |
 
 ### Admin
 
-| Variable | Default | Description |
-|---|---|---|
-| `ADMIN_USER` | `admin` | Admin panel username |
-| `ADMIN_PASSWORD` | — | Admin panel password (**required**, see above) |
+| Variable         | Default | Description                                    |
+| ---------------- | ------- | ---------------------------------------------- |
+| `ADMIN_USER`     | `admin` | Admin panel username                           |
+| `ADMIN_PASSWORD` | —       | Admin panel password (**required**, see above) |
 
 ### Branding
 
-| Variable | Default | Description |
-|---|---|---|
-| `BRAND_NAME` | `Archivum Null` | Name shown in the browser tab, the page headings, the footer and the web app manifest. 1 to 64 characters. |
-| `BRAND_TAGLINE` | `Anonymous encrypted file sharing` | Line under the name on the home page and at the end of the footer. 1 to 120 characters. |
-| `BRAND_ACCENT_COLOR` | `#60A5FA` | Accent colour as six hex digits (`#RRGGBB`). The label colour of buttons is chosen to match. |
-| `BRAND_THEME` | `dark` | `dark`, `light`, or `auto` to follow the visitor's system colour scheme. |
-| `BRANDING_PATH` | `branding` in the install directory (`/app/branding` in the image) | Directory holding your own logo and icons. Only a fixed list of file names is read from it, at startup. |
+| Variable             | Default                                                            | Description                                                                                                |
+| -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `BRAND_NAME`         | `Archivum Null`                                                    | Name shown in the browser tab, the page headings, the footer and the web app manifest. 1 to 64 characters. |
+| `BRAND_TAGLINE`      | `Anonymous encrypted file sharing`                                 | Line under the name on the home page and at the end of the footer. 1 to 120 characters.                    |
+| `BRAND_ACCENT_COLOR` | `#60A5FA`                                                          | Accent colour as six hex digits (`#RRGGBB`). The label colour of buttons is chosen to match.               |
+| `BRAND_THEME`        | `dark`                                                             | `dark`, `light`, or `auto` to follow the visitor's system colour scheme.                                   |
+| `BRANDING_PATH`      | `branding` in the install directory (`/app/branding` in the image) | Directory holding your own logo and icons. Only a fixed list of file names is read from it, at startup.    |
 
 All of these are cosmetic and are applied when the server starts; a value that fails its check stops the startup with a message naming the variable. [BRANDING.md](BRANDING.md) explains each setting and lists the image files.
 
 ### Version & update check
 
-| Variable | Default | Description |
-|---|---|---|
-| `APP_VERSION` | — | Version reported in the admin panel. Stamped automatically into Docker images from the release tag; **bare-metal installs must set it themselves** or the panel reports `unknown` |
-| `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release and show a notice in the admin panel. **Opt-in** — see below |
-| `UPDATE_CHECK_REPO` | `whiteravens20/archivum-null` | Repository to compare against; change it on a fork |
-| `UPDATE_CHECK_INTERVAL` | `21600` (6 h) | Seconds between checks. Minimum `300`; failed checks retry after 15 min |
+| Variable                | Default                       | Description                                                                                                                                                                       |
+| ----------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_VERSION`           | —                             | Version reported in the admin panel. Stamped automatically into Docker images from the release tag; **bare-metal installs must set it themselves** or the panel reports `unknown` |
+| `UPDATE_CHECK_ENABLED`  | `false`                       | Compare the running version against the newest GitHub release and show a notice in the admin panel. **Opt-in** — see below                                                        |
+| `UPDATE_CHECK_REPO`     | `whiteravens20/archivum-null` | Repository to compare against; change it on a fork                                                                                                                                |
+| `UPDATE_CHECK_INTERVAL` | `21600` (6 h)                 | Seconds between checks. Minimum `300`; failed checks retry after 15 min                                                                                                           |
 
 The running version is always shown in the admin panel and needs no network. Only
-the *comparison* against GitHub does, and that is off by default: it is the one
+the _comparison_ against GitHub does, and that is off by default: it is the one
 outbound connection the app ever makes on its own, and
 [HARDENING.md](HARDENING.md#egress-containment) tells you to block exactly that.
 

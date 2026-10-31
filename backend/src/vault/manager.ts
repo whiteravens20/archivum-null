@@ -1,5 +1,10 @@
 import type { VaultMetadata, ChunkedUploadSession } from './types.js';
-import { config, calcEncryptionOverhead, MIN_TTL_SECONDS, MAX_DOWNLOADS_PER_VAULT } from '../config.js';
+import {
+  config,
+  calcEncryptionOverhead,
+  MIN_TTL_SECONDS,
+  MAX_DOWNLOADS_PER_VAULT,
+} from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -46,7 +51,7 @@ const CLEANUP_INTERVAL = 60_000;
 function quotaExceeded(): Error {
   return Object.assign(
     new Error('Storage quota exceeded. Please try again later or contact the administrator.'),
-    { statusCode: 507 }
+    { statusCode: 507 },
   );
 }
 
@@ -65,10 +70,9 @@ function isVaultMetadata(meta: VaultMetadata, vaultId: string): boolean {
 
 /** A second request for an upload session whose data file is being written to. */
 function sessionBusy(): Error {
-  return Object.assign(
-    new Error('Another request for this upload is still being processed'),
-    { statusCode: 409 }
-  );
+  return Object.assign(new Error('Another request for this upload is still being processed'), {
+    statusCode: 409,
+  });
 }
 
 export class VaultManager {
@@ -113,7 +117,7 @@ export class VaultManager {
         const shown = foreign.slice(0, 5).join(', ');
         const more = foreign.length > 5 ? ` and ${foreign.length - 5} more` : '';
         console.warn(
-          `[WARN] STORAGE_PATH holds directories that are not vaults and were left alone: ${shown}${more}. Give the app a directory of its own.`
+          `[WARN] STORAGE_PATH holds directories that are not vaults and were left alone: ${shown}${more}. Give the app a directory of its own.`,
         );
       }
     } catch {
@@ -163,7 +167,7 @@ export class VaultManager {
     ttl: number,
     maxDownloads: number,
     chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE,
-    declaredSize?: number
+    declaredSize?: number,
   ): Promise<VaultMetadata> {
     // MAX_FILE_SIZE refers to the user's raw file — account for the encrypted
     // metadata header (filename + MIME) that the frontend prepends before encryption.
@@ -184,9 +188,8 @@ export class VaultManager {
       const projected = this.getStats().totalStorageBytes + reservedBytes + declared;
       // With nothing declared, only a quota that is already full shows here. The real
       // size is checked below, once it is known.
-      const over = declared > 0
-        ? projected > config.MAX_TOTAL_STORAGE
-        : projected >= config.MAX_TOTAL_STORAGE;
+      const over =
+        declared > 0 ? projected > config.MAX_TOTAL_STORAGE : projected >= config.MAX_TOTAL_STORAGE;
       if (over) throw quotaExceeded();
     }
 
@@ -210,10 +213,9 @@ export class VaultManager {
 
       if (size < MIN_CIPHERTEXT_SIZE) {
         await storage.deleteVault(vaultId).catch(() => {});
-        throw Object.assign(
-          new Error('Upload is too small to be an encrypted file'),
-          { statusCode: 400 }
-        );
+        throw Object.assign(new Error('Upload is too small to be an encrypted file'), {
+          statusCode: 400,
+        });
       }
 
       // What was stored takes the place of what was declared: the declared length
@@ -250,10 +252,20 @@ export class VaultManager {
 
   // ── Chunked upload ────────────────────────────────────────────────────────
 
-  initChunkedUpload(totalSize: number, ttl: number, maxDownloads: number, chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE, clientIp?: string): ChunkedUploadSession {
+  initChunkedUpload(
+    totalSize: number,
+    ttl: number,
+    maxDownloads: number,
+    chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE,
+    clientIp?: string,
+  ): ChunkedUploadSession {
     const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
     const maxAllowed = plaintextMax + calcEncryptionOverhead(plaintextMax);
-    if (!Number.isSafeInteger(totalSize) || totalSize < MIN_CIPHERTEXT_SIZE || totalSize > maxAllowed) {
+    if (
+      !Number.isSafeInteger(totalSize) ||
+      totalSize < MIN_CIPHERTEXT_SIZE ||
+      totalSize > maxAllowed
+    ) {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
 
@@ -265,8 +277,10 @@ export class VaultManager {
       const open = ipSessionCounts.get(clientIp) ?? 0;
       if (open >= config.MAX_UPLOAD_SESSIONS_PER_IP) {
         throw Object.assign(
-          new Error('Too many concurrent uploads. Complete or cancel an upload before starting another.'),
-          { statusCode: 429 }
+          new Error(
+            'Too many concurrent uploads. Complete or cancel an upload before starting another.',
+          ),
+          { statusCode: 429 },
         );
       }
     }
@@ -299,7 +313,11 @@ export class VaultManager {
     return session;
   }
 
-  async appendChunk(uploadId: string, chunkIndex: number, stream: Readable): Promise<ChunkedUploadSession> {
+  async appendChunk(
+    uploadId: string,
+    chunkIndex: number,
+    stream: Readable,
+  ): Promise<ChunkedUploadSession> {
     const session = uploadSessions.get(uploadId);
     if (!session || session.expiresAt <= Date.now()) {
       if (session) {
@@ -325,7 +343,7 @@ export class VaultManager {
       // already here, so it can go on instead of failing the upload.
       throw Object.assign(
         new Error(`Expected chunk index ${session.nextChunkIndex}, got ${chunkIndex}`),
-        { statusCode: 400, expectedChunkIndex: session.nextChunkIndex }
+        { statusCode: 400, expectedChunkIndex: session.nextChunkIndex },
       );
     }
 
@@ -335,7 +353,7 @@ export class VaultManager {
         uploadId,
         stream,
         session.totalSize,
-        session.receivedBytes
+        session.receivedBytes,
       );
       // Advance only once the bytes are on disk. A failed chunk leaves the session
       // where it was, so the client can send the same index again.
@@ -374,8 +392,10 @@ export class VaultManager {
 
     if (session.receivedBytes !== session.totalSize) {
       throw Object.assign(
-        new Error(`Upload incomplete: expected ${session.totalSize} bytes, got ${session.receivedBytes}`),
-        { statusCode: 400 }
+        new Error(
+          `Upload incomplete: expected ${session.totalSize} bytes, got ${session.receivedBytes}`,
+        ),
+        { statusCode: 400 },
       );
     }
 
@@ -450,7 +470,9 @@ export class VaultManager {
     return meta;
   }
 
-  async consumeDownload(vaultId: string): Promise<{ stream: Readable; meta: VaultMetadata } | null> {
+  async consumeDownload(
+    vaultId: string,
+  ): Promise<{ stream: Readable; meta: VaultMetadata } | null> {
     const meta = this.getVault(vaultId);
     if (!meta) return null;
 

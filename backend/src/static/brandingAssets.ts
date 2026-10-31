@@ -137,7 +137,9 @@ export function loadBrandingAssets(dir: string, warn: (message: string) => void)
   for (const name of present) {
     // Dot entries are how Kubernetes lays out a mounted ConfigMap; not a typo.
     if (!KNOWN_FILES.has(name) && !name.startsWith('.')) {
-      warn(`Branding: ${name} is not a file name this server uses and was ignored (see docs/BRANDING.md)`);
+      warn(
+        `Branding: ${name} is not a file name this server uses and was ignored (see docs/BRANDING.md)`,
+      );
     }
   }
 

@@ -35,7 +35,10 @@ describe('Logo', () => {
   });
 
   it('should show the operator logo for the theme in use', () => {
-    setBrandingTags({ 'brand-logo': '/brand/logo.svg', 'brand-logo-light': '/brand/logo-light.png' });
+    setBrandingTags({
+      'brand-logo': '/brand/logo.svg',
+      'brand-logo-light': '/brand/logo-light.png',
+    });
 
     const dark = render(<Logo className="w-16 h-16" />);
     expect(dark.container.querySelector('img')).toHaveAttribute('src', '/brand/logo.svg');

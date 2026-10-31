@@ -75,7 +75,9 @@ export function loadTerms(dir: string): Terms | null {
   try {
     markdown = fs.readFileSync(path.join(dir, 'TOS.md'), 'utf-8');
   } catch {
-    console.warn('[WARN] TOS.md cannot be read as a file. The footer leaves out its link to the terms, and /tos says they could not be loaded.');
+    console.warn(
+      '[WARN] TOS.md cannot be read as a file. The footer leaves out its link to the terms, and /tos says they could not be loaded.',
+    );
     return null;
   }
 
@@ -93,7 +95,9 @@ export function loadTerms(dir: string): Terms | null {
       translations[lang] = renderTerms(fs.readFileSync(path.join(dir, name), 'utf-8'));
     } catch {
       // Docker creates a directory for a bind mount whose file does not exist
-      console.warn(`[WARN] ${name} cannot be read as a file. The terms are served without this translation.`);
+      console.warn(
+        `[WARN] ${name} cannot be read as a file. The terms are served without this translation.`,
+      );
     }
   }
   return { terms: renderTerms(markdown), translations };
@@ -105,6 +109,8 @@ export function loadTerms(dir: string): Terms | null {
  * the branding is: the Content-Security-Policy allows no inline script to say it with.
  */
 export function markNoTerms(indexHtml: string): string {
-  return indexHtml.replace(/[ \t]*<\/head>/i, (end) => `    <meta name="terms" content="none" />\n${end}`);
+  return indexHtml.replace(
+    /[ \t]*<\/head>/i,
+    (end) => `    <meta name="terms" content="none" />\n${end}`,
+  );
 }
-

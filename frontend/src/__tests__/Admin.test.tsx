@@ -32,7 +32,8 @@ describe('Admin page', () => {
       storageQuotaBytes: 0,
     };
 
-    globalThis.fetch = vi.fn()
+    globalThis.fetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -86,7 +87,8 @@ describe('Admin page', () => {
 
   it('should show admin-disabled error on 403', async () => {
     // First call (stats) returns 403, second call (vaults) returns ok
-    globalThis.fetch = vi.fn()
+    globalThis.fetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: false,
         status: 403,
@@ -110,9 +112,7 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByText('Login'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Admin panel is disabled/)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Admin panel is disabled/)).toBeInTheDocument();
     });
   });
 
@@ -126,7 +126,9 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByText('Login'));
 
     expect(
-      await screen.findByText('Could not get an answer from the server. Is the backend container running?')
+      await screen.findByText(
+        'Could not get an answer from the server. Is the backend container running?',
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
   });
@@ -140,7 +142,8 @@ describe('Admin page', () => {
       storageQuotaBytes: 0,
     };
 
-    globalThis.fetch = vi.fn()
+    globalThis.fetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -187,7 +190,12 @@ describe('Admin page — rate limited by the server', () => {
   };
 
   function ok(body: unknown) {
-    return Promise.resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve(body) });
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: () => Promise.resolve(body),
+    });
   }
 
   function tooMany(error: string, retryAfter: number) {
@@ -229,7 +237,9 @@ describe('Admin page — rate limited by the server', () => {
 
     // The next poll, ten seconds later, is refused
     limited = true;
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
 
     expect(screen.getByText(/rate limiting this panel/)).toBeInTheDocument();
     expect(screen.getByText(/about 25 s/)).toBeInTheDocument();
@@ -238,7 +248,9 @@ describe('Admin page — rate limited by the server', () => {
 
     // And the one after that goes through again
     limited = false;
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
 
     expect(screen.queryByText(/rate limiting this panel/)).not.toBeInTheDocument();
     expect(screen.getByText('7')).toBeInTheDocument();
@@ -246,18 +258,22 @@ describe('Admin page — rate limited by the server', () => {
 
   it('goes back to the login form with the reason when the login itself is locked out', async () => {
     globalThis.fetch = vi.fn(() =>
-      tooMany('Too many failed login attempts. Try again later.', 42)
+      tooMany('Too many failed login attempts. Try again later.', 42),
     ) as unknown as typeof fetch;
 
     await login();
 
-    expect(await screen.findByText('Too many failed login attempts. Try again in 42 s.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Too many failed login attempts. Try again in 42 s.'),
+    ).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
     expect(screen.queryByText(/Backend unavailable/)).not.toBeInTheDocument();
   });
 
   it('tells a general rate limit on the login apart from a lockout', async () => {
-    globalThis.fetch = vi.fn(() => tooMany('Too many requests. Try again later.', 30)) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(() =>
+      tooMany('Too many requests. Try again later.', 30),
+    ) as unknown as typeof fetch;
 
     await login();
 
@@ -332,12 +348,12 @@ describe('Admin page — version and update notice', () => {
     const changes = screen.getByText('View changes →');
     expect(changes).toHaveAttribute(
       'href',
-      'https://github.com/whiteravens20/archivum-null/compare/v0.16.4...v2.0.0'
+      'https://github.com/whiteravens20/archivum-null/compare/v0.16.4...v2.0.0',
     );
     expect(changes).toHaveAttribute('rel', 'noopener noreferrer');
     expect(screen.getByText('Release notes')).toHaveAttribute(
       'href',
-      'https://github.com/whiteravens20/archivum-null/releases/tag/v2.0.0'
+      'https://github.com/whiteravens20/archivum-null/releases/tag/v2.0.0',
     );
   });
 
@@ -361,7 +377,10 @@ describe('Admin page — version and update notice', () => {
   });
 
   it('surfaces a blocked egress as a note, not a broken panel', async () => {
-    mockApi({ ...baseVersion, error: 'Could not reach api.github.com — outbound access may be blocked' });
+    mockApi({
+      ...baseVersion,
+      error: 'Could not reach api.github.com — outbound access may be blocked',
+    });
     await login();
 
     expect(await screen.findByText(/outbound access may be blocked/)).toBeInTheDocument();

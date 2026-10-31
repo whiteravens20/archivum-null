@@ -10,10 +10,7 @@ interface TurnstileResponse {
   action?: string;
 }
 
-export async function verifyTurnstile(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function verifyTurnstile(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!config.TURNSTILE_ENABLED) return;
 
   // Fastify types headers as string | string[] | undefined; the custom header is always a single string.
@@ -54,14 +51,17 @@ export async function verifyTurnstile(
     if (config.TURNSTILE_HOSTNAME && data.hostname !== config.TURNSTILE_HOSTNAME) {
       request.log.warn(
         { expected: config.TURNSTILE_HOSTNAME, got: data.hostname },
-        'Turnstile hostname mismatch'
+        'Turnstile hostname mismatch',
       );
       reply.status(403).send({ error: 'Captcha verification failed' });
       return;
     }
   } catch (err) {
     const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
-    request.log.error(err, isTimeout ? 'Turnstile API call timed out' : 'Turnstile API call failed');
+    request.log.error(
+      err,
+      isTimeout ? 'Turnstile API call timed out' : 'Turnstile API call failed',
+    );
     reply.status(isTimeout ? 504 : 500).send({ error: 'Captcha service unavailable' });
   }
 }

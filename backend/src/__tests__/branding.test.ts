@@ -27,7 +27,12 @@ import {
 } from '../static/branding.js';
 
 /** What the environment holds when nothing is configured, and what that parses to. */
-const INPUT = { name: 'Archivum Null', tagline: 'Anonymous encrypted file sharing', accentColor: '', theme: 'dark' };
+const INPUT = {
+  name: 'Archivum Null',
+  tagline: 'Anonymous encrypted file sharing',
+  accentColor: '',
+  theme: 'dark',
+};
 const DEFAULTS = {
   name: 'Archivum Null',
   tagline: 'Anonymous encrypted file sharing',
@@ -37,20 +42,38 @@ const DEFAULTS = {
 
 /** The page the frontend build starts from — the anchors applyBranding relies on live here. */
 const SOURCE_PAGE = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'index.html'),
-  'utf-8'
+  path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    'frontend',
+    'index.html',
+  ),
+  'utf-8',
 );
 
 /** The stylesheet whose variables the injected values have to line up with. */
 const STYLESHEET = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'src', 'index.css'),
-  'utf-8'
+  path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    'frontend',
+    'src',
+    'index.css',
+  ),
+  'utf-8',
 );
 
 /** Every hex value the stylesheet gives a token, in source order: the dark default first. */
 function tokenValues(name: string): string[] {
-  const values = [...STYLESHEET.matchAll(new RegExp(`--color-vault-${name}:\\s*(#[0-9a-fA-F]{6});`, 'g'))];
-  if (values.length === 0) throw new Error(`--color-vault-${name} is not a hex colour in index.css`);
+  const values = [
+    ...STYLESHEET.matchAll(new RegExp(`--color-vault-${name}:\\s*(#[0-9a-fA-F]{6});`, 'g')),
+  ];
+  if (values.length === 0)
+    throw new Error(`--color-vault-${name} is not a hex colour in index.css`);
   return values.map((match) => match[1].toLowerCase());
 }
 
@@ -82,8 +105,12 @@ describe('parseBranding', () => {
 
   it('holds the tagline to its own limit and names it in the error', () => {
     expect(() => parseBranding({ ...INPUT, tagline: 'a'.repeat(120) })).not.toThrow();
-    expect(() => parseBranding({ ...INPUT, tagline: 'a'.repeat(121) })).toThrow(/^BRAND_TAGLINE must be/);
-    expect(() => parseBranding({ ...INPUT, tagline: 'two\nlines' })).toThrow(/^BRAND_TAGLINE must be/);
+    expect(() => parseBranding({ ...INPUT, tagline: 'a'.repeat(121) })).toThrow(
+      /^BRAND_TAGLINE must be/,
+    );
+    expect(() => parseBranding({ ...INPUT, tagline: 'two\nlines' })).toThrow(
+      /^BRAND_TAGLINE must be/,
+    );
   });
 
   it('accepts a six-digit hex accent and lower-cases it', () => {
@@ -94,9 +121,14 @@ describe('parseBranding', () => {
     expect(parseBranding({ ...INPUT, theme }).theme).toBe(theme);
   });
 
-  it.each(['', 'Dark', 'system', 'light dark', 'dark" onload="x'])('rejects the theme %j', (theme) => {
-    expect(() => parseBranding({ ...INPUT, theme })).toThrow('BRAND_THEME must be one of: dark, light, auto');
-  });
+  it.each(['', 'Dark', 'system', 'light dark', 'dark" onload="x'])(
+    'rejects the theme %j',
+    (theme) => {
+      expect(() => parseBranding({ ...INPUT, theme })).toThrow(
+        'BRAND_THEME must be one of: dark, light, auto',
+      );
+    },
+  );
 
   it.each([
     ['a colour name', 'orange'],
@@ -147,7 +179,9 @@ describe('brandingWarnings', () => {
   it('does not warn in the light theme, which darkens the accent for text itself', () => {
     expect(brandingWarnings({ ...DEFAULTS, accentColor: '#1e3a8a', theme: 'light' })).toEqual([]);
     // `auto` still shows the dark page to visitors who ask for it.
-    expect(brandingWarnings({ ...DEFAULTS, accentColor: '#1e3a8a', theme: 'auto' })).toHaveLength(1);
+    expect(brandingWarnings({ ...DEFAULTS, accentColor: '#1e3a8a', theme: 'auto' })).toHaveLength(
+      1,
+    );
   });
 
   it('warns about an accent that cannot be read on the dark page', () => {
@@ -163,26 +197,34 @@ describe('brandingWarnings', () => {
 describe('escapeHtml', () => {
   it('escapes every character that can end text or an attribute value', () => {
     expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe(
-      '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;'
+      '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;',
     );
   });
 });
 
 describe('applyBranding', () => {
   it('replaces the title and description of the real index.html, once each', () => {
-    const page = applyBranding(SOURCE_PAGE, { ...DEFAULTS, name: 'Acme Drop', tagline: 'Files, sealed' });
+    const page = applyBranding(SOURCE_PAGE, {
+      ...DEFAULTS,
+      name: 'Acme Drop',
+      tagline: 'Files, sealed',
+    });
 
     expect(count(page, /<title>/g)).toBe(1);
     expect(page).toContain('<title>Acme Drop</title>');
     expect(count(page, /<meta name="description"/g)).toBe(1);
     expect(page).toContain(
-      '<meta name="description" content="Acme Drop — Files, sealed. Anonymous, zero-knowledge encrypted file sharing with expiring vaults." />'
+      '<meta name="description" content="Acme Drop — Files, sealed. Anonymous, zero-knowledge encrypted file sharing with expiring vaults." />',
     );
     expect(page).not.toContain('Archivum Null');
   });
 
   it('adds the tags the SPA reads the values from', () => {
-    const page = applyBranding(SOURCE_PAGE, { ...DEFAULTS, name: 'Acme Drop', tagline: 'Files, sealed' });
+    const page = applyBranding(SOURCE_PAGE, {
+      ...DEFAULTS,
+      name: 'Acme Drop',
+      tagline: 'Files, sealed',
+    });
 
     expect(page).toContain('<meta name="application-name" content="Acme Drop" />');
     expect(page).toContain('<meta name="brand-tagline" content="Files, sealed" />');
@@ -193,7 +235,10 @@ describe('applyBranding', () => {
   it('leaves the rest of the page as it was', () => {
     const page = applyBranding(SOURCE_PAGE, DEFAULTS);
     // The two tags it replaces come out whole first: a tag can span several lines.
-    const rest = SOURCE_PAGE.replace(/<title>[\s\S]*?<\/title>/i, '').replace(/<meta\s+name="description"[^>]*>/i, '');
+    const rest = SOURCE_PAGE.replace(/<title>[\s\S]*?<\/title>/i, '').replace(
+      /<meta\s+name="description"[^>]*>/i,
+      '',
+    );
 
     expect(rest).not.toContain('name="description"');
     for (const line of rest.split('\n')) {
@@ -203,7 +248,10 @@ describe('applyBranding', () => {
   });
 
   it('cannot be used to inject markup through the name', () => {
-    const page = applyBranding(SOURCE_PAGE, { ...DEFAULTS, name: '</title><script>alert(1)</script>' });
+    const page = applyBranding(SOURCE_PAGE, {
+      ...DEFAULTS,
+      name: '</title><script>alert(1)</script>',
+    });
 
     expect(page).not.toContain('<script>alert(1)</script>');
     expect(page).toContain('<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;</title>');
@@ -229,7 +277,11 @@ describe('applyBranding', () => {
 
   it('ends the tagline with a full stop in the description only when it has none', () => {
     const plain = applyBranding(SOURCE_PAGE, { ...DEFAULTS, name: 'A', tagline: 'Share safely' });
-    const punctuated = applyBranding(SOURCE_PAGE, { ...DEFAULTS, name: 'A', tagline: 'Share safely!' });
+    const punctuated = applyBranding(SOURCE_PAGE, {
+      ...DEFAULTS,
+      name: 'A',
+      tagline: 'Share safely!',
+    });
 
     expect(plain).toContain('content="A — Share safely. Anonymous');
     expect(punctuated).toContain('content="A — Share safely! Anonymous');
@@ -239,7 +291,7 @@ describe('applyBranding', () => {
     const page = applyBranding(SOURCE_PAGE, DEFAULTS);
 
     expect(page).toContain(
-      '<meta name="description" content="Archivum Null — anonymous, zero-knowledge encrypted file sharing with expiring vaults." />'
+      '<meta name="description" content="Archivum Null — anonymous, zero-knowledge encrypted file sharing with expiring vaults." />',
     );
   });
 
@@ -258,8 +310,12 @@ describe('applyBranding', () => {
     const page = applyBranding(SOURCE_PAGE, { ...DEFAULTS, theme: 'auto' });
 
     expect(page).toContain('<html data-theme="auto" lang="en">');
-    expect(page).toContain('<meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />');
-    expect(page).toContain('<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />');
+    expect(page).toContain(
+      '<meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />',
+    );
+    expect(page).toContain(
+      '<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />',
+    );
   });
 
   it('uses the page backgrounds the stylesheet defines', () => {
@@ -275,8 +331,12 @@ describe('applyBranding', () => {
     const light = applyBranding(SOURCE_PAGE, { ...DEFAULTS, accentColor: '#f97316' });
     const dark = applyBranding(SOURCE_PAGE, { ...DEFAULTS, accentColor: '#1e3a8a' });
 
-    expect(light).toContain('<style>:root{--color-vault-accent:#f97316;--color-vault-on-accent:#0b0f19}</style>');
-    expect(dark).toContain('<style>:root{--color-vault-accent:#1e3a8a;--color-vault-on-accent:#ffffff}</style>');
+    expect(light).toContain(
+      '<style>:root{--color-vault-accent:#f97316;--color-vault-on-accent:#0b0f19}</style>',
+    );
+    expect(dark).toContain(
+      '<style>:root{--color-vault-accent:#1e3a8a;--color-vault-on-accent:#ffffff}</style>',
+    );
     // After the stylesheet link, inside the head.
     expect(light.indexOf('<style>')).toBeLessThan(light.indexOf('</head>'));
   });
@@ -290,7 +350,10 @@ describe('applyBranding', () => {
 
   it('names the operator logos for the SPA when there are any', () => {
     const none = applyBranding(SOURCE_PAGE, DEFAULTS);
-    const both = applyBranding(SOURCE_PAGE, DEFAULTS, { logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' });
+    const both = applyBranding(SOURCE_PAGE, DEFAULTS, {
+      logo: '/brand/logo.svg',
+      logoLight: '/brand/logo-light.png',
+    });
     const lightOnly = applyBranding(SOURCE_PAGE, DEFAULTS, { logoLight: '/brand/logo-light.png' });
 
     expect(none).not.toContain('brand-logo');
@@ -303,8 +366,13 @@ describe('applyBranding', () => {
   it('leaves the page free of URLs to other origins, whatever is configured', () => {
     const page = applyBranding(
       SOURCE_PAGE,
-      { name: 'Acme https://evil.example', tagline: 'Files, sealed', accentColor: '#f97316', theme: 'auto' },
-      { logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' }
+      {
+        name: 'Acme https://evil.example',
+        tagline: 'Files, sealed',
+        accentColor: '#f97316',
+        theme: 'auto',
+      },
+      { logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' },
     );
 
     // The name is text and may say anything; nothing that the browser fetches may.
@@ -316,7 +384,10 @@ describe('applyBranding', () => {
   });
 
   it('adds a title to a page that had none', () => {
-    const page = applyBranding('<html><head><meta charset="UTF-8" /></head><body></body></html>', DEFAULTS);
+    const page = applyBranding(
+      '<html><head><meta charset="UTF-8" /></head><body></body></html>',
+      DEFAULTS,
+    );
 
     expect(page).toContain('<title>Archivum Null</title>');
     expect(page.indexOf('<title>')).toBeLessThan(page.indexOf('</head>'));
@@ -328,10 +399,19 @@ describe('applyBranding', () => {
 });
 
 describe('buildManifest', () => {
-  const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'frontend', 'public');
+  const PUBLIC_DIR = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    'frontend',
+    'public',
+  );
 
   it('carries the configured name and tagline', () => {
-    const manifest = JSON.parse(buildManifest({ ...DEFAULTS, name: 'Acme Drop', tagline: 'Files, sealed' }));
+    const manifest = JSON.parse(
+      buildManifest({ ...DEFAULTS, name: 'Acme Drop', tagline: 'Files, sealed' }),
+    );
 
     expect(manifest).toMatchObject({
       name: 'Acme Drop',
@@ -364,7 +444,11 @@ describe('buildManifest', () => {
       icons: { src: string; sizes: string; type: string; purpose?: string }[];
     };
 
-    expect(icons.map((icon) => icon.src)).toEqual(['/icon-192.png', '/icon-512.png', '/icon-maskable-512.png']);
+    expect(icons.map((icon) => icon.src)).toEqual([
+      '/icon-192.png',
+      '/icon-512.png',
+      '/icon-maskable-512.png',
+    ]);
     for (const icon of icons) {
       const png = fs.readFileSync(path.join(PUBLIC_DIR, icon.src));
       // A PNG states its width and height as two big-endian integers right after the IHDR tag.
@@ -380,7 +464,16 @@ describe('buildManifest', () => {
     const manifest = JSON.parse(buildManifest(DEFAULTS));
 
     expect(Object.keys(manifest).sort()).toEqual(
-      ['background_color', 'description', 'display', 'icons', 'name', 'scope', 'start_url', 'theme_color'].sort()
+      [
+        'background_color',
+        'description',
+        'display',
+        'icons',
+        'name',
+        'scope',
+        'start_url',
+        'theme_color',
+      ].sort(),
     );
   });
 });
@@ -432,7 +525,9 @@ describe('buildApp — branding on the served page', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('<title>Archivum Null</title>');
     expect(res.body).toContain('<meta name="application-name" content="Archivum Null" />');
-    expect(res.body).toContain('<meta name="brand-tagline" content="Anonymous encrypted file sharing" />');
+    expect(res.body).toContain(
+      '<meta name="brand-tagline" content="Anonymous encrypted file sharing" />',
+    );
   });
 
   it('marks the page when there are no terms, for the footer to leave out its link', async () => {
@@ -462,12 +557,16 @@ describe('buildApp — branding on the served page', () => {
     ).inject({ method: 'GET', url: '/' });
 
     expect(res.body).toContain('<title>Acme &lt;Drop&gt; &amp; &quot;Co&quot;</title>');
-    expect(res.body).toContain('<meta name="brand-tagline" content="Files, sealed — it&#39;s yours" />');
+    expect(res.body).toContain(
+      '<meta name="brand-tagline" content="Files, sealed — it&#39;s yours" />',
+    );
     expect(res.body).not.toContain('<Drop>');
   });
 
   it('serves the configured accent as an override of the stylesheet variables', async () => {
-    const res = await (await start({ BRAND_ACCENT_COLOR: '#F97316' })).inject({ method: 'GET', url: '/' });
+    const res = await (
+      await start({ BRAND_ACCENT_COLOR: '#F97316' })
+    ).inject({ method: 'GET', url: '/' });
 
     expect(res.body).toContain('--color-vault-accent:#f97316;--color-vault-on-accent:#0b0f19');
   });
@@ -482,7 +581,9 @@ describe('buildApp — branding on the served page', () => {
   });
 
   it('serves the same branded page on SPA routes', async () => {
-    const res = await (await start({ BRAND_NAME: 'Acme Drop' })).inject({ method: 'GET', url: '/vault/abc123' });
+    const res = await (
+      await start({ BRAND_NAME: 'Acme Drop' })
+    ).inject({ method: 'GET', url: '/vault/abc123' });
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('<title>Acme Drop</title>');
@@ -528,7 +629,7 @@ describe('buildApp — branding on the served page', () => {
 
   it('refuses to start on an accent that is not a plain hex colour', async () => {
     await expect(start({ BRAND_ACCENT_COLOR: 'red;}*{display:none' })).rejects.toThrow(
-      /^BRAND_ACCENT_COLOR must be/
+      /^BRAND_ACCENT_COLOR must be/,
     );
   });
 });

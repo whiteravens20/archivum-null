@@ -27,10 +27,7 @@ export default function Footer() {
           {hasTerms() && (
             <>
               <span className="text-vault-secondary/50">|</span>
-              <Link
-                to="/tos"
-                className="hover:text-vault-accent-ink transition-colors"
-              >
+              <Link to="/tos" className="hover:text-vault-accent-ink transition-colors">
                 {t('footer.terms')}
               </Link>
             </>

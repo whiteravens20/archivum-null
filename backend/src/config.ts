@@ -19,7 +19,8 @@ const envSchema = {
   TURNSTILE_SECRET: process.env.TURNSTILE_SECRET || '',
   // Public site key — safe to expose to the browser via /api/config
   TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY || TURNSTILE_PLACEHOLDER,
-  TURNSTILE_ENABLED: !!process.env.TURNSTILE_SECRET && process.env.TURNSTILE_SECRET !== TURNSTILE_PLACEHOLDER,
+  TURNSTILE_ENABLED:
+    !!process.env.TURNSTILE_SECRET && process.env.TURNSTILE_SECRET !== TURNSTILE_PLACEHOLDER,
   // Expected hostname in Turnstile response (e.g. 'example.com'). Leave empty to skip hostname check.
   TURNSTILE_HOSTNAME: process.env.TURNSTILE_HOSTNAME || '',
   // Upload-specific rate limit
@@ -53,7 +54,7 @@ const envSchema = {
   // of them with the default 10 MB. At a round 5 MB a second one would be 56 bytes
   // too many, and every request would carry a single chunk.
   CRYPTO_CHUNK_SIZE: Number(
-    process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE) - PER_CHUNK_OVERHEAD
+    process.env.CRYPTO_CHUNK_SIZE || Math.min(5242880, _CHUNK_SIZE) - PER_CHUNK_OVERHEAD,
   ),
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
@@ -84,7 +85,10 @@ const envSchema = {
   // Reverse proxies allowed to set X-Forwarded-For: comma-separated IPs, CIDR ranges,
   // or the named ranges loopback / linklocal / uniquelocal. Empty = trust no proxy.
   TRUST_PROXY: Object.freeze(
-    (process.env.TRUST_PROXY ?? 'loopback').split(',').map((entry) => entry.trim()).filter(Boolean)
+    (process.env.TRUST_PROXY ?? 'loopback')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
   ),
 };
 
@@ -117,15 +121,21 @@ function isValidTrustProxyEntry(entry: string): boolean {
 
 export function validateConfig(): void {
   if (!config.ADMIN_PASSWORD || config.ADMIN_PASSWORD === 'CHANGE_ME_IMMEDIATELY') {
-    console.warn('[WARN] ADMIN_PASSWORD is not set or uses default. Admin panel will be inaccessible.');
+    console.warn(
+      '[WARN] ADMIN_PASSWORD is not set or uses default. Admin panel will be inaccessible.',
+    );
   }
   // Turnstile needs both keys. With one of them the result is never what was meant.
   const siteKeySet = config.TURNSTILE_SITE_KEY !== TURNSTILE_PLACEHOLDER;
   if (config.TURNSTILE_ENABLED && !siteKeySet) {
-    console.warn('[WARN] TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is not — every upload will be refused, because the page has no challenge to show.');
+    console.warn(
+      '[WARN] TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is not — every upload will be refused, because the page has no challenge to show.',
+    );
   }
   if (!config.TURNSTILE_ENABLED && siteKeySet) {
-    console.warn('[WARN] TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET is not — Turnstile is off and uploads are not challenged.');
+    console.warn(
+      '[WARN] TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET is not — Turnstile is off and uploads are not challenged.',
+    );
   }
   if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) {
     throw new Error('PORT must be an integer between 0 and 65535');
@@ -133,10 +143,22 @@ export function validateConfig(): void {
   if (!isFinite(config.MAX_FILE_SIZE) || config.MAX_FILE_SIZE <= 0) {
     throw new Error('MAX_FILE_SIZE must be a positive number');
   }
-  if (!isFinite(config.RATE_LIMIT_WINDOW) || !isFinite(config.RATE_LIMIT_MAX) || !isFinite(config.RATE_LIMIT_API_MAX) || !isFinite(config.RATE_LIMIT_DOWNLOAD_MAX) || !isFinite(config.RATE_LIMIT_ADMIN_MAX)) {
+  if (
+    !isFinite(config.RATE_LIMIT_WINDOW) ||
+    !isFinite(config.RATE_LIMIT_MAX) ||
+    !isFinite(config.RATE_LIMIT_API_MAX) ||
+    !isFinite(config.RATE_LIMIT_DOWNLOAD_MAX) ||
+    !isFinite(config.RATE_LIMIT_ADMIN_MAX)
+  ) {
     throw new Error('Rate limit values must be valid numbers');
   }
-  if (config.RATE_LIMIT_WINDOW <= 0 || config.RATE_LIMIT_MAX <= 0 || config.RATE_LIMIT_API_MAX <= 0 || config.RATE_LIMIT_DOWNLOAD_MAX <= 0 || config.RATE_LIMIT_ADMIN_MAX <= 0) {
+  if (
+    config.RATE_LIMIT_WINDOW <= 0 ||
+    config.RATE_LIMIT_MAX <= 0 ||
+    config.RATE_LIMIT_API_MAX <= 0 ||
+    config.RATE_LIMIT_DOWNLOAD_MAX <= 0 ||
+    config.RATE_LIMIT_ADMIN_MAX <= 0
+  ) {
     throw new Error('Rate limit values must be positive');
   }
   if (!isFinite(config.MAX_TTL) || config.MAX_TTL <= 0) {
@@ -154,10 +176,14 @@ export function validateConfig(): void {
   // Every vault is held to these bounds, so a default outside them is not the default
   // that applies. Said, not refused: the instance works, just not as configured.
   if (config.DEFAULT_TTL < MIN_TTL_SECONDS) {
-    console.warn(`[WARN] DEFAULT_TTL is below ${MIN_TTL_SECONDS} seconds — vaults get the ${MIN_TTL_SECONDS}-second minimum instead.`);
+    console.warn(
+      `[WARN] DEFAULT_TTL is below ${MIN_TTL_SECONDS} seconds — vaults get the ${MIN_TTL_SECONDS}-second minimum instead.`,
+    );
   }
   if (config.DEFAULT_MAX_DOWNLOADS > MAX_DOWNLOADS_PER_VAULT) {
-    console.warn(`[WARN] DEFAULT_MAX_DOWNLOADS is above ${MAX_DOWNLOADS_PER_VAULT} — vaults get the ${MAX_DOWNLOADS_PER_VAULT}-download maximum instead.`);
+    console.warn(
+      `[WARN] DEFAULT_MAX_DOWNLOADS is above ${MAX_DOWNLOADS_PER_VAULT} — vaults get the ${MAX_DOWNLOADS_PER_VAULT}-download maximum instead.`,
+    );
   }
   if (!isFinite(config.CHUNK_SIZE) || config.CHUNK_SIZE <= 0) {
     throw new Error('CHUNK_SIZE must be a positive number');
@@ -175,7 +201,9 @@ export function validateConfig(): void {
     throw new Error('MAX_TOTAL_STORAGE must be a non-negative number');
   }
   if (config.MAX_TOTAL_STORAGE === 0) {
-    console.warn('[WARN] MAX_TOTAL_STORAGE is 0 — uploads are limited only by the free space of the disk the vaults are on. Set a quota in bytes.');
+    console.warn(
+      '[WARN] MAX_TOTAL_STORAGE is 0 — uploads are limited only by the free space of the disk the vaults are on. Set a quota in bytes.',
+    );
   }
   if (config.CRYPTO_CHUNK_SIZE > config.CHUNK_SIZE) {
     throw new Error('CRYPTO_CHUNK_SIZE must not exceed CHUNK_SIZE');
@@ -189,13 +217,13 @@ export function validateConfig(): void {
   // client behind the proxy into one rate-limit bucket — refuse to start instead.
   if (config.TRUST_PROXY.some((entry) => /^\d+$/.test(entry))) {
     throw new Error(
-      'TRUST_PROXY is no longer a hop count — set it to the IP or CIDR your reverse proxy connects from (see docs/CONFIGURATION.md)'
+      'TRUST_PROXY is no longer a hop count — set it to the IP or CIDR your reverse proxy connects from (see docs/CONFIGURATION.md)',
     );
   }
   const invalidProxy = config.TRUST_PROXY.find((entry) => !isValidTrustProxyEntry(entry));
   if (invalidProxy !== undefined) {
     throw new Error(
-      `TRUST_PROXY entry "${invalidProxy}" must be an IP address, a CIDR range with a non-zero prefix, or one of: loopback, linklocal, uniquelocal`
+      `TRUST_PROXY entry "${invalidProxy}" must be an IP address, a CIDR range with a non-zero prefix, or one of: loopback, linklocal, uniquelocal`,
     );
   }
   if (config.UPDATE_CHECK_ENABLED) {
@@ -216,12 +244,18 @@ export function validateConfig(): void {
   // Soft warnings for rate limit tiers that will never trigger independently
   // because the general API limit (applied to ALL /api/ routes) is lower.
   if (config.RATE_LIMIT_MAX > config.RATE_LIMIT_API_MAX) {
-    console.warn('[WARN] RATE_LIMIT_MAX > RATE_LIMIT_API_MAX — upload limit will never trigger (API limit fires first).');
+    console.warn(
+      '[WARN] RATE_LIMIT_MAX > RATE_LIMIT_API_MAX — upload limit will never trigger (API limit fires first).',
+    );
   }
   if (config.RATE_LIMIT_DOWNLOAD_MAX > config.RATE_LIMIT_API_MAX) {
-    console.warn('[WARN] RATE_LIMIT_DOWNLOAD_MAX > RATE_LIMIT_API_MAX — download limit will never trigger (API limit fires first).');
+    console.warn(
+      '[WARN] RATE_LIMIT_DOWNLOAD_MAX > RATE_LIMIT_API_MAX — download limit will never trigger (API limit fires first).',
+    );
   }
   if (config.RATE_LIMIT_ADMIN_MAX > config.RATE_LIMIT_API_MAX) {
-    console.warn('[WARN] RATE_LIMIT_ADMIN_MAX > RATE_LIMIT_API_MAX — admin limit will never trigger (API limit fires first).');
+    console.warn(
+      '[WARN] RATE_LIMIT_ADMIN_MAX > RATE_LIMIT_API_MAX — admin limit will never trigger (API limit fires first).',
+    );
   }
 }

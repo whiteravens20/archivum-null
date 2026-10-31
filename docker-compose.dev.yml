@@ -21,7 +21,7 @@ services:
     container_name: archivum-dev-backend
     restart: unless-stopped
     ports:
-      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
+      - '${DEV_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}'
     volumes:
       - ./backend/src:/app/backend/src:ro
       - ./TOS.md:/app/TOS.md:ro
@@ -43,7 +43,7 @@ services:
     container_name: archivum-dev-frontend
     restart: unless-stopped
     ports:
-      - "${DEV_BIND_ADDRESS:-127.0.0.1}:5173:5173"
+      - '${DEV_BIND_ADDRESS:-127.0.0.1}:5173:5173'
     volumes:
       - ./frontend/src:/app/frontend/src:ro
       - ./frontend/public:/app/frontend/public:ro

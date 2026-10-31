@@ -28,13 +28,13 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
-      time: "08:00"
+      time: '08:00'
       timezone: UTC
     labels:
       - dependencies
       - github-actions
     commit-message:
-      prefix: "ci"
+      prefix: 'ci'
     # Let a newly published version settle for a week before proposing it. A tag
     # can be repointed or a release yanked in the hours after it lands, and none
     # of these bumps is urgent. A pinned action gets no Dependabot alert, so the
@@ -54,13 +54,13 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "08:00"
+      time: '08:00'
       timezone: UTC
     labels:
       - dependencies
       - backend
     commit-message:
-      prefix: "chore(backend)"
+      prefix: 'chore(backend)'
     # Same week-long settling window: a freshly published npm version is the one
     # most likely to be a compromised or broken release. `cooldown` governs
     # version updates only — Dependabot security updates are exempt by design and
@@ -75,15 +75,15 @@ updates:
       # excludes them so they cannot match both.
       backend-vitest:
         patterns:
-          - "vitest"
-          - "@vitest/*"
+          - 'vitest'
+          - '@vitest/*'
       backend-non-breaking:
         update-types:
           - minor
           - patch
         exclude-patterns:
-          - "vitest"
-          - "@vitest/*"
+          - 'vitest'
+          - '@vitest/*'
 
   # ── Frontend npm ─────────────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -92,13 +92,13 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "08:00"
+      time: '08:00'
       timezone: UTC
     labels:
       - dependencies
       - frontend
     commit-message:
-      prefix: "chore(frontend)"
+      prefix: 'chore(frontend)'
     # Same week-long settling window; security updates stay exempt.
     cooldown:
       default-days: 7
@@ -106,15 +106,15 @@ updates:
       # Same exact-version pin as in the backend.
       frontend-vitest:
         patterns:
-          - "vitest"
-          - "@vitest/*"
+          - 'vitest'
+          - '@vitest/*'
       frontend-non-breaking:
         update-types:
           - minor
           - patch
         exclude-patterns:
-          - "vitest"
-          - "@vitest/*"
+          - 'vitest'
+          - '@vitest/*'
 
   # ── The formatter ────────────────────────────────────────────────────────────
   # Prettier at the root formats every file it reads. A release can change what it
@@ -124,12 +124,12 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
-      time: "08:00"
+      time: '08:00'
       timezone: UTC
     labels:
       - dependencies
     commit-message:
-      prefix: "chore(tools)"
+      prefix: 'chore(tools)'
     # Same week-long settling window; security updates stay exempt.
     cooldown:
       default-days: 7
@@ -148,18 +148,18 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "08:00"
+      time: '08:00'
       timezone: UTC
     labels:
       - dependencies
     commit-message:
-      prefix: "chore(docker)"
+      prefix: 'chore(docker)'
     # Same week-long settling window, for a new version and for a rebuilt one.
     cooldown:
       default-days: 7
     # A new major of Node is a change to the project, made by hand together with
     # `node-version` in the workflows.
     ignore:
-      - dependency-name: "*"
+      - dependency-name: '*'
         update-types:
           - version-update:semver-major

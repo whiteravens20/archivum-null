@@ -238,7 +238,9 @@ describe('crypto/encrypt', () => {
       while (offset < fullPlaintext.length) {
         const end = Math.min(offset + chunkSize, fullPlaintext.length);
         const chunk = fullPlaintext.slice(offset, end);
-        encryptedChunks.push(await encryptChunk(chunk, key, chunkIndex, end === fullPlaintext.length));
+        encryptedChunks.push(
+          await encryptChunk(chunk, key, chunkIndex, end === fullPlaintext.length),
+        );
         offset = end;
         chunkIndex++;
       }
@@ -246,7 +248,9 @@ describe('crypto/encrypt', () => {
       // Decrypt all chunks
       const decryptedParts: Uint8Array[] = [];
       for (let i = 0; i < encryptedChunks.length; i++) {
-        decryptedParts.push(await decryptChunk(encryptedChunks[i], key, i, i === encryptedChunks.length - 1));
+        decryptedParts.push(
+          await decryptChunk(encryptedChunks[i], key, i, i === encryptedChunks.length - 1),
+        );
       }
 
       // Reassemble
@@ -355,9 +359,9 @@ describe('crypto/encrypt', () => {
 
     it('should strip zero-width characters', () => {
       expect(sanitizeFilename('file\u200Bname.txt')).toBe('filename.txt'); // ZWSP
-      expect(sanitizeFilename('file\u200Cname')).toBe('filename');         // ZWNJ
-      expect(sanitizeFilename('file\u200Dname')).toBe('filename');         // ZWJ
-      expect(sanitizeFilename('\uFEFFtest')).toBe('test');                 // BOM
+      expect(sanitizeFilename('file\u200Cname')).toBe('filename'); // ZWNJ
+      expect(sanitizeFilename('file\u200Dname')).toBe('filename'); // ZWJ
+      expect(sanitizeFilename('\uFEFFtest')).toBe('test'); // BOM
     });
 
     it('should strip LRM and RLM marks', () => {

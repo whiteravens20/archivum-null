@@ -108,18 +108,14 @@ describe('LocalStorage', () => {
   describe('writeFile — maxSize enforcement', () => {
     it('throws when stream exceeds maxSize', async () => {
       const bigData = 'a'.repeat(200);
-      await expect(
-        storage.writeFile('too-big', createTestStream(bigData), 100)
-      ).rejects.toThrow();
+      await expect(storage.writeFile('too-big', createTestStream(bigData), 100)).rejects.toThrow();
     });
 
     it('does NOT leave a partial data file after size-exceeded error', async () => {
       const bigData = 'b'.repeat(200);
       await storage.writeFile('size-partial', createTestStream('seed'), 1000);
       // Replace with an oversized write
-      await storage
-        .writeFile('size-partial', createTestStream(bigData), 10)
-        .catch(() => {});
+      await storage.writeFile('size-partial', createTestStream(bigData), 10).catch(() => {});
 
       // The data.enc file must have been cleaned up by writeFile's catch block
       const { default: fspInner } = await import('node:fs/promises');
@@ -208,8 +204,12 @@ describe('LocalStorage', () => {
 
       // ...and no vault operation may reach it by name
       expect(await storage.deleteVault('_uploads')).toBe(false);
-      await expect(storage.writeFile('_uploads', createTestStream('x'))).rejects.toThrow('Invalid vault ID');
-      await expect(fsp.readFile(path.join(stagingDir, 'upload-1', 'data.enc'), 'utf-8')).resolves.toBe('partial');
+      await expect(storage.writeFile('_uploads', createTestStream('x'))).rejects.toThrow(
+        'Invalid vault ID',
+      );
+      await expect(
+        fsp.readFile(path.join(stagingDir, 'upload-1', 'data.enc'), 'utf-8'),
+      ).resolves.toBe('partial');
     });
 
     it('should allow valid nanoid-style IDs', () => {
@@ -246,7 +246,7 @@ describe('LocalStorage', () => {
 
     it('should reject chunk that would exceed maxTotalSize', async () => {
       await expect(
-        storage.appendChunk('oversized', createTestStream('a'.repeat(200)), 100, 0)
+        storage.appendChunk('oversized', createTestStream('a'.repeat(200)), 100, 0),
       ).rejects.toThrow();
     });
 
@@ -256,7 +256,7 @@ describe('LocalStorage', () => {
       // Verify _uploads/cleanup-test is gone
       const { default: fspInner } = await import('node:fs/promises');
       await expect(
-        fspInner.access(path.join(tempDir, '_uploads', 'cleanup-test'))
+        fspInner.access(path.join(tempDir, '_uploads', 'cleanup-test')),
       ).rejects.toThrow();
     });
 
@@ -270,9 +270,13 @@ describe('LocalStorage', () => {
 
       const { default: fspInner } = await import('node:fs/promises');
       // active-upload should still exist
-      await expect(fspInner.access(path.join(tempDir, '_uploads', 'active-upload'))).resolves.toBeUndefined();
+      await expect(
+        fspInner.access(path.join(tempDir, '_uploads', 'active-upload')),
+      ).resolves.toBeUndefined();
       // orphan-upload should be gone
-      await expect(fspInner.access(path.join(tempDir, '_uploads', 'orphan-upload'))).rejects.toThrow();
+      await expect(
+        fspInner.access(path.join(tempDir, '_uploads', 'orphan-upload')),
+      ).rejects.toThrow();
     });
 
     it('should handle purgeOrphanedUploads when _uploads dir does not exist', async () => {

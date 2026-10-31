@@ -18,7 +18,10 @@ describe('buildProxyHint', () => {
     const hint = buildProxyHint();
     const { request, warn } = fakeRequest('172.18.0.1', '172.18.0.1', '203.0.113.1');
     await hint(request);
-    expect(warn).toHaveBeenCalledWith({ peer: '172.18.0.1' }, expect.stringContaining('TRUST_PROXY'));
+    expect(warn).toHaveBeenCalledWith(
+      { peer: '172.18.0.1' },
+      expect.stringContaining('TRUST_PROXY'),
+    );
   });
 
   it('logs only once per process', async () => {

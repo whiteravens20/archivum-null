@@ -52,7 +52,9 @@ export function localeFor(lang: Language, preferred: readonly string[]): string 
 type En = typeof en;
 
 /** The forms of a message that depends on a number, one per plural category it can fall into. */
-export type PluralForms = Readonly<Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }>;
+export type PluralForms = Readonly<
+  Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }
+>;
 
 /** What a translation provides: every key of the English messages, with the same kind of value. */
 export type Messages = { readonly [K in keyof En]: En[K] extends string ? string : PluralForms };
@@ -63,7 +65,9 @@ export type TextKey = { [K in keyof En]: En[K] extends string ? K : never }[keyo
 export type PluralKey = Exclude<keyof En, TextKey>;
 
 /** The names of a message's `{placeholders}`. */
-type Placeholders<S> = S extends `${string}{${infer Name}}${infer Rest}` ? Name | Placeholders<Rest> : never;
+type Placeholders<S> = S extends `${string}{${infer Name}}${infer Rest}`
+  ? Name | Placeholders<Rest>
+  : never;
 type Vars<K extends TextKey> = Readonly<Record<Placeholders<En[K]>, string | number>>;
 /** The values a message takes: none, or one for each of its placeholders. */
 type VarsArg<K extends TextKey> = [Placeholders<En[K]>] extends [never] ? [] : [vars: Vars<K>];
@@ -86,7 +90,10 @@ export interface Translator {
    * A message with React nodes in its placeholders, for markup inside a sentence.
    * The markup stays in the code; nothing in a message is parsed as HTML.
    */
-  rich<K extends TextKey>(key: K, slots: Readonly<Record<Placeholders<En[K]>, ReactNode>>): ReactNode;
+  rich<K extends TextKey>(
+    key: K,
+    slots: Readonly<Record<Placeholders<En[K]>, ReactNode>>,
+  ): ReactNode;
   message(message: Message): string;
   /** Switch the interface to another language. */
   setLang(lang: Language): void;
@@ -94,13 +101,18 @@ export interface Translator {
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
-export function createTranslator(lang: Language, locale: string, setLang: (lang: Language) => void): Translator {
+export function createTranslator(
+  lang: Language,
+  locale: string,
+  setLang: (lang: Language) => void,
+): Translator {
   const messages = MESSAGES[lang];
   const numbers = new Intl.NumberFormat(locale);
   const plurals = new Intl.PluralRules(lang);
 
   // Own keys only: `constructor` or `__proto__` is not a message.
-  const lookup = (key: string) => (Object.hasOwn(messages, key) ? messages[key as keyof Messages] : undefined);
+  const lookup = (key: string) =>
+    Object.hasOwn(messages, key) ? messages[key as keyof Messages] : undefined;
 
   // One pass over the message: what a value brings in is never read again, so a file
   // name such as `{actual}` or `$&` shows as itself.
@@ -134,7 +146,9 @@ export function createTranslator(lang: Language, locale: string, setLang: (lang:
       // With a capturing group, split() alternates text and placeholder names
       const parts = text(key)
         .split(/\{(\w+)\}/)
-        .map((part, i) => (i % 2 === 0 ? part : Object.hasOwn(named, part) ? named[part] : `{${part}}`));
+        .map((part, i) =>
+          i % 2 === 0 ? part : Object.hasOwn(named, part) ? named[part] : `{${part}}`,
+        );
       return createElement(Fragment, null, ...parts);
     },
     message(message) {

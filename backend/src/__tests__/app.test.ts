@@ -81,7 +81,9 @@ describe('buildApp wiring — rate limiting is active end-to-end', () => {
 
   it('refuses even the right password while the client is locked out', async () => {
     const wrong = { authorization: `Basic ${Buffer.from('admin:guess').toString('base64')}` };
-    const right = { authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}` };
+    const right = {
+      authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}`,
+    };
 
     for (let i = 0; i < 2; i++) {
       const res = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: wrong });
@@ -96,7 +98,9 @@ describe('buildApp wiring — rate limiting is active end-to-end', () => {
   it('lets a signed-in admin poll past the admin limit', async () => {
     // Admin limit is 2: the panel alone makes more requests than that in ten seconds.
     // Only the general limit (5) applies to requests that carry valid credentials.
-    const right = { authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}` };
+    const right = {
+      authorization: `Basic ${Buffer.from('admin:strong-test-password').toString('base64')}`,
+    };
 
     for (let i = 0; i < 5; i++) {
       const res = await app.inject({ method: 'GET', url: '/api/admin/stats', headers: right });
@@ -115,10 +119,15 @@ describe('buildApp wiring — request body limits', () => {
 
   function multipart(fields: Record<string, string>, file: Buffer): Buffer {
     const head = Object.entries(fields)
-      .map(([name, value]) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+      .map(
+        ([name, value]) =>
+          `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      )
       .join('');
     return Buffer.concat([
-      Buffer.from(`${head}--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="f.bin"\r\nContent-Type: application/octet-stream\r\n\r\n`),
+      Buffer.from(
+        `${head}--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="f.bin"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      ),
       file,
       Buffer.from(`\r\n--${boundary}--\r\n`),
     ]);
@@ -178,7 +187,10 @@ describe('buildApp wiring — request body limits', () => {
     const chunk = await app.inject({
       method: 'POST',
       url: `/api/vault/upload/${uploadId}/chunk`,
-      headers: { 'content-type': `multipart/form-data; boundary=${boundary}`, 'x-session-token': sessionToken },
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        'x-session-token': sessionToken,
+      },
       payload: multipart({ chunkIndex: '0' }, Buffer.alloc(300_000, 7)),
     });
 
@@ -249,6 +261,10 @@ describe('request log serializer', () => {
       ip: '203.0.113.1',
       socket: { remotePort: 51234 },
     } as unknown as FastifyRequest);
-    expect(logged).toEqual({ method: 'GET', route: '/api/vault/:vaultId/download', host: 'example.com' });
+    expect(logged).toEqual({
+      method: 'GET',
+      route: '/api/vault/:vaultId/download',
+      host: 'example.com',
+    });
   });
 });

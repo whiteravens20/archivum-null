@@ -63,13 +63,13 @@ Updating the installation rebuilds the frontend and leaves `branding/` and `.env
 
 ## Settings
 
-| Variable | Default | Description |
-|---|---|---|
-| `BRAND_NAME` | `Archivum Null` | The name in the browser tab, in the heading of the home and vault pages, in the footer and in the web app manifest. 1 to 64 characters. |
-| `BRAND_TAGLINE` | `Anonymous encrypted file sharing` | The line under the name on the home page and at the end of the footer. A tagline of your own is also used in the page description. 1 to 120 characters. |
-| `BRAND_ACCENT_COLOR` | `#60A5FA` | The accent colour, as six hex digits. See [Accent colour](#accent-colour). |
-| `BRAND_THEME` | `dark` | `dark`, `light` or `auto`. See [Theme](#theme). |
-| `BRANDING_PATH` | `branding` in the install directory (`/app/branding` in the image) | Where the server looks for your logo and icons. You only need this if the default location does not suit you. |
+| Variable             | Default                                                            | Description                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BRAND_NAME`         | `Archivum Null`                                                    | The name in the browser tab, in the heading of the home and vault pages, in the footer and in the web app manifest. 1 to 64 characters.                 |
+| `BRAND_TAGLINE`      | `Anonymous encrypted file sharing`                                 | The line under the name on the home page and at the end of the footer. A tagline of your own is also used in the page description. 1 to 120 characters. |
+| `BRAND_ACCENT_COLOR` | `#60A5FA`                                                          | The accent colour, as six hex digits. See [Accent colour](#accent-colour).                                                                              |
+| `BRAND_THEME`        | `dark`                                                             | `dark`, `light` or `auto`. See [Theme](#theme).                                                                                                         |
+| `BRANDING_PATH`      | `branding` in the install directory (`/app/branding` in the image) | Where the server looks for your logo and icons. You only need this if the default location does not suit you.                                           |
 
 A value that fails its check stops the server at startup, with a message that names the variable. Nothing is applied half-way.
 
@@ -86,11 +86,11 @@ The accent is the colour of the main buttons, the progress bars and the highligh
 
 ## Theme
 
-| Value | What visitors see |
-|---|---|
-| `dark` | The dark theme. This is the default. |
-| `light` | The light theme. |
-| `auto` | Light for visitors whose system is set to a light colour scheme, dark for everyone else. |
+| Value   | What visitors see                                                                        |
+| ------- | ---------------------------------------------------------------------------------------- |
+| `dark`  | The dark theme. This is the default.                                                     |
+| `light` | The light theme.                                                                         |
+| `auto`  | Light for visitors whose system is set to a light colour scheme, dark for everyone else. |
 
 There is no switch on the page. `auto` is decided by the browser from the visitor's system setting, in CSS alone, so nothing has to be stored in the browser to remember a choice.
 
@@ -98,16 +98,16 @@ There is no switch on the page. `auto` is decided by the browser from the visito
 
 Put files with these exact names into the branding directory. Each one replaces the built-in image; whatever you leave out stays built-in.
 
-| File | Replaces | Notes |
-|---|---|---|
-| `logo.svg`, `logo.webp` or `logo.png` | The mark above the name on the home and vault pages | Shown in a square of up to 80 px. It does not have to be square itself; it is fitted, not stretched. Used in both themes unless you add the next file. |
-| `logo-light.svg`, `logo-light.webp` or `logo-light.png` | The same mark in the light theme | Optional. Add it when your logo is made for dark backgrounds. |
-| `favicon.svg` | The tab icon in current browsers | Supply this together with `favicon.ico`. |
-| `favicon.ico` | The tab icon in Safari and older browsers | 16, 32 and 48 px in one file. |
-| `apple-touch-icon.png` | The icon of a home-screen shortcut on iOS | 180 × 180 px, no transparency. |
-| `icon-192.png` | The icon in the web app manifest | 192 × 192 px. |
-| `icon-512.png` | The large icon in the web app manifest | 512 × 512 px. |
-| `icon-maskable-512.png` | The icon Android crops to its own shape | 512 × 512 px, no transparency. Keep the artwork inside the central circle that is 80% of the width. |
+| File                                                    | Replaces                                            | Notes                                                                                                                                                  |
+| ------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `logo.svg`, `logo.webp` or `logo.png`                   | The mark above the name on the home and vault pages | Shown in a square of up to 80 px. It does not have to be square itself; it is fitted, not stretched. Used in both themes unless you add the next file. |
+| `logo-light.svg`, `logo-light.webp` or `logo-light.png` | The same mark in the light theme                    | Optional. Add it when your logo is made for dark backgrounds.                                                                                          |
+| `favicon.svg`                                           | The tab icon in current browsers                    | Supply this together with `favicon.ico`.                                                                                                               |
+| `favicon.ico`                                           | The tab icon in Safari and older browsers           | 16, 32 and 48 px in one file.                                                                                                                          |
+| `apple-touch-icon.png`                                  | The icon of a home-screen shortcut on iOS           | 180 × 180 px, no transparency.                                                                                                                         |
+| `icon-192.png`                                          | The icon in the web app manifest                    | 192 × 192 px.                                                                                                                                          |
+| `icon-512.png`                                          | The large icon in the web app manifest              | 512 × 512 px.                                                                                                                                          |
+| `icon-maskable-512.png`                                 | The icon Android crops to its own shape             | 512 × 512 px, no transparency. Keep the artwork inside the central circle that is 80% of the width.                                                    |
 
 The rules the server applies:
 
@@ -138,11 +138,11 @@ What this means for the security of an instance:
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| The server does not start and logs `BRAND_… must be …` | A setting failed its check | Correct the value named in the message |
-| `.env` was changed but the page looks the same | The container was restarted, not recreated | `docker compose up -d` |
-| A new logo or icon does not appear | Wrong file name, a file over the size limit, or no restart | Check the name against the table, read the warnings in the log, restart |
-| The tab still shows the old favicon | Browsers cache favicons apart from the page | Close and reopen the tab, or clear the site data |
-| Nothing from this page has any effect | A reverse proxy serves `frontend/dist` from disk | Proxy every request to the app, as [HARDENING.md](HARDENING.md#version-disclosure) requires |
-| The Vite dev server shows the built-in branding | Branding is applied by the backend to the built page | Run `npm run build` in `frontend/` and open the backend port instead |
+| Symptom                                                | Cause                                                      | Fix                                                                                         |
+| ------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| The server does not start and logs `BRAND_… must be …` | A setting failed its check                                 | Correct the value named in the message                                                      |
+| `.env` was changed but the page looks the same         | The container was restarted, not recreated                 | `docker compose up -d`                                                                      |
+| A new logo or icon does not appear                     | Wrong file name, a file over the size limit, or no restart | Check the name against the table, read the warnings in the log, restart                     |
+| The tab still shows the old favicon                    | Browsers cache favicons apart from the page                | Close and reopen the tab, or clear the site data                                            |
+| Nothing from this page has any effect                  | A reverse proxy serves `frontend/dist` from disk           | Proxy every request to the app, as [HARDENING.md](HARDENING.md#version-disclosure) requires |
+| The Vite dev server shows the built-in branding        | Branding is applied by the backend to the built page       | Run `npm run build` in `frontend/` and open the backend port instead                        |

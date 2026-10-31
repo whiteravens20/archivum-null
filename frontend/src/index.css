@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
 /* ─── JetBrains Mono, self-hosted ───
@@ -16,9 +16,9 @@
   font-weight: 400 700;
   font-display: swap;
   src: url('./assets/fonts/jetbrains-mono-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: 'JetBrains Mono';
@@ -26,9 +26,10 @@
   font-weight: 400 700;
   font-display: swap;
   src: url('./assets/fonts/jetbrains-mono-latin-ext.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
-    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
-    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 
 /* ─── Theme tokens (TailwindCSS v4) ───
@@ -38,13 +39,13 @@
  */
 @theme {
   /* Surfaces: the page, and what sits on it (cards, inputs, tracks) */
-  --color-vault-bg: #0B0F19;
-  --color-vault-secondary: #1C2433;
+  --color-vault-bg: #0b0f19;
+  --color-vault-secondary: #1c2433;
 
   /* Accent: `accent` fills, `on-accent` is what is drawn on a fill, and
    * `accent-ink` is the accent used as text or as a line on the page */
-  --color-vault-accent: #60A5FA;
-  --color-vault-on-accent: #0B0F19;
+  --color-vault-accent: #60a5fa;
+  --color-vault-on-accent: #0b0f19;
   --color-vault-accent-ink: var(--color-vault-accent);
 
   /* Text, from most to least prominent */
@@ -81,11 +82,11 @@
  * and anything else keeps the dark values above. No script is involved.
  */
 @custom-variant theme-light {
-  &:where([data-theme="light"], [data-theme="light"] *) {
+  &:where([data-theme='light'], [data-theme='light'] *) {
     @slot;
   }
   @media (prefers-color-scheme: light) {
-    &:where([data-theme="auto"], [data-theme="auto"] *) {
+    &:where([data-theme='auto'], [data-theme='auto'] *) {
       @slot;
     }
   }
@@ -98,35 +99,35 @@
   @variant theme-light {
     color-scheme: light;
 
-    --color-vault-bg: #F8FAFC;
-    --color-vault-secondary: #E2E8F0;
+    --color-vault-bg: #f8fafc;
+    --color-vault-secondary: #e2e8f0;
 
     /* The accent is the operator's to choose and most accents are too light to
      * read on a light page, so text and lines take a darkened form of it. Fills
      * keep the accent as it is. */
     --color-vault-accent-ink: color-mix(in oklab, var(--color-vault-accent) 60%, black);
 
-    --color-vault-heading: #0F172A;
-    --color-vault-text: #1E293B;
+    --color-vault-heading: #0f172a;
+    --color-vault-text: #1e293b;
     --color-vault-text-soft: #334155;
     --color-vault-muted: #475569;
-    --color-vault-subtle: #5B6B80;
-    --color-vault-faint: #8A99AE;
+    --color-vault-subtle: #5b6b80;
+    --color-vault-faint: #8a99ae;
 
-    --color-vault-line-strong: #64748B;
-    --color-vault-line: #94A3B8;
-    --color-vault-line-soft: #CBD5E1;
+    --color-vault-line-strong: #64748b;
+    --color-vault-line: #94a3b8;
+    --color-vault-line-soft: #cbd5e1;
 
-    --color-vault-danger: #B91C1C;
-    --color-vault-danger-strong: #7F1D1D;
-    --color-vault-danger-fill: #EF4444;
-    --color-vault-warning: #713F12;
+    --color-vault-danger: #b91c1c;
+    --color-vault-danger-strong: #7f1d1d;
+    --color-vault-danger-fill: #ef4444;
+    --color-vault-warning: #713f12;
     --color-vault-warning-strong: #422006;
     /* Toned down by colour here: fading dark text only costs it contrast */
-    --color-vault-warning-soft: #854D0E;
-    --color-vault-warning-fill: #EAB308;
+    --color-vault-warning-soft: #854d0e;
+    --color-vault-warning-fill: #eab308;
     --color-vault-success: #166534;
-    --color-vault-success-fill: #22C55E;
+    --color-vault-success-fill: #22c55e;
   }
 }
 

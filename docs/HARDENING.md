@@ -59,27 +59,27 @@ Before applying any rules, understand the threat model this guide addresses and 
 
 ### What these rules protect against
 
-| Threat | Mitigation |
-|---|---|
-| Port 3000 reachable from the public internet or LAN | `HOST_BIND_ADDRESS` in `.env` publishes the port on the tunnel address only, and the inbound guard drops connections that did not arrive on the tunnel interface |
-| Attacker uses a compromised container to pivot to other LAN hosts | Egress rules drop every connection the app opens, to the LAN and to the Docker host itself |
-| Attacker uses a compromised container to beacon to internet C2 | Egress rules drop all outbound except, when Turnstile is on, Cloudflare's challenge endpoints |
-| VPS reverse proxy exposes the backend port publicly | VPS firewall drops port 3000; only 80/443 are open |
-| WireGuard misconfiguration routes all homelab traffic through the tunnel | `AllowedIPs = <homelab-ip>/32` scopes the tunnel to the homelab endpoint only |
-| TLS termination breaks WebCrypto on the client | Reverse proxy enforces HTTPS; HSTS header is set by the backend |
+| Threat                                                                   | Mitigation                                                                                                                                                       |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Port 3000 reachable from the public internet or LAN                      | `HOST_BIND_ADDRESS` in `.env` publishes the port on the tunnel address only, and the inbound guard drops connections that did not arrive on the tunnel interface |
+| Attacker uses a compromised container to pivot to other LAN hosts        | Egress rules drop every connection the app opens, to the LAN and to the Docker host itself                                                                       |
+| Attacker uses a compromised container to beacon to internet C2           | Egress rules drop all outbound except, when Turnstile is on, Cloudflare's challenge endpoints                                                                    |
+| VPS reverse proxy exposes the backend port publicly                      | VPS firewall drops port 3000; only 80/443 are open                                                                                                               |
+| WireGuard misconfiguration routes all homelab traffic through the tunnel | `AllowedIPs = <homelab-ip>/32` scopes the tunnel to the homelab endpoint only                                                                                    |
+| TLS termination breaks WebCrypto on the client                           | Reverse proxy enforces HTTPS; HSTS header is set by the backend                                                                                                  |
 
 ### What these rules do NOT protect against
 
-| Limitation | Why |
-|---|---|
-| A root-level compromise of the Proxmox / hypervisor host | Host compromise is above the firewall layer — keep the host OS patched and SSH restricted |
-| A channel through a destination you allowed | With Turnstile on, the app may reach Cloudflare's address ranges on port 443. Those ranges serve a great many other sites, so egress is narrowed, not closed. The same holds for anything you add with `--allow` |
-| Data leaving in DNS queries from a container | Docker's built-in resolver answers the container from the daemon's side, where no rule on the container's traffic applies. See [Docker](#docker) for how to leave the container without a resolver |
-| IPv6, if you write the rules by hand | `setup-firewall.sh` drops whatever the app opens over IPv6. The hand-written examples in this guide are IPv4 only: add the `ip6tables` counterparts, or use the nftables form, which covers both |
-| Rule loss after reboot (without persistence) | iptables rules are in-memory by default — see [persistence notes](#persistence) |
-| Docker daemon itself as an attack surface | Do not expose `/var/run/docker.sock` inside containers; the production Compose file already enforces this |
-| `conntrack` table exhaustion DoS | Rate limiting in the app and at the reverse proxy layer mitigate this; kernel `nf_conntrack_max` tuning is outside the scope of this guide |
-| Cloudflare Tunnel / Tailscale coordination metadata | Both services collect metadata (see their dedicated sections) — they are not zero-knowledge transports |
+| Limitation                                               | Why                                                                                                                                                                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A root-level compromise of the Proxmox / hypervisor host | Host compromise is above the firewall layer — keep the host OS patched and SSH restricted                                                                                                                        |
+| A channel through a destination you allowed              | With Turnstile on, the app may reach Cloudflare's address ranges on port 443. Those ranges serve a great many other sites, so egress is narrowed, not closed. The same holds for anything you add with `--allow` |
+| Data leaving in DNS queries from a container             | Docker's built-in resolver answers the container from the daemon's side, where no rule on the container's traffic applies. See [Docker](#docker) for how to leave the container without a resolver               |
+| IPv6, if you write the rules by hand                     | `setup-firewall.sh` drops whatever the app opens over IPv6. The hand-written examples in this guide are IPv4 only: add the `ip6tables` counterparts, or use the nftables form, which covers both                 |
+| Rule loss after reboot (without persistence)             | iptables rules are in-memory by default — see [persistence notes](#persistence)                                                                                                                                  |
+| Docker daemon itself as an attack surface                | Do not expose `/var/run/docker.sock` inside containers; the production Compose file already enforces this                                                                                                        |
+| `conntrack` table exhaustion DoS                         | Rate limiting in the app and at the reverse proxy layer mitigate this; kernel `nf_conntrack_max` tuning is outside the scope of this guide                                                                       |
+| Cloudflare Tunnel / Tailscale coordination metadata      | Both services collect metadata (see their dedicated sections) — they are not zero-knowledge transports                                                                                                           |
 
 ### Rule ordering is critical, and so is the chain
 
@@ -129,10 +129,10 @@ sudo bash scripts/setup-firewall.sh --mode docker --turnstile no --tunnel-iface 
 
 What it sets up differs between the two ways of running the app, because the traffic takes a different path:
 
-| | Path of a connection to the app | Where the guard sits |
-|---|---|---|
-| **Docker** | Forwarded to the container. `INPUT` never sees it | A chain on the forward path for traffic going out to the app's bridge: with iptables in the `mangle` table, with nftables in the script's own table |
-| **Bare-metal** | Delivered to the Node process on the host | A chain on the input path for the app port, in the same two places. Connections from the host itself stay allowed, so a proxy or tunnel daemon on the same machine keeps working |
+|                | Path of a connection to the app                   | Where the guard sits                                                                                                                                                             |
+| -------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Docker**     | Forwarded to the container. `INPUT` never sees it | A chain on the forward path for traffic going out to the app's bridge: with iptables in the `mangle` table, with nftables in the script's own table                              |
+| **Bare-metal** | Delivered to the Node process on the host         | A chain on the input path for the app port, in the same two places. Connections from the host itself stay allowed, so a proxy or tunnel daemon on the same machine keeps working |
 
 Add `--dry-run` to print the rules without applying them.
 
@@ -239,13 +239,13 @@ should cost them real effort, not one unauthenticated `GET /`.
 Enforced inside the Node process, so it applies identically to Docker and to a
 bare-metal `node backend/dist/index.js`:
 
-| Leak | Status |
-|---|---|
-| Vite content-hashed asset names (`/assets/index-Qld3srqp.js`) — reproducible by rebuilding any published tag | Randomised per boot; the real names 404 |
-| `Last-Modified` on static files — dates the build to the second | Suppressed |
-| `ETag` on static files — `"<size>-<mtime as hex>"`, the same timestamp | Suppressed |
-| `uptime` on `GET /api/health` — dates the deploy, which pins the release | Removed; moved behind auth to `GET /api/admin/version` |
-| Running version | Served only from the authenticated `GET /api/admin/version` |
+| Leak                                                                                                         | Status                                                      |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Vite content-hashed asset names (`/assets/index-Qld3srqp.js`) — reproducible by rebuilding any published tag | Randomised per boot; the real names 404                     |
+| `Last-Modified` on static files — dates the build to the second                                              | Suppressed                                                  |
+| `ETag` on static files — `"<size>-<mtime as hex>"`, the same timestamp                                       | Suppressed                                                  |
+| `uptime` on `GET /api/health` — dates the deploy, which pins the release                                     | Removed; moved behind auth to `GET /api/admin/version`      |
+| Running version                                                                                              | Served only from the authenticated `GET /api/admin/version` |
 
 Asset names are randomised **at container start, not at build time**, deliberately:
 release images are public on `ghcr.io`, so anything baked into `archivum-null:2.0.0`
@@ -269,6 +269,7 @@ stays compatible with `read_only: true`.
   ```
 
   Caddy sends no `Server` version by default.
+
 - **Do not let the proxy duplicate the app's security headers.** The app already sets
   `Strict-Transport-Security`, `X-Content-Type-Options`, `Content-Security-Policy`
   and the rest on every response. Adding them again in nginx produces two copies of
@@ -276,13 +277,13 @@ stays compatible with `read_only: true`.
 
 ### What is still detectable
 
-Be honest about the limit: **the bundle's *contents* are the version.** Client-side
+Be honest about the limit: **the bundle's _contents_ are the version.** Client-side
 code is delivered to the browser by definition, so anyone who downloads the JavaScript
 and diffs it against a rebuilt tag can still identify the release, and the bundle
 carries dependency versions (`react-dom`, `react-router`) in cleartext regardless.
 
 That is unavoidable for a browser app, and it is not what the measures above are for.
-They remove the *cheap, passive, scannable* signal — the kind that gets a host swept
+They remove the _cheap, passive, scannable_ signal — the kind that gets a host swept
 up in a mass scan for "everything running < v1.2.3". They do not stop a targeted
 analyst, and nothing short of not shipping JavaScript would.
 
@@ -293,8 +294,8 @@ analyst, and nothing short of not shipping JavaScript would.
 Enable the admin panel's update check (`UPDATE_CHECK_ENABLED=true`) so you find out
 when a release ships. It is off by default because it needs egress — with the rules
 in [Egress Containment](#egress-containment) applied you must either allow
-`api.github.com` or leave it off and track releases another way (GitHub's *Watch →
-Releases only*, or an RSS reader on `https://github.com/whiteravens20/archivum-null/releases.atom`).
+`api.github.com` or leave it off and track releases another way (GitHub's _Watch →
+Releases only_, or an RSS reader on `https://github.com/whiteravens20/archivum-null/releases.atom`).
 
 If you use Watchtower to apply updates, note that a Watchtower running with
 `WATCHTOWER_LABEL_ENABLE=true` updates **only** containers that opt in. Without the
@@ -306,7 +307,7 @@ first pulled, indefinitely:
 services:
   archivum-null:
     labels:
-      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.enable: 'true'
 ```
 
 Verify which containers are actually managed:
@@ -332,6 +333,7 @@ docker compose pull && docker compose up -d
 The VPS runs **only** the reverse proxy. Port 3000 must **never** be reachable from the public internet — only 80 (HTTP→HTTPS redirect) and 443 (HTTPS).
 
 **UFW (Ubuntu/Debian)**
+
 ```bash
 ufw default deny incoming
 ufw allow 22/tcp    # SSH — restrict to your admin IP if possible
@@ -342,6 +344,7 @@ ufw enable
 ```
 
 **nftables**
+
 ```bash
 nft add rule inet filter input tcp dport { 22, 80, 443 } accept
 nft add rule inet filter input drop
@@ -408,7 +411,7 @@ credentials-file: /root/.cloudflared/<tunnel-id>.json
 
 ingress:
   - hostname: archivum.yourdomain.com
-    service: http://127.0.0.1:3000   # or tunnel IP if on separate host
+    service: http://127.0.0.1:3000 # or tunnel IP if on separate host
   - service: http_status:404
 ```
 
@@ -449,20 +452,22 @@ iptables -I OUTPUT -d 198.41.192.0/24 -p tcp --dport 443 -j ACCEPT
 
 > **Summary: Cloudflare Tunnel does NOT break the zero-knowledge file guarantee, but it does expose metadata to Cloudflare.**
 
-| What Cloudflare can see | Impact on Archivum Null |
-|---|---|
-| Client IP addresses of every request | IP metadata is exposed to Cloudflare (and any legal demand served on them) |
-| Request paths (`/api/vault/<id>`, timestamps) | Vault access patterns are visible — Cloudflare knows which vault IDs were accessed and when |
-| HTTP headers, User-Agent strings | Browser/client fingerprinting data retained in Cloudflare logs |
-| TLS termination at Cloudflare edge | Cloudflare decrypts TLS and re-encrypts to your origin — they see plaintext HTTP, including uploaded ciphertext blobs |
-| URL path — **not** the fragment (`#KEY`) | The encryption key in the URL fragment is **never** sent in HTTP requests; browsers strip it. Cloudflare **cannot** see the decryption key |
+| What Cloudflare can see                       | Impact on Archivum Null                                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Client IP addresses of every request          | IP metadata is exposed to Cloudflare (and any legal demand served on them)                                                                 |
+| Request paths (`/api/vault/<id>`, timestamps) | Vault access patterns are visible — Cloudflare knows which vault IDs were accessed and when                                                |
+| HTTP headers, User-Agent strings              | Browser/client fingerprinting data retained in Cloudflare logs                                                                             |
+| TLS termination at Cloudflare edge            | Cloudflare decrypts TLS and re-encrypts to your origin — they see plaintext HTTP, including uploaded ciphertext blobs                      |
+| URL path — **not** the fragment (`#KEY`)      | The encryption key in the URL fragment is **never** sent in HTTP requests; browsers strip it. Cloudflare **cannot** see the decryption key |
 
 **What Cloudflare cannot see:**
+
 - File contents (uploaded as AES-256-GCM ciphertext — Cloudflare receives the same encrypted blob as any transit node)
 - The decryption key (lives in the URL fragment `#`, which browsers never transmit in HTTP)
 - Original filename or MIME type (encrypted inside the blob)
 
 **Additional concerns:**
+
 - Cloudflare logs are subject to legal demands in US and EU jurisdictions. An operator cannot prevent Cloudflare from complying with a valid subpoena for access logs.
 - Cloudflare's [DDoS and abuse detection](https://developers.cloudflare.com/fundamentals/privacy/) systems may analyse request patterns.
 - If you enable **Cloudflare WAF** or **Cloudflare Workers** in front of the tunnel, those can inspect request bodies (the ciphertext blob). This does not expose plaintext but breaks the "only the server I control sees the ciphertext" model.
@@ -505,11 +510,13 @@ sudo tailscale up
 ```
 
 Note the assigned `100.x.x.x` address:
+
 ```bash
 tailscale ip -4
 ```
 
 Bind Archivum Null to the Tailscale IP in `.env`:
+
 ```bash
 HOST_BIND_ADDRESS=100.x.x.x   # Tailscale IP of this host
 ```
@@ -552,20 +559,20 @@ The service is now reachable only from devices in the same tailnet.
 
 [Egress Containment](#egress-containment) below assumes the only process that ever dials out is the app. A mesh VPN breaks that assumption as soon as `tailscaled` runs **inside** the scope those rules cover — an LXC given `policy_out: DROP`, or a host given a blanket `OUTPUT` DROP policy. Such a rule does not merely cut the app off from the internet: it tears the tunnel down, and your remote access to the machine with it.
 
-| `tailscaled` runs on | What changes |
-|---|---|
-| The Docker / Proxmox **host**, app in a container | Nothing. The container keeps its egress rules unchanged; the tunnel's traffic is host traffic and never crosses them. Prefer this — the app's own egress stays at zero. |
-| **Inside** the contained container / LXC | Allow the ports below *before* the DROP, or the tunnel never comes up. |
+| `tailscaled` runs on                                                        | What changes                                                                                                                                                                                          |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The Docker / Proxmox **host**, app in a container                           | Nothing. The container keeps its egress rules unchanged; the tunnel's traffic is host traffic and never crosses them. Prefer this — the app's own egress stays at zero.                               |
+| **Inside** the contained container / LXC                                    | Allow the ports below _before_ the DROP, or the tunnel never comes up.                                                                                                                                |
 | Bare-metal alongside the app ([Bare-metal / systemd](#bare-metal--systemd)) | Nothing. Those rules apply to packets of the app's user, and `tailscaled` runs as root, so they never touch it — unless you widen them into a blanket `OUTPUT` DROP, which puts you in the row above. |
 
 **What Tailscale needs outbound:**
 
-| Port | Purpose | If blocked |
-|---|---|---|
-| `443/tcp` | Control plane and DERP relays | No tunnel at all |
-| `3478/udp` | STUN — NAT traversal | Falls back to DERP over 443: works, slower |
-| `41641/udp` | Direct WireGuard peer traffic | Falls back to DERP over 443: works, slower |
-| `53/udp`, `53/tcp` | DNS | No tunnel — the control plane is reached by name |
+| Port               | Purpose                       | If blocked                                       |
+| ------------------ | ----------------------------- | ------------------------------------------------ |
+| `443/tcp`          | Control plane and DERP relays | No tunnel at all                                 |
+| `3478/udp`         | STUN — NAT traversal          | Falls back to DERP over 443: works, slower       |
+| `41641/udp`        | Direct WireGuard peer traffic | Falls back to DERP over 443: works, slower       |
+| `53/udp`, `53/tcp` | DNS                           | No tunnel — the control plane is reached by name |
 
 The rules are **port-based, not address-based**. DERP is a large and changing relay fleet, so there is no stable IP range to allow the way there is for Cloudflare.
 
@@ -619,19 +626,21 @@ With Headscale, the control-plane metadata stays entirely on infrastructure you 
 
 > **Summary: Tailscale (hosted) exposes device and network metadata to Tailscale Inc.; file contents and encryption keys are unaffected.**
 
-| What Tailscale (the company) can see | Impact |
-|---|---|
-| Device identities and their `100.x.x.x` addresses | Tailscale's coordination server knows every node in your tailnet and its connected identity (Google/GitHub/Microsoft account) |
-| Connection timestamps and online/offline events | Network activity patterns are logged by the coordination server |
-| DERP relay traffic (when direct P2P fails) | When NAT traversal fails, encrypted WireGuard packets flow through Tailscale-operated DERP servers. Tailscale sees packet sizes and timing but **cannot decrypt** the WireGuard payload |
-| Identity provider linkage | Login requires an SSO provider (Google, GitHub, Microsoft). Your device identity is linked to that account |
+| What Tailscale (the company) can see              | Impact                                                                                                                                                                                  |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Device identities and their `100.x.x.x` addresses | Tailscale's coordination server knows every node in your tailnet and its connected identity (Google/GitHub/Microsoft account)                                                           |
+| Connection timestamps and online/offline events   | Network activity patterns are logged by the coordination server                                                                                                                         |
+| DERP relay traffic (when direct P2P fails)        | When NAT traversal fails, encrypted WireGuard packets flow through Tailscale-operated DERP servers. Tailscale sees packet sizes and timing but **cannot decrypt** the WireGuard payload |
+| Identity provider linkage                         | Login requires an SSO provider (Google, GitHub, Microsoft). Your device identity is linked to that account                                                                              |
 
 **What Tailscale cannot see:**
+
 - WireGuard payload (all traffic is end-to-end encrypted with WireGuard keys; Tailscale's coordination server holds no WireGuard private keys)
 - File contents, encryption keys, vault URLs (never reach Tailscale infrastructure)
 - Request-level metadata (Tailscale is a network layer; it does not inspect HTTP)
 
 **Additional concerns:**
+
 - Tailscale's coordination server is hosted in the US and subject to US legal process.
 - The SSO login requirement (Google/GitHub/Microsoft) links device identity to a third-party account. If that account is compromised, tailnet access is at risk — enable 2FA on the SSO account.
 - `tailscale up --advertise-exit-node` or `--advertise-routes` on the Archivum Null host can unintentionally expose LAN subnets to the tailnet. Do not use these flags unless deliberately routing LAN traffic.
@@ -643,17 +652,17 @@ With Headscale, the control-plane metadata stays entirely on infrastructure you 
 
 ## Egress Containment
 
-**Threat:** Inbound rules prevent unauthorized access *to* the container. A separate concern is what happens when an attacker gains code execution *inside* the container — e.g. via a vulnerability in Node.js, Fastify, or a malformed uploaded blob. Without egress controls, the compromised process can freely initiate outbound connections: scanning the internal LAN, pivoting to other hosts, or beaconing to a C2 server on the internet.
+**Threat:** Inbound rules prevent unauthorized access _to_ the container. A separate concern is what happens when an attacker gains code execution _inside_ the container — e.g. via a vulnerability in Node.js, Fastify, or a malformed uploaded blob. Without egress controls, the compromised process can freely initiate outbound connections: scanning the internal LAN, pivoting to other hosts, or beaconing to a C2 server on the internet.
 
 The rules below cut off that escape path.
 
 **Before you pick an option, know what legitimately needs egress.** By default the
 app makes no outbound connection at all. Two optional features change that:
 
-| Feature | Needs | If blocked |
-|---|---|---|
-| Cloudflare Turnstile (`TURNSTILE_SECRET` set) | `https://challenges.cloudflare.com` | Uploads fail — the challenge cannot be verified |
-| Update check (`UPDATE_CHECK_ENABLED=true`) | `https://api.github.com` | Fails quietly; the admin panel still reports the running version, with the reason beside it |
+| Feature                                       | Needs                               | If blocked                                                                                  |
+| --------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| Cloudflare Turnstile (`TURNSTILE_SECRET` set) | `https://challenges.cloudflare.com` | Uploads fail — the challenge cannot be verified                                             |
+| Update check (`UPDATE_CHECK_ENABLED=true`)    | `https://api.github.com`            | Fails quietly; the admin panel still reports the running version, with the reason beside it |
 
 The update check is off by default precisely so that this section's rules and the
 application's behaviour do not contradict each other. If you want it, allow
@@ -679,12 +688,12 @@ The rules match the app's network by the name of its bridge, `br-archivum`, whic
 
 **What the rules do:**
 
-| Traffic | Verdict |
-|---|---|
-| Replies of the app to its visitors | Pass: they belong to connections the proxy opened |
-| A connection the container opens to the LAN or the internet | Dropped. With `--turnstile yes`, TCP 443 to `104.16.0.0/13` and `104.24.0.0/14` passes |
-| A connection the container opens to the Docker host itself | Dropped. Without this the host's SSH daemon, and anything else it listens on, stays within the container's reach whatever the other rules say |
-| A connection to the container (with `--tunnel-iface`) | Passes from that interface only |
+| Traffic                                                     | Verdict                                                                                                                                       |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Replies of the app to its visitors                          | Pass: they belong to connections the proxy opened                                                                                             |
+| A connection the container opens to the LAN or the internet | Dropped. With `--turnstile yes`, TCP 443 to `104.16.0.0/13` and `104.24.0.0/14` passes                                                        |
+| A connection the container opens to the Docker host itself  | Dropped. Without this the host's SSH daemon, and anything else it listens on, stays within the container's reach whatever the other rules say |
+| A connection to the container (with `--tunnel-iface`)       | Passes from that interface only                                                                                                               |
 
 Do **not** use `internal: true` on the Compose network for this. Docker publishes no port for a container on an internal network, so the app stops being reachable.
 
@@ -755,7 +764,7 @@ table inet archivum_null {
 
 **Name resolution.** The container asks Docker's built-in resolver, and Docker passes the query to the host's name servers from the host's side. Turnstile therefore works without any rule for DNS, and the script adds none. Two consequences:
 
-- A resolver the container reaches *by itself* does need one: a server set with `dns:` in the Compose file, or any server on an old Docker. It shows in `docker exec archivum-null cat /etc/resolv.conf` as an `ExtServers` entry without `host(...)`. Pass it with `--dns <address>`.
+- A resolver the container reaches _by itself_ does need one: a server set with `dns:` in the Compose file, or any server on an old Docker. It shows in `docker exec archivum-null cat /etc/resolv.conf` as an `ExtServers` entry without `host(...)`. Pass it with `--dns <address>`.
 - The rules cannot stop a contained container from resolving names, and a name can carry data to whoever runs its zone. If Turnstile and the update check are both off, the app resolves nothing. Leave it without a resolver then:
 
   ```yaml
@@ -824,11 +833,11 @@ With iptables the script builds the same from `-m owner --uid-owner`; `--backend
 
 ### Summary — what to apply
 
-| Deployment | Turnstile disabled | Turnstile enabled |
-|---|---|---|
-| Docker | `setup-firewall.sh --mode docker --turnstile no` | `setup-firewall.sh --mode docker --turnstile yes` |
+| Deployment     | Turnstile disabled                                   | Turnstile enabled                                     |
+| -------------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| Docker         | `setup-firewall.sh --mode docker --turnstile no`     | `setup-firewall.sh --mode docker --turnstile yes`     |
 | Bare-metal, VM | `setup-firewall.sh --mode bare-metal --turnstile no` | `setup-firewall.sh --mode bare-metal --turnstile yes` |
-| Proxmox LXC | `policy_out: DROP` in the guest's `.fw` file | `policy_out: DROP` + Cloudflare and DNS ACCEPT rules |
+| Proxmox LXC    | `policy_out: DROP` in the guest's `.fw` file         | `policy_out: DROP` + Cloudflare and DNS ACCEPT rules  |
 
 For the Proxmox firewall, see [PROXMOX.md — Egress Containment](PROXMOX.md#egress-containment--proxmox-firewall).
 
@@ -881,6 +890,7 @@ A container is a process on the host's kernel, confined by it. The settings in `
 The script covers Docker and bare-metal, with iptables or nftables, and owns what it creates: with nftables the table `inet archivum_null`, with iptables the chains `ARCHIVUM-EGRESS`, `ARCHIVUM-HOST` and `ARCHIVUM-INGRESS` and the jumps into them. Every run rebuilds them from the options given, so it is safe to run again with different options. Its rules only drop; they never accept a packet your own firewall or Docker would have refused.
 
 **Interactive:**
+
 ```bash
 sudo bash scripts/setup-firewall.sh
 ```
@@ -907,20 +917,20 @@ bash scripts/setup-firewall.sh --mode docker --turnstile yes --tunnel-iface wg0 
 sudo bash scripts/setup-firewall.sh --remove
 ```
 
-| Option | Meaning |
-|---|---|
-| `--mode docker` \| `bare-metal` | How the app runs |
-| `--backend iptables` \| `nftables` | Default: nftables when `nft` is installed |
-| `--turnstile yes` \| `no` | Whether the app may reach Cloudflare's challenge endpoints |
-| `--tunnel-iface <iface>` | Inbound guard: only this interface may reach the app port |
-| `--bridge <name>` | Docker: the bridge of the app's network (default `br-archivum`) |
-| `--app-uid <user>` | Bare-metal: the app's user, by name or number (default `archivum`) |
-| `--dns <a,b>` \| `none` | Resolvers the app may query; see [Docker](#docker) for when a container needs one |
-| `--allow <CIDR:PORT>` | One more TCP destination the app may connect to; repeatable |
-| `--persist` | Install `archivum-null-firewall.service`, which applies the same rules at boot |
-| `--remove` | Remove the rules and the unit |
-| `--dry-run` | Print, change nothing |
-| `--yes` | Do not ask for confirmation |
+| Option                             | Meaning                                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| `--mode docker` \| `bare-metal`    | How the app runs                                                                  |
+| `--backend iptables` \| `nftables` | Default: nftables when `nft` is installed                                         |
+| `--turnstile yes` \| `no`          | Whether the app may reach Cloudflare's challenge endpoints                        |
+| `--tunnel-iface <iface>`           | Inbound guard: only this interface may reach the app port                         |
+| `--bridge <name>`                  | Docker: the bridge of the app's network (default `br-archivum`)                   |
+| `--app-uid <user>`                 | Bare-metal: the app's user, by name or number (default `archivum`)                |
+| `--dns <a,b>` \| `none`            | Resolvers the app may query; see [Docker](#docker) for when a container needs one |
+| `--allow <CIDR:PORT>`              | One more TCP destination the app may connect to; repeatable                       |
+| `--persist`                        | Install `archivum-null-firewall.service`, which applies the same rules at boot    |
+| `--remove`                         | Remove the rules and the unit                                                     |
+| `--dry-run`                        | Print, change nothing                                                             |
+| `--yes`                            | Do not ask for confirmation                                                       |
 
 After applying, run the deployment validator:
 
@@ -934,13 +944,13 @@ sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 
 Run the current script once, with the options for your deployment. It finds the rules the earlier version added and removes them, by their exact text:
 
-| Where | What it removes | Why |
-|---|---|---|
-| `FORWARD`, rules for `br-archivum` | The egress rules of Docker mode with iptables | They sat behind Docker's own accept and were never evaluated: the container's egress was open |
-| `DOCKER-USER`, `-i <tunnel> -j ACCEPT` | The accept for the tunnel interface | It made the host forward that interface's packets to every network it has a route to |
-| `INPUT`, rules for the app port | The inbound guard | In Docker mode it never saw the traffic. The new guard sits where the traffic passes |
-| `OUTPUT`, rules for the app's UID | The egress rules of bare-metal mode | They also dropped the app's replies, so the service answered nobody |
-| The table `inet filter`, nftables | The same rules in their nftables form | Replaced by a table of the script's own |
+| Where                                  | What it removes                               | Why                                                                                           |
+| -------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `FORWARD`, rules for `br-archivum`     | The egress rules of Docker mode with iptables | They sat behind Docker's own accept and were never evaluated: the container's egress was open |
+| `DOCKER-USER`, `-i <tunnel> -j ACCEPT` | The accept for the tunnel interface           | It made the host forward that interface's packets to every network it has a route to          |
+| `INPUT`, rules for the app port        | The inbound guard                             | In Docker mode it never saw the traffic. The new guard sits where the traffic passes          |
+| `OUTPUT`, rules for the app's UID      | The egress rules of bare-metal mode           | They also dropped the app's replies, so the service answered nobody                           |
+| The table `inet filter`, nftables      | The same rules in their nftables form         | Replaced by a table of the script's own                                                       |
 
 Then deal with what was saved, or the old rules come back at the next boot. The earlier `--persist` saved the whole ruleset of that moment, and with it Docker's own rules and those of a VPN client. Restored at every boot, that copy leaves rules behind for containers and bridges that no longer exist, at addresses other containers have since been given.
 

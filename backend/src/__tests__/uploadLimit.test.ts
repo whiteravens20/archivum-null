@@ -20,12 +20,15 @@ const BOUNDARY = '----uploadLimitTest';
 
 function multipart(fields: Record<string, string>, file: Buffer): Buffer {
   const head = Object.entries(fields)
-    .map(([name, value]) => `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+    .map(
+      ([name, value]) =>
+        `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+    )
     .join('');
   return Buffer.concat([
     Buffer.from(
       `${head}--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="encrypted.bin"\r\n` +
-      'Content-Type: application/octet-stream\r\n\r\n'
+        'Content-Type: application/octet-stream\r\n\r\n',
     ),
     file,
     Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
@@ -38,7 +41,12 @@ describe('upload request size limit', () => {
 
   const headers = { 'content-type': `multipart/form-data; boundary=${BOUNDARY}` };
   const upload = (file: Buffer) =>
-    app.inject({ method: 'POST', url: '/api/vault', headers, payload: multipart({ ttl: '3600', maxDownloads: '1' }, file) });
+    app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers,
+      payload: multipart({ ttl: '3600', maxDownloads: '1' }, file),
+    });
   const sendChunk = (uploadId: string, sessionToken: string, index: number, file: Buffer) =>
     app.inject({
       method: 'POST',

@@ -44,7 +44,12 @@ setInterval(() => {
 }, 300_000).unref();
 
 /** The bucket for this client in the current window, started afresh when the last one ended. */
-function currentBucket(map: Map<string, RateBucket>, ip: string, windowMs: number, now: number): RateBucket {
+function currentBucket(
+  map: Map<string, RateBucket>,
+  ip: string,
+  windowMs: number,
+  now: number,
+): RateBucket {
   let bucket = map.get(ip);
   if (!bucket || bucket.resetAt <= now) {
     bucket = { count: 0, resetAt: now + windowMs };
@@ -53,7 +58,12 @@ function currentBucket(map: Map<string, RateBucket>, ip: string, windowMs: numbe
   return bucket;
 }
 
-function tooManyRequests(reply: FastifyReply, bucket: RateBucket, now: number, error: string): void {
+function tooManyRequests(
+  reply: FastifyReply,
+  bucket: RateBucket,
+  now: number,
+  error: string,
+): void {
   const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
   reply.header('Retry-After', retryAfter);
   reply.status(429).send({ error, retryAfter });
@@ -64,7 +74,7 @@ function checkLimit(
   ip: string,
   max: number,
   windowMs: number,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): boolean {
   const now = Date.now();
   const bucket = currentBucket(map, ip, windowMs, now);

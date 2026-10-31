@@ -11,7 +11,8 @@ function parseTerms(raw: unknown): Terms | null {
   if (typeof raw !== 'object' || raw === null) return null;
   // Narrowed field by field below: the body is whatever the server sent.
   const { terms, translations } = raw as Record<string, unknown>;
-  if (typeof terms !== 'string' || typeof translations !== 'object' || translations === null) return null;
+  if (typeof terms !== 'string' || typeof translations !== 'object' || translations === null)
+    return null;
   return { terms, translations: translations as Record<string, unknown> };
 }
 
@@ -39,19 +40,23 @@ export default function Tos() {
       .catch(() => setError(true));
   }, []);
 
-  const translation = terms && Object.hasOwn(terms.translations, lang) ? terms.translations[lang] : undefined;
+  const translation =
+    terms && Object.hasOwn(terms.translations, lang) ? terms.translations[lang] : undefined;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-12">
       <div className="mb-8">
-        <a href="/" className="text-sm text-vault-accent-ink hover:underline">{t('common.home')}</a>
+        <a href="/" className="text-sm text-vault-accent-ink hover:underline">
+          {t('common.home')}
+        </a>
       </div>
       {error ? (
         <p className="text-vault-danger text-sm">{t('tos.failed')}</p>
       ) : terms === null ? (
         <p className="text-vault-subtle animate-pulse text-sm">{t('tos.loading')}</p>
       ) : (
-        <article className="prose prose-sm max-w-none
+        <article
+          className="prose prose-sm max-w-none
           prose-headings:text-vault-heading prose-headings:font-semibold
           prose-h1:text-2xl prose-h2:text-base prose-h2:mt-6
           prose-p:text-vault-muted prose-p:leading-relaxed
@@ -65,7 +70,9 @@ export default function Tos() {
           // links are kept to web and mail addresses. The Content-Security-Policy
           // would not run a script from it either way. No Markdown parser is shipped
           // to the browser for this one page.
-          dangerouslySetInnerHTML={{ __html: typeof translation === 'string' ? translation : terms.terms }}
+          dangerouslySetInnerHTML={{
+            __html: typeof translation === 'string' ? translation : terms.terms,
+          }}
         />
       )}
     </div>
