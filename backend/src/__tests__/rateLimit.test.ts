@@ -14,6 +14,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import type * as RateLimit from '../middleware/rateLimit.js';
+import type { RateBucket } from '../middleware/rateLimit.js';
 
 describe('Rate-limit middleware', () => {
   let app: FastifyInstance;
@@ -290,5 +292,89 @@ describe('Rate-limit middleware, a client with no address', () => {
     expect(String(warn.mock.calls[0])).toContain('X-Forwarded-For');
     expect(String(warn.mock.calls[0])).not.toContain('203.0.113.7');
     await app.close();
+  });
+});
+
+describe('Rate-limit buckets', () => {
+  type Map_ = Map<string, RateBucket>;
+  const WINDOW = 60_000;
+  let buckets: typeof RateLimit;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    buckets = await import('../middleware/rateLimit.js');
+  });
+
+  it('should go on with a bucket until its window ends, then start afresh', () => {
+    const map: Map_ = new Map();
+    const first = buckets.currentBucket(map, 'a', WINDOW, 1000);
+    first.count = 5;
+
+    expect(buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW - 1)).toBe(first);
+
+    const next = buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW);
+    expect(next).not.toBe(first);
+    expect(next.count).toBe(0);
+    expect(next.resetAt).toBe(1000 + 2 * WINDOW);
+  });
+
+  it('should keep the map in the order the buckets started, a restarted one included', () => {
+    const map: Map_ = new Map();
+    buckets.currentBucket(map, 'a', WINDOW, 1000);
+    buckets.currentBucket(map, 'b', WINDOW, 2000);
+    buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW);
+
+    expect([...map.keys()]).toEqual(['b', 'a']);
+  });
+
+  it('should forget the buckets whose window has ended, and no others', () => {
+    const map: Map_ = new Map();
+    buckets.currentBucket(map, 'a', WINDOW, 1000);
+    buckets.currentBucket(map, 'b', WINDOW, 2000);
+    buckets.currentBucket(map, 'c', WINDOW, 3000);
+
+    buckets.forgetExpired(map, 2000 + WINDOW);
+    expect([...map.keys()]).toEqual(['c']);
+
+    buckets.forgetExpired(map, 3000 + WINDOW);
+    expect(map.size).toBe(0);
+  });
+
+  it('should forget a bucket that ended behind one that was restarted', () => {
+    const map: Map_ = new Map();
+    buckets.currentBucket(map, 'a', WINDOW, 1000);
+    buckets.currentBucket(map, 'b', WINDOW, 2000);
+    buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW);
+
+    buckets.forgetExpired(map, 2000 + WINDOW);
+    expect([...map.keys()]).toEqual(['a']);
+  });
+
+  it('should keep count of no more clients than the limit, dropping the oldest', () => {
+    const map: Map_ = new Map();
+    for (let i = 0; i < buckets.MAX_TRACKED_CLIENTS; i++) {
+      buckets.currentBucket(map, `client-${i}`, WINDOW, 1000);
+    }
+    expect(map.size).toBe(buckets.MAX_TRACKED_CLIENTS);
+
+    buckets.currentBucket(map, 'one more', WINDOW, 1000);
+    expect(map.size).toBe(buckets.MAX_TRACKED_CLIENTS);
+    expect(map.has('client-0')).toBe(false);
+    expect(map.has('client-1')).toBe(true);
+    expect(map.has('one more')).toBe(true);
+  });
+
+  it('should make room by dropping what has ended before anything still running', () => {
+    const map: Map_ = new Map();
+    for (let i = 0; i < buckets.MAX_TRACKED_CLIENTS; i++) {
+      buckets.currentBucket(map, `client-${i}`, WINDOW, i < 10 ? 1000 : 1000 + WINDOW);
+    }
+
+    buckets.currentBucket(map, 'one more', WINDOW, 1000 + WINDOW);
+
+    // The ten that ended all went; nothing still running had to.
+    expect(map.size).toBe(buckets.MAX_TRACKED_CLIENTS - 9);
+    expect(map.has('client-10')).toBe(true);
+    expect(map.has('client-9')).toBe(false);
   });
 });

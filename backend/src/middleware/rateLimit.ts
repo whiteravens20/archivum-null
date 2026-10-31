@@ -23,43 +23,64 @@ import { requestPath } from './requestPath.js';
  * clients to spoof their IP. Buckets are keyed by `clientKey()`, which groups
  * IPv6 clients by /64 so rotating addresses inside one allocation gains nothing.
  */
-interface RateBucket {
+export interface RateBucket {
   count: number;
   resetAt: number;
 }
+
+/**
+ * Most clients one tier keeps count of, about 20 MB at a little over 200 bytes each. Every
+ * bucket is a few bytes of memory that a client with many addresses makes the server spend,
+ * so there has to be an end to them. The oldest go first: they are the closest to their end
+ * anyway, and whoever holds this many addresses has no need to clear a count of their own.
+ */
+export const MAX_TRACKED_CLIENTS = 100_000;
 
 const apiBuckets = new Map<string, RateBucket>();
 const uploadBuckets = new Map<string, RateBucket>();
 const downloadBuckets = new Map<string, RateBucket>();
 const adminBuckets = new Map<string, RateBucket>();
 
-function cleanupMap(map: Map<string, RateBucket>): void {
-  const now = Date.now();
-  for (const [key, bucket] of map.entries()) {
-    if (bucket.resetAt <= now) map.delete(key);
+/**
+ * Drop the buckets whose window has ended. Every bucket of a process lasts as long as the
+ * next and `currentBucket` adds them in order, so those are all at the front of the map.
+ */
+export function forgetExpired(map: Map<string, RateBucket>, now: number): void {
+  for (const [key, bucket] of map) {
+    if (bucket.resetAt > now) return;
+    map.delete(key);
   }
 }
 
-// Cleanup stale entries every 5 minutes
+// A client's address stays in memory no longer than a minute past the end of its window.
 setInterval(() => {
-  cleanupMap(apiBuckets);
-  cleanupMap(uploadBuckets);
-  cleanupMap(downloadBuckets);
-  cleanupMap(adminBuckets);
-}, 300_000).unref();
+  const now = Date.now();
+  for (const map of [apiBuckets, uploadBuckets, downloadBuckets, adminBuckets]) {
+    forgetExpired(map, now);
+  }
+}, 60_000).unref();
 
 /** The bucket for this client in the current window, started afresh when the last one ended. */
-function currentBucket(
+export function currentBucket(
   map: Map<string, RateBucket>,
   ip: string,
   windowMs: number,
   now: number,
 ): RateBucket {
-  let bucket = map.get(ip);
-  if (!bucket || bucket.resetAt <= now) {
-    bucket = { count: 0, resetAt: now + windowMs };
-    map.set(ip, bucket);
+  const running = map.get(ip);
+  if (running && running.resetAt > now) return running;
+
+  // Out and back in, not overwritten: the map has to stay in the order the buckets started.
+  map.delete(ip);
+  if (map.size >= MAX_TRACKED_CLIENTS) {
+    forgetExpired(map, now);
+    if (map.size >= MAX_TRACKED_CLIENTS) {
+      const oldest = map.keys().next().value;
+      if (oldest !== undefined) map.delete(oldest);
+    }
   }
+  const bucket = { count: 0, resetAt: now + windowMs };
+  map.set(ip, bucket);
   return bucket;
 }
 
