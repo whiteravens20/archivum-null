@@ -82,12 +82,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     reply.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
-    reply.header(
-      'Strict-Transport-Security',
-      'max-age=63072000; includeSubDomains; preload'
-    );
+    reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     return payload;
   });
 
@@ -154,20 +151,20 @@ export async function buildApp(): Promise<FastifyInstance> {
     // below only ever sends a finished string.
     const brandingAssets = loadBrandingAssets(
       config.BRANDING_PATH || path.join(__dirname, '..', '..', 'branding'),
-      (warning) => app.log.warn(warning)
+      (warning) => app.log.warn(warning),
     );
     const branded = applyBranding(assetCloak.indexHtml, branding, brandingAssets);
     const indexHtml = termsServed ? branded : markNoTerms(branded);
     for (const warning of brandingWarnings(branding)) app.log.warn(warning);
     if (brandingAssets.files.size > 0) {
-      app.log.info({ files: [...brandingAssets.files.keys()] }, 'Serving the operator\'s branding files');
+      app.log.info(
+        { files: [...brandingAssets.files.keys()] },
+        "Serving the operator's branding files",
+      );
     }
 
     const sendIndex = (reply: FastifyReply) =>
-      reply
-        .header('Cache-Control', 'no-store')
-        .type('text/html; charset=utf-8')
-        .send(indexHtml);
+      reply.header('Cache-Control', 'no-store').type('text/html; charset=utf-8').send(indexHtml);
 
     // Cloaked assets. The name changes on every restart, so the bytes behind a given
     // URL never do — safe to cache immutably for as long as the client likes.
@@ -191,7 +188,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         reply
           .header('Cache-Control', 'public, max-age=0, must-revalidate')
           .type(asset.contentType)
-          .send(asset.body)
+          .send(asset.body),
       );
     }
 
@@ -201,7 +198,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       reply
         .header('Cache-Control', 'public, max-age=0, must-revalidate')
         .type('application/manifest+json; charset=utf-8')
-        .send(manifest)
+        .send(manifest),
     );
 
     await app.register(fastifyStatic, {

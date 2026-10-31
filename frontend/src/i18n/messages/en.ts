@@ -24,7 +24,8 @@ export const en = {
   'home.created': 'Vault created',
   'home.createdDetail': 'File encrypted and uploaded successfully',
   'home.createAnother': 'Create another vault',
-  'home.captchaSlow': 'Still waiting for the CAPTCHA. If a challenge is shown above, complete it. If nothing appears, reload the page.',
+  'home.captchaSlow':
+    'Still waiting for the CAPTCHA. If a challenge is shown above, complete it. If nothing appears, reload the page.',
   'home.captchaFailed': 'CAPTCHA verification failed — please reload and try again',
   'home.captchaExpired': 'CAPTCHA expired — please reload and try again',
   'home.uploading': 'Encrypting & uploading...',
@@ -44,7 +45,8 @@ export const en = {
   'upload.expired': 'The upload session expired. Try again.',
   'upload.tooLarge': 'The file is larger than this server accepts.',
   'upload.rateLimited': 'Too many uploads from your connection. Wait a moment and try again.',
-  'upload.storageFull': 'The server is out of storage space. Try again later or contact the administrator.',
+  'upload.storageFull':
+    'The server is out of storage space. Try again later or contact the administrator.',
   'upload.serverError': 'The server could not store the file. Try again later.',
   'upload.failed': 'The upload failed. Try again.',
 
@@ -65,7 +67,8 @@ export const en = {
   'vaultLink.label': 'Vault Link (contains decryption key)',
   'vaultLink.copy': 'Copy',
   'vaultLink.copied': '✓ Copied',
-  'vaultLink.warning': '⚠ This link contains the encryption key in the URL fragment (#). The key is never sent to the server. Anyone with this link can decrypt the file. Store it securely or share via an encrypted channel.',
+  'vaultLink.warning':
+    '⚠ This link contains the encryption key in the URL fragment (#). The key is never sent to the server. Anyone with this link can decrypt the file. Store it securely or share via an encrypted channel.',
 
   'vault.subtitle': 'Vault retrieval',
   'vault.loading': 'Loading vault...',
@@ -77,12 +80,16 @@ export const en = {
   'vault.expiresIn': 'Expires in',
   'vault.expired': 'Expired',
   'vault.notice': '⚠ Security notice',
-  'vault.notice.sender': 'The file name and type are set by the sender and cannot be verified by the server.',
-  'vault.notice.scan': 'Do not open files from untrusted senders. Scan downloaded files with antivirus software before opening.',
+  'vault.notice.sender':
+    'The file name and type are set by the sender and cannot be verified by the server.',
+  'vault.notice.scan':
+    'Do not open files from untrusted senders. Scan downloaded files with antivirus software before opening.',
   'vault.notice.extensions': 'Be cautious of misleading file extensions (e.g. {example}).',
   'vault.mismatch': '⚠ Filename mismatch detected',
-  'vault.mismatch.detail': 'The link indicated {expected} but the decrypted file is actually {actual}. The link may have been tampered with.',
-  'vault.noKey': '⚠ No decryption key found in URL. The key must be in the URL fragment (#). Without it the file cannot be decrypted, so the download is disabled.',
+  'vault.mismatch.detail':
+    'The link indicated {expected} but the decrypted file is actually {actual}. The link may have been tampered with.',
+  'vault.noKey':
+    '⚠ No decryption key found in URL. The key must be in the URL fragment (#). Without it the file cannot be decrypted, so the download is disabled.',
   'vault.downloading': 'Downloading...',
   'vault.decrypting': 'Decrypting...',
   'vault.done': '✓ File decrypted and downloaded successfully',
@@ -123,7 +130,8 @@ export const en = {
   'admin.rateLimited': 'Too many requests. Try again in {seconds} s.',
   'admin.backendUnavailable': 'Backend unavailable ({status}). Is the backend container running?',
   'admin.noAnswer': 'Could not get an answer from the server. Is the backend container running?',
-  'admin.rateLimitedNotice': 'The server is rate limiting this panel. The figures below are the last it sent. They refresh by themselves once the limit lifts, in about {seconds} s.',
+  'admin.rateLimitedNotice':
+    'The server is rate limiting this panel. The figures below are the last it sent. They refresh by themselves once the limit lifts, in about {seconds} s.',
   'admin.updateAvailable': 'Update available — {version}',
   'admin.runs': 'This instance runs {version}',
   'admin.runsReleased': 'This instance runs {version} · released {date}',

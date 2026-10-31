@@ -45,6 +45,11 @@ jobs:
       - name: Audit frontend (dev, high)
         run: node .github/scripts/audit-check.mjs --dir frontend --audit-level high
 
+      # The formatter at the root ships nothing and runs in CI, so it is held to the
+      # bar of the dev dependencies.
+      - name: Audit the formatter (dev, high)
+        run: node .github/scripts/audit-check.mjs --dir . --audit-level high
+
       # Verify every installed tarball has a valid registry signature.
       # Catches forged tarballs / tampered registry metadata at install time.
       # Requires a fresh install since `audit signatures` reads node_modules.
@@ -62,6 +67,12 @@ jobs:
 
       - name: Verify frontend signatures
         working-directory: frontend
+        run: npm audit signatures
+
+      - name: Install the formatter (for signature audit)
+        run: npm ci --ignore-scripts
+
+      - name: Verify the formatter's signatures
         run: npm audit signatures
 
   dependency-review:
@@ -103,7 +114,7 @@ jobs:
           output: trivy-fs.sarif
           trivyignores: .trivyignore
           limit-severities-for-sarif: true
-          exit-code: '1'  # Fail the build on HIGH/CRITICAL vulnerabilities
+          exit-code: '1' # Fail the build on HIGH/CRITICAL vulnerabilities
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
@@ -135,7 +146,7 @@ jobs:
           output: trivy-docker.sarif
           trivyignores: .trivyignore
           limit-severities-for-sarif: true
-          exit-code: '1'  # Fail the build on HIGH/CRITICAL vulnerabilities
+          exit-code: '1' # Fail the build on HIGH/CRITICAL vulnerabilities
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2

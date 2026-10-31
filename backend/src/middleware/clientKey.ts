@@ -18,8 +18,9 @@ export function clientKey(ip: string): string {
   if (mapped) return mapped[1];
 
   // An embedded IPv4 tail (`64:ff9b::192.0.2.1`) fills two groups, not one.
-  const hexAddress = address.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/, (_m, a, b, c, d) =>
-    `${((+a << 8) | +b).toString(16)}:${((+c << 8) | +d).toString(16)}`
+  const hexAddress = address.replace(
+    /(\d+)\.(\d+)\.(\d+)\.(\d+)$/,
+    (_m, a, b, c, d) => `${((+a << 8) | +b).toString(16)}:${((+c << 8) | +d).toString(16)}`,
   );
   const [head, tail] = hexAddress.split('::');
   const headGroups = head ? head.split(':') : [];
@@ -27,7 +28,14 @@ export function clientKey(ip: string): string {
   const groups =
     tail === undefined
       ? headGroups
-      : [...headGroups, ...Array<string>(8 - headGroups.length - tailGroups.length).fill('0'), ...tailGroups];
+      : [
+          ...headGroups,
+          ...Array<string>(8 - headGroups.length - tailGroups.length).fill('0'),
+          ...tailGroups,
+        ];
 
-  return `${groups.slice(0, 4).map((group) => parseInt(group, 16).toString(16)).join(':')}::/64`;
+  return `${groups
+    .slice(0, 4)
+    .map((group) => parseInt(group, 16).toString(16))
+    .join(':')}::/64`;
 }

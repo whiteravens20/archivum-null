@@ -18,7 +18,8 @@ export const pl: Messages = {
   'home.created': 'Sejf utworzony',
   'home.createdDetail': 'Plik został zaszyfrowany i przesłany',
   'home.createAnother': 'Utwórz kolejny sejf',
-  'home.captchaSlow': 'Nadal czekamy na CAPTCHA. Jeśli powyżej widać zadanie, rozwiąż je. Jeśli nic się nie pojawia, odśwież stronę.',
+  'home.captchaSlow':
+    'Nadal czekamy na CAPTCHA. Jeśli powyżej widać zadanie, rozwiąż je. Jeśli nic się nie pojawia, odśwież stronę.',
   'home.captchaFailed': 'Weryfikacja CAPTCHA nie powiodła się — odśwież stronę i spróbuj ponownie',
   'home.captchaExpired': 'CAPTCHA wygasła — odśwież stronę i spróbuj ponownie',
   'home.uploading': 'Szyfrowanie i przesyłanie...',
@@ -27,8 +28,10 @@ export const pl: Messages = {
   'home.waitingForCaptcha': 'Czekam na CAPTCHA...',
   'home.encryptAndUpload': 'Zaszyfruj i prześlij',
   'home.howItWorks': 'Jak to działa',
-  'home.step1': 'Plik jest szyfrowany w Twojej przeglądarce algorytmem AES-256-GCM, zanim zostanie wysłany.',
-  'home.step2': 'Na serwer trafia tylko zaszyfrowana treść. Klucz zostaje we fragmencie adresu URL.',
+  'home.step1':
+    'Plik jest szyfrowany w Twojej przeglądarce algorytmem AES-256-GCM, zanim zostanie wysłany.',
+  'home.step2':
+    'Na serwer trafia tylko zaszyfrowana treść. Klucz zostaje we fragmencie adresu URL.',
   'home.step3': 'Sejf usuwa się sam, gdy minie jego czas ważności albo wyczerpie się limit pobrań.',
 
   'upload.fileTooLarge': 'Plik przekracza maksymalny rozmiar {size}',
@@ -37,28 +40,51 @@ export const pl: Messages = {
   'upload.expired': 'Sesja przesyłania wygasła. Spróbuj ponownie.',
   'upload.tooLarge': 'Plik jest większy, niż przyjmuje ten serwer.',
   'upload.rateLimited': 'Wysłano zbyt wiele żądań. Odczekaj chwilę i spróbuj ponownie.',
-  'upload.storageFull': 'Na serwerze zabrakło miejsca. Spróbuj później albo skontaktuj się z administratorem.',
+  'upload.storageFull':
+    'Na serwerze zabrakło miejsca. Spróbuj później albo skontaktuj się z administratorem.',
   'upload.serverError': 'Serwer nie mógł zapisać pliku. Spróbuj ponownie później.',
   'upload.failed': 'Przesyłanie nie powiodło się. Spróbuj ponownie.',
 
   'uploadZone.tooLarge': 'Plik jest za duży — maksymalny rozmiar to {size}',
   'uploadZone.empty': 'Plik jest pusty',
-  'uploadZone.unreadable': 'Nie udało się odczytać upuszczonego pliku — wybierz go w oknie wyboru pliku',
+  'uploadZone.unreadable':
+    'Nie udało się odczytać upuszczonego pliku — wybierz go w oknie wyboru pliku',
   'uploadZone.dropHere': 'Upuść plik tutaj',
   'uploadZone.prompt': 'Upuść plik albo kliknij, aby go wybrać',
   'uploadZone.hint': 'Maks. rozmiar: {size} · Szyfrowany w przeglądarce przed wysłaniem',
 
   'vaultConfig.expiresAfter': 'Czas ważności',
   'vaultConfig.maxDownloads': 'Limit pobrań',
-  'vaultConfig.minutes': { one: '{count} min', few: '{count} min', many: '{count} min', other: '{count} min' },
-  'vaultConfig.hours': { one: '{count} godzina', few: '{count} godziny', many: '{count} godzin', other: '{count} godziny' },
-  'vaultConfig.days': { one: '{count} dzień', few: '{count} dni', many: '{count} dni', other: '{count} dnia' },
-  'vaultConfig.downloads': { one: '{count} pobranie', few: '{count} pobrania', many: '{count} pobrań', other: '{count} pobrania' },
+  'vaultConfig.minutes': {
+    one: '{count} min',
+    few: '{count} min',
+    many: '{count} min',
+    other: '{count} min',
+  },
+  'vaultConfig.hours': {
+    one: '{count} godzina',
+    few: '{count} godziny',
+    many: '{count} godzin',
+    other: '{count} godziny',
+  },
+  'vaultConfig.days': {
+    one: '{count} dzień',
+    few: '{count} dni',
+    many: '{count} dni',
+    other: '{count} dnia',
+  },
+  'vaultConfig.downloads': {
+    one: '{count} pobranie',
+    few: '{count} pobrania',
+    many: '{count} pobrań',
+    other: '{count} pobrania',
+  },
 
   'vaultLink.label': 'Link do sejfu (zawiera klucz deszyfrujący)',
   'vaultLink.copy': 'Kopiuj',
   'vaultLink.copied': '✓ Skopiowano',
-  'vaultLink.warning': '⚠ Ten link zawiera klucz szyfrujący we fragmencie adresu URL (#). Klucz nigdy nie trafia na serwer. Każdy, kto ma ten link, może odszyfrować plik. Przechowuj go bezpiecznie albo przekaż szyfrowanym kanałem.',
+  'vaultLink.warning':
+    '⚠ Ten link zawiera klucz szyfrujący we fragmencie adresu URL (#). Klucz nigdy nie trafia na serwer. Każdy, kto ma ten link, może odszyfrować plik. Przechowuj go bezpiecznie albo przekaż szyfrowanym kanałem.',
 
   'vault.subtitle': 'Odbiór sejfu',
   'vault.loading': 'Wczytywanie sejfu...',
@@ -71,17 +97,21 @@ export const pl: Messages = {
   'vault.expired': 'Wygasł',
   'vault.notice': '⚠ Uwaga dotycząca bezpieczeństwa',
   'vault.notice.sender': 'Nazwę i typ pliku podaje nadawca; serwer nie może ich sprawdzić.',
-  'vault.notice.scan': 'Nie otwieraj plików od nieznanych nadawców. Przed otwarciem sprawdź pobrany plik programem antywirusowym.',
+  'vault.notice.scan':
+    'Nie otwieraj plików od nieznanych nadawców. Przed otwarciem sprawdź pobrany plik programem antywirusowym.',
   'vault.notice.extensions': 'Uważaj na mylące rozszerzenia plików (np. {example}).',
   'vault.mismatch': '⚠ Wykryto niezgodność nazwy pliku',
-  'vault.mismatch.detail': 'Link wskazywał {expected}, ale odszyfrowany plik to w rzeczywistości {actual}. Link mógł zostać zmieniony.',
-  'vault.noKey': '⚠ W adresie URL nie ma klucza deszyfrującego. Klucz musi być we fragmencie adresu (#). Bez niego nie da się odszyfrować pliku, dlatego pobieranie jest wyłączone.',
+  'vault.mismatch.detail':
+    'Link wskazywał {expected}, ale odszyfrowany plik to w rzeczywistości {actual}. Link mógł zostać zmieniony.',
+  'vault.noKey':
+    '⚠ W adresie URL nie ma klucza deszyfrującego. Klucz musi być we fragmencie adresu (#). Bez niego nie da się odszyfrować pliku, dlatego pobieranie jest wyłączone.',
   'vault.downloading': 'Pobieranie...',
   'vault.decrypting': 'Odszyfrowywanie...',
   'vault.done': '✓ Plik został odszyfrowany i pobrany',
   'vault.decryptAndDownload': 'Odszyfruj i pobierz',
   'vault.downloadAgain': 'Pobierz ponownie',
-  'vault.footnote': 'Odszyfrowanie odbywa się w całości w Twojej przeglądarce. Serwer nigdy nie widzi klucza.',
+  'vault.footnote':
+    'Odszyfrowanie odbywa się w całości w Twojej przeglądarce. Serwer nigdy nie widzi klucza.',
   'vault.noId': 'Brak identyfikatora sejfu',
   'vault.notFound': 'Sejf nie istnieje albo wygasł',
   'vault.rateLimited': 'Zbyt wiele żądań. Odczekaj chwilę i spróbuj ponownie.',
@@ -109,12 +139,14 @@ export const pl: Messages = {
   'admin.subtitle': 'Monitorowanie działania',
   'admin.loading': 'Wczytywanie...',
   'admin.authFailed': 'Uwierzytelnianie nie powiodło się',
-  'admin.disabled': 'Panel administratora jest wyłączony. Ustaw ADMIN_PASSWORD w zmiennych środowiskowych.',
+  'admin.disabled':
+    'Panel administratora jest wyłączony. Ustaw ADMIN_PASSWORD w zmiennych środowiskowych.',
   'admin.lockedOut': 'Zbyt wiele nieudanych prób logowania. Spróbuj ponownie za {seconds} s.',
   'admin.rateLimited': 'Zbyt wiele żądań. Spróbuj ponownie za {seconds} s.',
   'admin.backendUnavailable': 'Backend jest niedostępny ({status}). Czy kontener backendu działa?',
   'admin.noAnswer': 'Nie udało się uzyskać odpowiedzi serwera. Czy kontener backendu działa?',
-  'admin.rateLimitedNotice': 'Serwer ogranicza liczbę zapytań z tego panelu. Poniższe dane to ostatnie, jakie przesłał. Odświeżą się same, gdy limit minie, za około {seconds} s.',
+  'admin.rateLimitedNotice':
+    'Serwer ogranicza liczbę zapytań z tego panelu. Poniższe dane to ostatnie, jakie przesłał. Odświeżą się same, gdy limit minie, za około {seconds} s.',
   'admin.updateAvailable': 'Dostępna aktualizacja — {version}',
   'admin.runs': 'Ta instancja działa na wersji {version}',
   'admin.runsReleased': 'Ta instancja działa na wersji {version} · wydanie z {date}',

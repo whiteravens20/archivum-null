@@ -17,7 +17,12 @@ vi.mock('../crypto/encrypt.js', () => ({
 // An upload that goes on until the test lets it finish
 const upload = vi.hoisted(() => ({ finish: (_result: unknown) => {} }));
 vi.mock('../api/vault.js', () => ({
-  uploadVault: vi.fn(() => new Promise((resolve) => { upload.finish = resolve; })),
+  uploadVault: vi.fn(
+    () =>
+      new Promise((resolve) => {
+        upload.finish = resolve;
+      }),
+  ),
   uploadVaultChunked: vi.fn(),
 }));
 
@@ -63,7 +68,7 @@ describe('the interface language', () => {
         <MemoryRouter>
           <Footer />
         </MemoryRouter>
-      </I18nProvider>
+      </I18nProvider>,
     );
   }
 
@@ -119,7 +124,12 @@ describe('a change of language on the upload page', () => {
   };
 
   function serveConfig(overrides: Partial<typeof config> = {}) {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ ...config, ...overrides }) }));
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: () => Promise.resolve({ ...config, ...overrides }) }),
+    );
   }
 
   async function openAndChooseFile() {
@@ -129,10 +139,13 @@ describe('a change of language on the upload page', () => {
           <Home />
           <Footer />
         </MemoryRouter>
-      </I18nProvider>
+      </I18nProvider>,
     );
     // The configuration arrives
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     await act(async () => {
       fireEvent.change(view.container.querySelector('input[type="file"]')!, {
         target: { files: [new File(['x'], 'report.pdf')] },
@@ -169,7 +182,7 @@ describe('a change of language on the upload page', () => {
 
     expect(await screen.findByText('Sejf utworzony')).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveValue(
-      `${window.location.origin}/vault/v-1#${'K'.repeat(43)}.${btoa('report.pdf').replace(/=+$/, '')}`
+      `${window.location.origin}/vault/v-1#${'K'.repeat(43)}.${btoa('report.pdf').replace(/=+$/, '')}`,
     );
     expect(uploadVault).toHaveBeenCalledOnce();
   });

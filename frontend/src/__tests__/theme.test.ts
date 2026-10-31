@@ -16,7 +16,10 @@ const PALETTE =
   'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black';
 const UTILITY =
   'bg|text|border|divide|ring|outline|fill|stroke|from|via|to|decoration|placeholder|caret|accent|shadow';
-const PALETTE_CLASS = new RegExp(`(?<![\\w-])(?:${UTILITY})-(?:${PALETTE})(?:-\\d{2,3})?(?![\\w-])`, 'g');
+const PALETTE_CLASS = new RegExp(
+  `(?<![\\w-])(?:${UTILITY})-(?:${PALETTE})(?:-\\d{2,3})?(?![\\w-])`,
+  'g',
+);
 /** An arbitrary value that is a colour: `bg-[#0B0F19]`, `text-[rgb(…)]`. */
 const ARBITRARY_COLOUR = /-\[(?:#|rgb|hsl|oklch)[^\]]*\]/g;
 
@@ -41,6 +44,8 @@ describe('theme tokens', () => {
 
     expect(offending.match(PALETTE_CLASS)).toEqual(['text-gray-500', 'bg-red-500', 'border-white']);
     expect(offending.match(ARBITRARY_COLOUR)).toEqual(['-[#0B0F19]']);
-    expect('text-vault-muted bg-vault-accent/10 text-[10px] border-transparent'.match(PALETTE_CLASS)).toBeNull();
+    expect(
+      'text-vault-muted bg-vault-accent/10 text-[10px] border-transparent'.match(PALETTE_CLASS),
+    ).toBeNull();
   });
 });

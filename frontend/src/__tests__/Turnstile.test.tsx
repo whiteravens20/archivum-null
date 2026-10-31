@@ -8,15 +8,13 @@ describe('Turnstile', () => {
   });
 
   it('should return null when siteKey is empty', () => {
-    const { container } = render(
-      <Turnstile siteKey="" onVerify={vi.fn()} />
-    );
+    const { container } = render(<Turnstile siteKey="" onVerify={vi.fn()} />);
     expect(container.innerHTML).toBe('');
   });
 
   it('should return null when siteKey is the disabled sentinel', () => {
     const { container } = render(
-      <Turnstile siteKey="0x0000000000000000000000" onVerify={vi.fn()} />
+      <Turnstile siteKey="0x0000000000000000000000" onVerify={vi.fn()} />,
     );
     expect(container.innerHTML).toBe('');
   });
@@ -32,11 +30,14 @@ describe('Turnstile', () => {
       expect(script!.async).toBe(true);
     });
 
-    it.each(['', '0x0000000000000000000000'])('should not contact Cloudflare for the disabled site key %j', (siteKey) => {
-      render(<Turnstile siteKey={siteKey} onVerify={vi.fn()} />);
+    it.each(['', '0x0000000000000000000000'])(
+      'should not contact Cloudflare for the disabled site key %j',
+      (siteKey) => {
+        render(<Turnstile siteKey={siteKey} onVerify={vi.fn()} />);
 
-      expect(document.querySelector('script[src*="cloudflare"]')).toBeNull();
-    });
+        expect(document.querySelector('script[src*="cloudflare"]')).toBeNull();
+      },
+    );
 
     it('should request the script once, however often the widget is shown', () => {
       const first = render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
@@ -48,7 +49,11 @@ describe('Turnstile', () => {
     });
 
     it('should not request the script again once it has loaded', () => {
-      window.turnstile = { render: vi.fn().mockReturnValue('widget-1'), remove: vi.fn(), reset: vi.fn() };
+      window.turnstile = {
+        render: vi.fn().mockReturnValue('widget-1'),
+        remove: vi.fn(),
+        reset: vi.fn(),
+      };
 
       render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
 
@@ -57,9 +62,7 @@ describe('Turnstile', () => {
   });
 
   it('should render a container div when siteKey is valid', () => {
-    const { container } = render(
-      <Turnstile siteKey="0xABC123" onVerify={vi.fn()} />
-    );
+    const { container } = render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
     expect(container.querySelector('div')).toBeTruthy();
   });
 
@@ -90,28 +93,34 @@ describe('Turnstile', () => {
         sitekey: '0xABC123',
         theme: 'dark',
         size: 'normal',
-      })
+      }),
     );
 
     vi.useRealTimers();
   });
 
-  it.each(['light', 'auto'] as const)('should render the widget in the %s theme of the page', async (theme) => {
-    vi.useFakeTimers();
-    document.documentElement.dataset.theme = theme;
+  it.each(['light', 'auto'] as const)(
+    'should render the widget in the %s theme of the page',
+    async (theme) => {
+      vi.useFakeTimers();
+      document.documentElement.dataset.theme = theme;
 
-    const renderFn = vi.fn().mockReturnValue('widget-1');
-    window.turnstile = { render: renderFn, remove: vi.fn(), reset: vi.fn() };
+      const renderFn = vi.fn().mockReturnValue('widget-1');
+      window.turnstile = { render: renderFn, remove: vi.fn(), reset: vi.fn() };
 
-    render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(200);
-    });
+      render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
 
-    expect(renderFn).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ theme }));
+      expect(renderFn).toHaveBeenCalledWith(
+        expect.any(HTMLElement),
+        expect.objectContaining({ theme }),
+      );
 
-    vi.useRealTimers();
-  });
+      vi.useRealTimers();
+    },
+  );
 
   it('should clean up widget on unmount', async () => {
     vi.useFakeTimers();
@@ -123,9 +132,7 @@ describe('Turnstile', () => {
       reset: vi.fn(),
     };
 
-    const { unmount } = render(
-      <Turnstile siteKey="0xABC123" onVerify={vi.fn()} />
-    );
+    const { unmount } = render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
@@ -143,9 +150,7 @@ describe('Turnstile', () => {
     const renderFn = vi.fn().mockReturnValue('widget-2');
     const onError = vi.fn();
 
-    render(
-      <Turnstile siteKey="0xABC123" onVerify={vi.fn()} onError={onError} />
-    );
+    render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} onError={onError} />);
 
     window.turnstile = {
       render: renderFn,
@@ -161,7 +166,7 @@ describe('Turnstile', () => {
       expect.any(HTMLElement),
       expect.objectContaining({
         'error-callback': onError,
-      })
+      }),
     );
 
     vi.useRealTimers();
@@ -173,9 +178,7 @@ describe('Turnstile', () => {
     const renderFn = vi.fn().mockReturnValue('widget-3');
     const onExpire = vi.fn();
 
-    render(
-      <Turnstile siteKey="0xABC123" onVerify={vi.fn()} onExpire={onExpire} />
-    );
+    render(<Turnstile siteKey="0xABC123" onVerify={vi.fn()} onExpire={onExpire} />);
 
     window.turnstile = {
       render: renderFn,
@@ -191,7 +194,7 @@ describe('Turnstile', () => {
       expect.any(HTMLElement),
       expect.objectContaining({
         'expired-callback': onExpire,
-      })
+      }),
     );
 
     vi.useRealTimers();

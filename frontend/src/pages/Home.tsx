@@ -5,7 +5,12 @@ import ProgressBar from '../components/ProgressBar.tsx';
 import VaultLink from '../components/VaultLink.tsx';
 import Turnstile from '../components/Turnstile.tsx';
 import Logo from '../components/Logo.tsx';
-import { generateKey, exportKey, buildMetadataHeader, calculateTotalEncryptedSize } from '../crypto/encrypt.ts';
+import {
+  generateKey,
+  exportKey,
+  buildMetadataHeader,
+  calculateTotalEncryptedSize,
+} from '../crypto/encrypt.ts';
 import { uploadVault, uploadVaultChunked } from '../api/vault.ts';
 import { ApiError } from '../api/errors.ts';
 import { DEFAULT_TAGLINE, getBranding } from '../branding.ts';
@@ -17,7 +22,7 @@ const DOWNLOAD_OPTION_VALUES = [1, 3, 5, 10, 25, 50, 100];
 
 function nearestInList(value: number, list: number[]): number {
   return list.reduce((prev, curr) =>
-    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev,
   );
 }
 
@@ -54,7 +59,15 @@ function parseRuntimeConfig(raw: unknown): RuntimeConfig | null {
   if (typeof raw !== 'object' || raw === null) return null;
   // Narrowed field by field below: the body is whatever the server sent.
   const candidate = raw as Record<string, unknown>;
-  const { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled } = candidate;
+  const {
+    maxFileSize,
+    chunkSize,
+    cryptoChunkSize,
+    defaultTtl,
+    defaultMaxDownloads,
+    turnstileSiteKey,
+    turnstileEnabled,
+  } = candidate;
   if (
     !isPositiveInteger(maxFileSize) ||
     !isPositiveInteger(chunkSize) ||
@@ -66,12 +79,25 @@ function parseRuntimeConfig(raw: unknown): RuntimeConfig | null {
   ) {
     return null;
   }
-  return { maxFileSize, chunkSize, cryptoChunkSize, defaultTtl, defaultMaxDownloads, turnstileSiteKey, turnstileEnabled };
+  return {
+    maxFileSize,
+    chunkSize,
+    cryptoChunkSize,
+    defaultTtl,
+    defaultMaxDownloads,
+    turnstileSiteKey,
+    turnstileEnabled,
+  };
 }
 
 type Stage = 'idle' | 'uploading' | 'done' | 'error';
 
-const TAGS = ['home.tag.noAccounts', 'home.tag.noCookies', 'home.tag.noTracking', 'home.tag.zeroKnowledge'] as const;
+const TAGS = [
+  'home.tag.noAccounts',
+  'home.tag.noCookies',
+  'home.tag.noTracking',
+  'home.tag.zeroKnowledge',
+] as const;
 
 type UploadProblem = Extract<TextKey, `upload.${string}`> | 'common.unreachable';
 
@@ -120,7 +146,9 @@ export default function Home() {
         setTtl(nearestInList(cfg.defaultTtl, TTL_OPTION_VALUES));
         setMaxDownloads(nearestInList(cfg.defaultMaxDownloads, DOWNLOAD_OPTION_VALUES));
       })
-      .catch(() => { /* keep defaults on network error */ });
+      .catch(() => {
+        /* keep defaults on network error */
+      });
   }, []);
   const [progress, setProgress] = useState(0);
   const [vaultUrl, setVaultUrl] = useState<string | null>(null);
@@ -128,7 +156,9 @@ export default function Home() {
   const [error, setError] = useState<UploadProblem | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
   const [captchaVerified, setCaptchaVerified] = useState(false);
-  const [captchaError, setCaptchaError] = useState<'home.captchaFailed' | 'home.captchaExpired' | null>(null);
+  const [captchaError, setCaptchaError] = useState<
+    'home.captchaFailed' | 'home.captchaExpired' | null
+  >(null);
   // The file whose CAPTCHA has been pending for a while. Kept per file, so the hint
   // it drives goes away by itself when another file is chosen.
   const [captchaSlowFor, setCaptchaSlowFor] = useState<File | null>(null);
@@ -201,15 +231,23 @@ export default function Home() {
       let result;
       if (totalEncrypted > runtimeConfig.chunkSize) {
         result = await uploadVaultChunked(
-          file, key, chunkPlaintextSize,
-          ttl, maxDownloads, turnstileToken,
+          file,
+          key,
+          chunkPlaintextSize,
+          ttl,
+          maxDownloads,
+          turnstileToken,
           (p) => setProgress(p),
           ac.signal,
         );
       } else {
         result = await uploadVault(
-          file, key, chunkPlaintextSize,
-          ttl, maxDownloads, turnstileToken,
+          file,
+          key,
+          chunkPlaintextSize,
+          ttl,
+          maxDownloads,
+          turnstileToken,
           (p) => setProgress(p),
           ac.signal,
         );
@@ -278,9 +316,7 @@ export default function Home() {
             <div className="text-center mb-6">
               <div className="text-3xl mb-2">◈</div>
               <p className="text-vault-success font-medium">{t('home.created')}</p>
-              <p className="text-xs text-vault-subtle mt-1">
-                {t('home.createdDetail')}
-              </p>
+              <p className="text-xs text-vault-subtle mt-1">{t('home.createdDetail')}</p>
             </div>
             <VaultLink url={vaultUrl} />
           </div>
@@ -350,10 +386,7 @@ export default function Home() {
 
               {stage === 'uploading' && (
                 <>
-                  <ProgressBar
-                    progress={progress}
-                    label={t('home.uploading')}
-                  />
+                  <ProgressBar progress={progress} label={t('home.uploading')} />
                   <button
                     onClick={handleCancel}
                     className="w-full py-2 text-sm text-vault-danger hover:text-vault-danger-strong border border-vault-danger-fill/30 rounded-lg transition-colors"
@@ -379,15 +412,19 @@ export default function Home() {
               ) : (
                 <button
                   onClick={handleUpload}
-                  disabled={stage !== 'idle' || !file || (runtimeConfig.turnstileEnabled && !captchaVerified)}
+                  disabled={
+                    stage !== 'idle' ||
+                    !file ||
+                    (runtimeConfig.turnstileEnabled && !captchaVerified)
+                  }
                   className="w-full py-3 bg-vault-accent text-vault-on-accent rounded-lg font-medium
                              hover:bg-vault-accent/90 transition-colors
                              disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {stage === 'idle'
-                    ? (runtimeConfig.turnstileEnabled && !captchaVerified
-                        ? t('home.waitingForCaptcha')
-                        : t('home.encryptAndUpload'))
+                    ? runtimeConfig.turnstileEnabled && !captchaVerified
+                      ? t('home.waitingForCaptcha')
+                      : t('home.encryptAndUpload')
                     : t('common.processing')}
                 </button>
               )}

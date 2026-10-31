@@ -26,10 +26,7 @@ function refuse(request: FastifyRequest, reply: FastifyReply, error: string): vo
   reply.status(401).send({ error });
 }
 
-export async function basicAuth(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function basicAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const auth = request.headers.authorization;
 
   if (!config.ADMIN_PASSWORD || config.ADMIN_PASSWORD === 'CHANGE_ME_IMMEDIATELY') {

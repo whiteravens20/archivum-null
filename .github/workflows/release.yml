@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0   # full history needed for branch containment check
+          fetch-depth: 0 # full history needed for branch containment check
       - name: Check branch containment
         id: check
         run: |
@@ -80,13 +80,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # Required to push to ghcr.io
-      id-token: write   # Sign the provenance attestation
+      packages: write # Required to push to ghcr.io
+      id-token: write # Sign the provenance attestation
       attestations: write
 
     outputs:
       digest: ${{ steps.build.outputs.digest }}
-      tags:   ${{ steps.meta.outputs.tags }}
+      tags: ${{ steps.meta.outputs.tags }}
 
     steps:
       - name: Checkout
@@ -217,13 +217,13 @@ jobs:
     if: needs.check-branch.outputs.on-main == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # Required to create/update the release
-      id-token: write   # Sign the provenance attestation
+      contents: write # Required to create/update the release
+      id-token: write # Sign the provenance attestation
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0  # needed to compare tag with previous tag
+          fetch-depth: 0 # needed to compare tag with previous tag
 
       - name: Extract tag message
         id: tag-msg
@@ -350,8 +350,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read          # Pull image from ghcr.io
-      security-events: write  # Upload SARIF to Security tab
+      packages: read # Pull image from ghcr.io
+      security-events: write # Upload SARIF to Security tab
 
     steps:
       - name: Checkout (for .trivyignore)
@@ -386,4 +386,3 @@ jobs:
         with:
           sarif_file: trivy-release.sarif
           category: trivy-release
-

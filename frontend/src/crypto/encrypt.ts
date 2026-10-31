@@ -44,7 +44,7 @@ export async function generateKey(): Promise<CryptoKey> {
   return crypto.subtle.generateKey(
     { name: ALGORITHM, length: KEY_LENGTH },
     true, // extractable — needed to export for URL fragment
-    ['encrypt', 'decrypt']
+    ['encrypt', 'decrypt'],
   );
 }
 
@@ -57,13 +57,9 @@ export async function exportKey(key: CryptoKey): Promise<string> {
 /** Import key from base64url string */
 export async function importKey(base64url: string): Promise<CryptoKey> {
   const raw = base64UrlToArrayBuffer(base64url);
-  return crypto.subtle.importKey(
-    'raw',
-    raw,
-    { name: ALGORITHM, length: KEY_LENGTH },
-    false,
-    ['decrypt']
-  );
+  return crypto.subtle.importKey('raw', raw, { name: ALGORITHM, length: KEY_LENGTH }, false, [
+    'decrypt',
+  ]);
 }
 
 /**
@@ -94,9 +90,12 @@ export function buildMetadataHeader(filename: string, mimeType: string): Uint8Ar
   const view = new DataView(header.buffer);
   let offset = 0;
 
-  view.setUint16(offset, nameBytes.length, false); offset += 2;
-  header.set(nameBytes, offset);                   offset += nameBytes.length;
-  view.setUint16(offset, mimeBytes.length, false); offset += 2;
+  view.setUint16(offset, nameBytes.length, false);
+  offset += 2;
+  header.set(nameBytes, offset);
+  offset += nameBytes.length;
+  view.setUint16(offset, mimeBytes.length, false);
+  offset += 2;
   header.set(mimeBytes, offset);
 
   return header;
@@ -116,14 +115,17 @@ export function parseMetadataHeader(plaintext: Uint8Array): {
   const decoder = new TextDecoder();
   let pos = 0;
 
-  const nameLen = dv.getUint16(pos, false); pos += 2;
+  const nameLen = dv.getUint16(pos, false);
+  pos += 2;
   if (pos + nameLen + 2 > plaintext.length) throw new Error('Corrupt payload: name out of bounds');
   const filename = sanitizeFilename(decoder.decode(plaintext.slice(pos, pos + nameLen)));
   pos += nameLen;
 
-  const mimeLen = dv.getUint16(pos, false); pos += 2;
+  const mimeLen = dv.getUint16(pos, false);
+  pos += 2;
   if (pos + mimeLen > plaintext.length) throw new Error('Corrupt payload: mime out of bounds');
-  const mimeType = decoder.decode(plaintext.slice(pos, pos + mimeLen)) || 'application/octet-stream';
+  const mimeType =
+    decoder.decode(plaintext.slice(pos, pos + mimeLen)) || 'application/octet-stream';
   pos += mimeLen;
 
   return { filename, mimeType, contentOffset: pos };
@@ -155,7 +157,7 @@ export async function encryptChunk(
   plaintext: BufferSource,
   key: CryptoKey,
   chunkIndex: number,
-  isLast: boolean
+  isLast: boolean,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const aad = buildChunkAad(chunkIndex, isLast);
@@ -163,7 +165,7 @@ export async function encryptChunk(
   const ciphertext = await crypto.subtle.encrypt(
     { name: ALGORITHM, iv, additionalData: aad },
     key,
-    plaintext
+    plaintext,
   );
 
   const result = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
@@ -185,7 +187,7 @@ export async function decryptChunk(
   chunk: Uint8Array,
   key: CryptoKey,
   chunkIndex: number,
-  isLast: boolean
+  isLast: boolean,
 ): Promise<Uint8Array<ArrayBuffer>> {
   if (chunk.length < IV_LENGTH + GCM_TAG_LENGTH) {
     throw new Error('Invalid encrypted chunk: too short');
@@ -198,7 +200,7 @@ export async function decryptChunk(
   const plaintext = await crypto.subtle.decrypt(
     { name: ALGORITHM, iv, additionalData: aad },
     key,
-    ciphertext
+    ciphertext,
   );
 
   return new Uint8Array(plaintext);
@@ -227,7 +229,7 @@ export function countChunks(plaintextSize: number, chunkPlaintextSize: number): 
  */
 export function calculateTotalEncryptedSize(
   plaintextSize: number,
-  chunkPlaintextSize: number
+  chunkPlaintextSize: number,
 ): number {
   return plaintextSize + countChunks(plaintextSize, chunkPlaintextSize) * PER_CHUNK_OVERHEAD;
 }

@@ -79,7 +79,7 @@ describe('buildAssetCloak', () => {
     // were left alone the cloaked names would 404 the moment a build has one.
     fs.writeFileSync(
       path.join(distRoot, 'assets', HASHED_CSS),
-      `body{background:url("/assets/${HASHED_JS}")}`
+      `body{background:url("/assets/${HASHED_JS}")}`,
     );
 
     const cloak = buildAssetCloak(distRoot)!;
@@ -108,7 +108,7 @@ describe('buildAssetCloak', () => {
     fs.writeFileSync(path.join(distRoot, 'assets', 'fonts', 'mono-AbCd1234.woff2'), 'font');
     fs.writeFileSync(
       path.join(distRoot, 'assets', HASHED_CSS),
-      '@font-face{src:url("/assets/fonts/mono-AbCd1234.woff2")}'
+      '@font-face{src:url("/assets/fonts/mono-AbCd1234.woff2")}',
     );
 
     const cloak = buildAssetCloak(distRoot)!;
@@ -129,7 +129,7 @@ describe('buildAssetCloak', () => {
     fs.writeFileSync(path.join(distRoot, 'assets', 'app.js.map'), 'y');
     fs.writeFileSync(
       path.join(distRoot, 'assets', HASHED_CSS),
-      '/*! /assets/app.js.map and /assets/app.js */'
+      '/*! /assets/app.js.map and /assets/app.js */',
     );
 
     const cloak = buildAssetCloak(distRoot)!;
@@ -252,7 +252,7 @@ describe('buildApp — static serving does not disclose the running version', ()
 
       expect(res.statusCode).toBe(404);
       expect(res.json()).toMatchObject({ error: 'Not found' });
-    }
+    },
   );
 
   it('answers HEAD on an SPA route like GET', async () => {

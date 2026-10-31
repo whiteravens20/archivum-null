@@ -61,7 +61,7 @@ the version is treated as something to withhold from unauthenticated callers.
 - [x] Version served only from the authenticated admin API, never bundled into the frontend
 - [x] Enforced in the Node process, so Docker and bare-metal behave identically
 
-**Limit, stated plainly:** the bundle's *contents* are the version. Client-side code
+**Limit, stated plainly:** the bundle's _contents_ are the version. Client-side code
 is delivered to the browser by definition, so downloading the JavaScript and diffing
 it against a rebuilt tag still identifies the release, and the bundle names its
 dependency versions in cleartext regardless. The measures above remove the cheap,
@@ -161,7 +161,7 @@ from becoming an attack surface:
 - [x] Minimal dependencies
 - [x] 7-day dependency quarantine — Dependabot `cooldown: default-days: 7` on every ecosystem, so a freshly published version is never proposed, never auto-merged. Security advisories are exempt and land immediately.
 - [x] `min-release-age=7` in every `.npmrc` as the client-side backstop for manual installs
-- [x] Registry signatures verified in CI (`npm audit signatures`, both workspaces)
+- [x] Registry signatures verified in CI (`npm audit signatures`, both workspaces and the formatter at the root)
 - [x] `npm ci --ignore-scripts` in Docker build
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images
@@ -169,12 +169,12 @@ from becoming an attack surface:
 
 ### What This Does NOT Protect Against
 
-| Threat vector | Why it is out of scope |
-|---|---|
-| Compromised client device | Encryption key resides in browser memory and the URL bar; malware/physical access exposes it |
-| Malicious browser extension | Extensions can read page content, URL fragments, and intercept WebCrypto calls |
-| Link sharing over insecure channel | Anyone holding the vault URL `#KEY` fragment can decrypt the file |
-| Server-side JS tampering | A compromised server could serve a modified frontend that exfiltrates the key before encryption |
-| Targeted state-level adversary with client access | Outside scope — use offline, air-gapped tools for this threat model |
-| Sustained DDoS | Rate limiting covers casual abuse; deploy behind Cloudflare or another CDN for sustained attacks |
-| Long-term storage security | Vaults are designed to be ephemeral; do not use for archival of sensitive material |
+| Threat vector                                     | Why it is out of scope                                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Compromised client device                         | Encryption key resides in browser memory and the URL bar; malware/physical access exposes it     |
+| Malicious browser extension                       | Extensions can read page content, URL fragments, and intercept WebCrypto calls                   |
+| Link sharing over insecure channel                | Anyone holding the vault URL `#KEY` fragment can decrypt the file                                |
+| Server-side JS tampering                          | A compromised server could serve a modified frontend that exfiltrates the key before encryption  |
+| Targeted state-level adversary with client access | Outside scope — use offline, air-gapped tools for this threat model                              |
+| Sustained DDoS                                    | Rate limiting covers casual abuse; deploy behind Cloudflare or another CDN for sustained attacks |
+| Long-term storage security                        | Vaults are designed to be ephemeral; do not use for archival of sensitive material               |

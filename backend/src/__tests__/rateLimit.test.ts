@@ -26,10 +26,10 @@ describe('Rate-limit middleware', () => {
 
     // Stub env vars so the freshly-imported config picks them up
     vi.stubEnv('RATE_LIMIT_WINDOW', '60');
-    vi.stubEnv('RATE_LIMIT_MAX', '3');           // Upload limit
-    vi.stubEnv('RATE_LIMIT_API_MAX', '5');       // General API limit
-    vi.stubEnv('RATE_LIMIT_DOWNLOAD_MAX', '2');  // Download limit
-    vi.stubEnv('RATE_LIMIT_ADMIN_MAX', '2');     // Admin limit
+    vi.stubEnv('RATE_LIMIT_MAX', '3'); // Upload limit
+    vi.stubEnv('RATE_LIMIT_API_MAX', '5'); // General API limit
+    vi.stubEnv('RATE_LIMIT_DOWNLOAD_MAX', '2'); // Download limit
+    vi.stubEnv('RATE_LIMIT_ADMIN_MAX', '2'); // Admin limit
 
     app = Fastify({ logger: false });
 
@@ -43,7 +43,11 @@ describe('Rate-limit middleware', () => {
     // Test routes
     app.get('/api/health', async () => ({ status: 'ok' }));
     app.post('/api/vault', async () => ({ created: true }));
-    app.post('/api/vault/upload/init', async () => ({ uploadId: 'u1', chunkSize: 52428800, expiresAt: 9999 }));
+    app.post('/api/vault/upload/init', async () => ({
+      uploadId: 'u1',
+      chunkSize: 52428800,
+      expiresAt: 9999,
+    }));
     app.post('/api/vault/upload/:uploadId/chunk', async () => ({ receivedBytes: 100 }));
     app.post('/api/vault/upload/:uploadId/complete', async () => ({ vaultId: 'v1' }));
     app.get('/api/vault/test-id/download', async () => ({ data: 'ok' }));

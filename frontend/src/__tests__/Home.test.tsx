@@ -19,7 +19,11 @@ vi.mock('../api/vault.js', () => ({
 // The widget itself is not rendered; what the page handed it is kept, so a test can
 // answer the way Cloudflare's script would.
 const turnstile = vi.hoisted(() => ({
-  props: null as null | { onVerify: (token: string) => void; onError?: () => void; onExpire?: () => void },
+  props: null as null | {
+    onVerify: (token: string) => void;
+    onError?: () => void;
+    onExpire?: () => void;
+  },
 }));
 
 vi.mock('../components/Turnstile.js', () => ({
@@ -42,10 +46,13 @@ const mockConfig = {
 describe('Home', () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockConfig),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockConfig),
+      }),
+    );
   });
 
   it('should render the heading', async () => {
@@ -53,7 +60,7 @@ describe('Home', () => {
     render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Archivum Null')).toBeInTheDocument();
   });
@@ -63,7 +70,7 @@ describe('Home', () => {
     render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Anonymous encrypted file sharing')).toBeInTheDocument();
   });
@@ -74,7 +81,7 @@ describe('Home', () => {
     render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Acme Drop');
     expect(screen.getByText('Files, sealed')).toBeInTheDocument();
@@ -87,9 +94,11 @@ describe('Home', () => {
     const { container } = render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('<img src=x onerror=alert(1)>');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      '<img src=x onerror=alert(1)>',
+    );
     expect(container.querySelector('h1 img')).toBeNull();
   });
 
@@ -98,7 +107,7 @@ describe('Home', () => {
     render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('No accounts')).toBeInTheDocument();
     expect(screen.getByText('No cookies')).toBeInTheDocument();
@@ -111,7 +120,7 @@ describe('Home', () => {
     render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText(/drop file or click to select/i)).toBeInTheDocument();
   });
@@ -121,7 +130,7 @@ describe('Home', () => {
     render(
       <MemoryRouter>
         <Home />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('How it works')).toBeInTheDocument();
     expect(screen.getByText(/AES-256-GCM/)).toBeInTheDocument();
@@ -135,7 +144,7 @@ describe('Home', () => {
       const { container } = render(
         <MemoryRouter>
           <Home />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
       await act(async () => {
         fireEvent.change(container.querySelector('input[type="file"]')!, {
@@ -149,9 +158,16 @@ describe('Home', () => {
 
     it('should say why from the status, not from what the server wrote', async () => {
       const { ApiError } = await import('../api/errors.js');
-      await uploadAndFail(new ApiError(507, 'Storage quota exceeded. Please try again later or contact the administrator.'));
+      await uploadAndFail(
+        new ApiError(
+          507,
+          'Storage quota exceeded. Please try again later or contact the administrator.',
+        ),
+      );
       expect(
-        await screen.findByText('The server is out of storage space. Try again later or contact the administrator.')
+        await screen.findByText(
+          'The server is out of storage space. Try again later or contact the administrator.',
+        ),
       ).toBeInTheDocument();
       expect(screen.queryByText(/Storage quota exceeded/)).not.toBeInTheDocument();
     });
@@ -163,7 +179,9 @@ describe('Home', () => {
     });
 
     it('should not show the text of an error that is not a refused request', async () => {
-      await uploadAndFail(new DOMException('The requested file could not be read', 'NotReadableError'));
+      await uploadAndFail(
+        new DOMException('The requested file could not be read', 'NotReadableError'),
+      );
       expect(await screen.findByText('The upload failed. Try again.')).toBeInTheDocument();
       expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument();
     });
@@ -177,10 +195,13 @@ describe('Home', () => {
       const view = render(
         <MemoryRouter>
           <Home />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
       // Let the response be read and applied, or ignored
-      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       expect(fetchMock).toHaveBeenCalledWith('/api/config');
       return view;
     }
@@ -200,7 +221,8 @@ describe('Home', () => {
       await renderWithConfigResponse({
         ok: false,
         status: 429,
-        json: () => Promise.resolve({ error: 'Too many requests. Try again later.', retryAfter: 30 }),
+        json: () =>
+          Promise.resolve({ error: 'Too many requests. Try again later.', retryAfter: 30 }),
       });
       expect(screen.getByText(/Max size: 100 MB/)).toBeInTheDocument();
       expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
@@ -220,10 +242,13 @@ describe('Home', () => {
 
     beforeEach(() => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(enabledConfig),
-      }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(enabledConfig),
+        }),
+      );
     });
 
     afterEach(() => {
@@ -235,7 +260,7 @@ describe('Home', () => {
       const { container } = render(
         <MemoryRouter>
           <Home />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       await waitFor(() => {
@@ -298,7 +323,7 @@ describe('Home', () => {
       const { container } = render(
         <MemoryRouter>
           <Home />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
 
       await waitFor(() => {

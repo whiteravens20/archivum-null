@@ -107,9 +107,7 @@ export class LocalStorage implements StorageBackend {
   async listVaults(): Promise<string[]> {
     try {
       const entries = await fsp.readdir(this.basePath, { withFileTypes: true });
-      return entries
-        .filter((e) => e.isDirectory() && e.name !== UPLOADS_DIR)
-        .map((e) => e.name);
+      return entries.filter((e) => e.isDirectory() && e.name !== UPLOADS_DIR).map((e) => e.name);
     } catch {
       return [];
     }
@@ -140,7 +138,7 @@ export class LocalStorage implements StorageBackend {
     uploadId: string,
     stream: Readable,
     maxTotalSize: number,
-    currentSize: number
+    currentSize: number,
   ): Promise<number> {
     const dir = this.uploadDir(uploadId);
     await fsp.mkdir(dir, { recursive: true });
@@ -194,7 +192,7 @@ export class LocalStorage implements StorageBackend {
       const orphans = entries
         .filter((e) => e.isDirectory() && !activeUploadIds.has(e.name))
         .map((e) =>
-          fsp.rm(path.join(uploadsDir, e.name), { recursive: true, force: true }).catch(() => {})
+          fsp.rm(path.join(uploadsDir, e.name), { recursive: true, force: true }).catch(() => {}),
         );
       await Promise.allSettled(orphans);
     } catch {

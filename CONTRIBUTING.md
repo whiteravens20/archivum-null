@@ -17,6 +17,7 @@ Thank you for considering a contribution to Archivum Null. This project handles 
   - [Project Structure](#project-structure)
   - [Coding Guidelines](#coding-guidelines)
     - [General](#general)
+    - [Formatting](#formatting)
     - [Linting](#linting)
     - [TypeScript](#typescript)
     - [Naming conventions](#naming-conventions)
@@ -80,10 +81,10 @@ Contributions we will **not accept**:
 
 ### Requirements
 
-| Tool | Version |
-|---|---|
-| Node.js | ≥ 24.0.0 |
-| npm | bundled with Node.js |
+| Tool                    | Version                              |
+| ----------------------- | ------------------------------------ |
+| Node.js                 | ≥ 24.0.0                             |
+| npm                     | bundled with Node.js                 |
 | Docker & Docker Compose | optional — for containerised testing |
 
 ### Local start (no Docker)
@@ -156,7 +157,18 @@ frontend/src/
 - **TypeScript** is mandatory everywhere — no `any` types and no type assertions without a comment explaining why.
 - Keep functions small and single-purpose.
 - No dead code or commented-out blocks in submitted PRs.
-- Match the existing code style; ESLint is the source of truth.
+- Prettier decides the layout; ESLint is the gate for the code itself.
+
+### Formatting
+
+Prettier formats every file it reads, the code, the docs and the workflows alike, with one config at the repository root. Run it there before you commit:
+
+```bash
+npm ci --ignore-scripts
+npm run format
+```
+
+CI runs `npm run format:check` and fails on a file that is not formatted.
 
 ### Linting
 
@@ -180,13 +192,13 @@ No type errors are accepted.
 
 ### Naming conventions
 
-| Context | Convention |
-|---|---|
-| Files | `camelCase.ts` / `PascalCase.tsx` for React components |
-| Variables / functions | `camelCase` |
-| Types / interfaces | `PascalCase` |
-| Constants | `UPPER_SNAKE_CASE` |
-| Environment variables | `UPPER_SNAKE_CASE` |
+| Context               | Convention                                             |
+| --------------------- | ------------------------------------------------------ |
+| Files                 | `camelCase.ts` / `PascalCase.tsx` for React components |
+| Variables / functions | `camelCase`                                            |
+| Types / interfaces    | `PascalCase`                                           |
+| Constants             | `UPPER_SNAKE_CASE`                                     |
+| Environment variables | `UPPER_SNAKE_CASE`                                     |
 
 ### Dependencies
 
@@ -337,7 +349,7 @@ Before opening a PR that touches security-relevant code, confirm the following i
 1. **Fork** the repository and create a branch from `dev` (not `main`).
 2. Branch naming: `fix/short-description`, `feat/short-description`, `docs/short-description`, `security/short-description`.
 3. Make your changes, following this guide.
-4. Run the full test and lint suite.
+4. Run the formatter and the full test and lint suite.
 5. Open a pull request against the `dev` branch.
 6. Fill out the PR template completely — incomplete PRs will be asked to add missing information.
 7. Respond to review comments. PRs that are not addressed within 30 days may be closed.

@@ -36,8 +36,7 @@ function mockGitHub({ status = 200, body = JSON.stringify(LATEST_RELEASE) } = {}
   const fetchMock = vi
     .fn()
     .mockImplementation(
-      async () =>
-        new Response(body, { status, headers: { 'Content-Type': 'application/json' } })
+      async () => new Response(body, { status, headers: { 'Content-Type': 'application/json' } }),
     );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -110,7 +109,7 @@ describe('getUpdateStatus', () => {
     expect(status.latest).toBe('v2.0.0');
     expect(status.releaseUrl).toBe(LATEST_RELEASE.html_url);
     expect(status.compareUrl).toBe(
-      'https://github.com/whiteravens20/archivum-null/compare/v0.16.4...v2.0.0'
+      'https://github.com/whiteravens20/archivum-null/compare/v0.16.4...v2.0.0',
     );
     expect(status.publishedAt).toBe(LATEST_RELEASE.published_at);
     expect(status.error).toBeNull();

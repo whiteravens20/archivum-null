@@ -204,15 +204,15 @@ describe('validateConfig', () => {
   });
 
   it('should auto-derive CRYPTO_CHUNK_SIZE from CHUNK_SIZE when not set', async () => {
-    vi.stubEnv('CHUNK_SIZE', '2000000');            // 2 MB — smaller than 5 MB default
-    vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
+    vi.stubEnv('CHUNK_SIZE', '2000000'); // 2 MB — smaller than 5 MB default
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', ''); // not set
     const { config } = await import('../config.js');
-    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000 - 28);  // CHUNK_SIZE less one chunk's overhead
+    expect(config.CRYPTO_CHUNK_SIZE).toBe(2000000 - 28); // CHUNK_SIZE less one chunk's overhead
   });
 
   it('should default CRYPTO_CHUNK_SIZE to just under 5 MB when CHUNK_SIZE is larger', async () => {
-    vi.stubEnv('CHUNK_SIZE', '50000000');            // 50 MB
-    vi.stubEnv('CRYPTO_CHUNK_SIZE', '');             // not set
+    vi.stubEnv('CHUNK_SIZE', '50000000'); // 50 MB
+    vi.stubEnv('CRYPTO_CHUNK_SIZE', ''); // not set
     const { config } = await import('../config.js');
     expect(config.CRYPTO_CHUNK_SIZE).toBe(5242880 - 28);
   });
@@ -237,7 +237,9 @@ describe('validateConfig', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { validateConfig } = await import('../config.js');
     validateConfig();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is not'));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is not'),
+    );
   });
 
   it('should warn when the Turnstile site key is set without a secret', async () => {
@@ -247,13 +249,21 @@ describe('validateConfig', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { validateConfig } = await import('../config.js');
     validateConfig();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET is not'));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('TURNSTILE_SITE_KEY is set but TURNSTILE_SECRET is not'),
+    );
   });
 
   it.each([
     ['both keys set', { TURNSTILE_SECRET: 'a-real-secret', TURNSTILE_SITE_KEY: 'a-real-site-key' }],
     ['neither key set', { TURNSTILE_SECRET: '', TURNSTILE_SITE_KEY: '' }],
-    ['both left at the placeholder', { TURNSTILE_SECRET: '0x0000000000000000000000', TURNSTILE_SITE_KEY: '0x0000000000000000000000' }],
+    [
+      'both left at the placeholder',
+      {
+        TURNSTILE_SECRET: '0x0000000000000000000000',
+        TURNSTILE_SITE_KEY: '0x0000000000000000000000',
+      },
+    ],
   ])('should say nothing about Turnstile with %s', async (_name, env) => {
     vi.stubEnv('ADMIN_PASSWORD', 'secret');
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
@@ -270,8 +280,12 @@ describe('validateConfig', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { validateConfig } = await import('../config.js');
     expect(() => validateConfig()).not.toThrow();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DEFAULT_TTL is below 60 seconds'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DEFAULT_MAX_DOWNLOADS is above 1000'));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('DEFAULT_TTL is below 60 seconds'),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('DEFAULT_MAX_DOWNLOADS is above 1000'),
+    );
   });
 
   it.each(['abc', '-1', '70000', '3000.5'])('should reject PORT=%s', async (port) => {
@@ -287,7 +301,7 @@ describe('validateConfig', () => {
       vi.stubEnv('UPDATE_CHECK_REPO', repo);
       const { validateConfig } = await import('../config.js');
       expect(() => validateConfig()).toThrow('UPDATE_CHECK_REPO must be in "owner/repo" form');
-    }
+    },
   );
 
   it.each(['whiteravens20/archivum-null', 'some.org/my.repo', 'a/.github', '.dotfiles/repo'])(
@@ -298,7 +312,7 @@ describe('validateConfig', () => {
       vi.stubEnv('UPDATE_CHECK_REPO', repo);
       const { validateConfig } = await import('../config.js');
       expect(() => validateConfig()).not.toThrow();
-    }
+    },
   );
 
   it('should warn when storage is unlimited', async () => {
@@ -324,17 +338,27 @@ describe('validateConfig', () => {
     expect(() => validateConfig()).toThrow('TRUST_PROXY is no longer a hop count');
   });
 
-  it.each(['0.0.0.0/0', '::/0', 'true', '*', '10.0.0.1/33', 'fd00::/129', '10.0.0.0/8/1', '10.0.0.0/x', '<proxy-ip>'])(
-    'should reject TRUST_PROXY entry %s',
-    async (entry) => {
-      vi.stubEnv('TRUST_PROXY', `127.0.0.1,${entry}`);
-      const { validateConfig } = await import('../config.js');
-      expect(() => validateConfig()).toThrow(`TRUST_PROXY entry "${entry}"`);
-    }
-  );
+  it.each([
+    '0.0.0.0/0',
+    '::/0',
+    'true',
+    '*',
+    '10.0.0.1/33',
+    'fd00::/129',
+    '10.0.0.0/8/1',
+    '10.0.0.0/x',
+    '<proxy-ip>',
+  ])('should reject TRUST_PROXY entry %s', async (entry) => {
+    vi.stubEnv('TRUST_PROXY', `127.0.0.1,${entry}`);
+    const { validateConfig } = await import('../config.js');
+    expect(() => validateConfig()).toThrow(`TRUST_PROXY entry "${entry}"`);
+  });
 
   it('should accept IPs, CIDR ranges and named ranges in TRUST_PROXY', async () => {
-    vi.stubEnv('TRUST_PROXY', '10.8.0.1, 172.18.0.0/16, fd00::/8, ::1, loopback, linklocal, uniquelocal');
+    vi.stubEnv(
+      'TRUST_PROXY',
+      '10.8.0.1, 172.18.0.0/16, fd00::/8, ::1, loopback, linklocal, uniquelocal',
+    );
     vi.stubEnv('ADMIN_PASSWORD', 'secret');
     const { validateConfig } = await import('../config.js');
     expect(() => validateConfig()).not.toThrow();
@@ -355,7 +379,7 @@ describe('validateConfig', () => {
     const { validateConfig } = await import('../config.js');
     validateConfig();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('RATE_LIMIT_MAX > RATE_LIMIT_API_MAX')
+      expect.stringContaining('RATE_LIMIT_MAX > RATE_LIMIT_API_MAX'),
     );
   });
 
@@ -367,7 +391,7 @@ describe('validateConfig', () => {
     const { validateConfig } = await import('../config.js');
     validateConfig();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('RATE_LIMIT_DOWNLOAD_MAX > RATE_LIMIT_API_MAX')
+      expect.stringContaining('RATE_LIMIT_DOWNLOAD_MAX > RATE_LIMIT_API_MAX'),
     );
   });
 });

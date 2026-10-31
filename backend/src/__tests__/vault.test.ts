@@ -43,16 +43,18 @@ function makeMockVaultManager() {
       }
       return null;
     }),
-    initChunkedUpload: vi.fn((_totalSize: number, _ttl: number, _maxDownloads: number, _chunkPlaintextSize?: number) => ({
-      uploadId: 'upload-abc',
-      totalSize: 200,
-      receivedBytes: 0,
-      nextChunkIndex: 0,
-      ttl: 3600,
-      maxDownloads: 5,
-      chunkPlaintextSize: 5242880,
-      expiresAt: 9999999999,
-    })),
+    initChunkedUpload: vi.fn(
+      (_totalSize: number, _ttl: number, _maxDownloads: number, _chunkPlaintextSize?: number) => ({
+        uploadId: 'upload-abc',
+        totalSize: 200,
+        receivedBytes: 0,
+        nextChunkIndex: 0,
+        ttl: 3600,
+        maxDownloads: 5,
+        chunkPlaintextSize: 5242880,
+        expiresAt: 9999999999,
+      }),
+    ),
     appendChunk: vi.fn(async (_uploadId: string, _chunkIndex: number, stream: Readable) => {
       stream.resume();
       return { uploadId: 'upload-abc', receivedBytes: 100, nextChunkIndex: 1 };
@@ -65,7 +67,9 @@ function makeMockVaultManager() {
     })),
     abortChunkedUpload: vi.fn(async () => {}),
     signUploadSession: vi.fn((_uploadId: string) => 'mock-session-token-abc'),
-    verifyUploadSession: vi.fn((_uploadId: string, token: string) => token === 'mock-session-token-abc'),
+    verifyUploadSession: vi.fn(
+      (_uploadId: string, token: string) => token === 'mock-session-token-abc',
+    ),
   };
 }
 
@@ -73,25 +77,29 @@ function makeMockVaultManager() {
 function buildMultipart(
   boundary: string,
   fields: Record<string, string>,
-  file?: { name: string; content: Buffer }
+  file?: { name: string; content: Buffer },
 ): Buffer {
   const parts: Buffer[] = [];
   const CRLF = '\r\n';
 
   for (const [name, value] of Object.entries(fields)) {
-    parts.push(Buffer.from(
-      `--${boundary}${CRLF}` +
-      `Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}` +
-      `${value}${CRLF}`
-    ));
+    parts.push(
+      Buffer.from(
+        `--${boundary}${CRLF}` +
+          `Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}` +
+          `${value}${CRLF}`,
+      ),
+    );
   }
 
   if (file) {
-    parts.push(Buffer.from(
-      `--${boundary}${CRLF}` +
-      `Content-Disposition: form-data; name="file"; filename="${file.name}"${CRLF}` +
-      `Content-Type: application/octet-stream${CRLF}${CRLF}`
-    ));
+    parts.push(
+      Buffer.from(
+        `--${boundary}${CRLF}` +
+          `Content-Disposition: form-data; name="file"; filename="${file.name}"${CRLF}` +
+          `Content-Type: application/octet-stream${CRLF}${CRLF}`,
+      ),
+    );
     parts.push(file.content);
     parts.push(Buffer.from(CRLF));
   }
@@ -133,9 +141,10 @@ describe('Vault routes', () => {
   // ------------------------------------------------------------------
 
   it('POST /api/vault returns 201 on successful upload', async () => {
-    const payload = buildMultipart(boundary,
+    const payload = buildMultipart(
+      boundary,
       { ttl: '3600', maxDownloads: '5' },
-      { name: 'encrypted.bin', content: Buffer.from('encrypted-content') }
+      { name: 'encrypted.bin', content: Buffer.from('encrypted-content') },
     );
 
     const res = await app.inject({
@@ -156,11 +165,13 @@ describe('Vault routes', () => {
 
   it('POST /api/vault returns 413 when createVault throws statusCode 413', async () => {
     mockManager.createVault.mockRejectedValueOnce(
-      Object.assign(new Error('File too large'), { statusCode: 413 })
+      Object.assign(new Error('File too large'), { statusCode: 413 }),
     );
 
-    const payload = buildMultipart(boundary, {},
-      { name: 'big.bin', content: Buffer.from('x'.repeat(100)) }
+    const payload = buildMultipart(
+      boundary,
+      {},
+      { name: 'big.bin', content: Buffer.from('x'.repeat(100)) },
     );
 
     const res = await app.inject({
@@ -176,7 +187,7 @@ describe('Vault routes', () => {
 
   it('POST /api/vault returns 400 with the reason when createVault refuses the upload', async () => {
     mockManager.createVault.mockRejectedValueOnce(
-      Object.assign(new Error('Upload is too small to be an encrypted file'), { statusCode: 400 })
+      Object.assign(new Error('Upload is too small to be an encrypted file'), { statusCode: 400 }),
     );
 
     const res = await app.inject({
@@ -192,11 +203,13 @@ describe('Vault routes', () => {
 
   it('POST /api/vault returns 507 when createVault throws statusCode 507', async () => {
     mockManager.createVault.mockRejectedValueOnce(
-      Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 })
+      Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 }),
     );
 
-    const payload = buildMultipart(boundary, {},
-      { name: 'data.bin', content: Buffer.from('some-data') }
+    const payload = buildMultipart(
+      boundary,
+      {},
+      { name: 'data.bin', content: Buffer.from('some-data') },
     );
 
     const res = await app.inject({
@@ -217,8 +230,10 @@ describe('Vault routes', () => {
       throw Object.assign(new Error('Storage quota exceeded'), { statusCode: 507 });
     });
 
-    const payload = buildMultipart(boundary, {},
-      { name: 'data.bin', content: Buffer.alloc(256 * 1024) }
+    const payload = buildMultipart(
+      boundary,
+      {},
+      { name: 'data.bin', content: Buffer.alloc(256 * 1024) },
     );
 
     const res = await app.inject({
@@ -230,7 +245,11 @@ describe('Vault routes', () => {
 
     expect(res.statusCode).toBe(507);
     expect(mockManager.createVault).toHaveBeenCalledWith(
-      expect.anything(), 86400, 10, 5242852, payload.length
+      expect.anything(),
+      86400,
+      10,
+      5242852,
+      payload.length,
     );
     // The manager refused without reading the part; the route must not leave it unread
     expect(part?.readableFlowing).toBe(true);
@@ -239,8 +258,10 @@ describe('Vault routes', () => {
   it('POST /api/vault returns 500 on unexpected error', async () => {
     mockManager.createVault.mockRejectedValueOnce(new Error('disk failure'));
 
-    const payload = buildMultipart(boundary, {},
-      { name: 'data.bin', content: Buffer.from('some-data') }
+    const payload = buildMultipart(
+      boundary,
+      {},
+      { name: 'data.bin', content: Buffer.from('some-data') },
     );
 
     const res = await app.inject({
@@ -255,8 +276,10 @@ describe('Vault routes', () => {
   });
 
   it('POST /api/vault uses default TTL and maxDownloads when fields are missing', async () => {
-    const payload = buildMultipart(boundary, {},
-      { name: 'file.bin', content: Buffer.from('content') }
+    const payload = buildMultipart(
+      boundary,
+      {},
+      { name: 'file.bin', content: Buffer.from('content') },
     );
 
     const res = await app.inject({
@@ -270,10 +293,10 @@ describe('Vault routes', () => {
     // createVault should be called with default config values
     expect(mockManager.createVault).toHaveBeenCalledWith(
       expect.anything(),
-      86400,   // DEFAULT_TTL
-      10,      // DEFAULT_MAX_DOWNLOADS
+      86400, // DEFAULT_TTL
+      10, // DEFAULT_MAX_DOWNLOADS
       5242852, // CRYPTO_CHUNK_SIZE default
-      payload.length // the request's Content-Length
+      payload.length, // the request's Content-Length
     );
   });
 
@@ -358,7 +381,12 @@ describe('Vault routes', () => {
       method: 'POST',
       url: '/api/vault/upload/init',
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ totalSize: 200, ttl: 3600, maxDownloads: 5, chunkPlaintextSize: 5242880 }),
+      payload: JSON.stringify({
+        totalSize: 200,
+        ttl: 3600,
+        maxDownloads: 5,
+        chunkPlaintextSize: 5242880,
+      }),
     });
 
     expect(res.statusCode).toBe(201);
@@ -382,17 +410,20 @@ describe('Vault routes', () => {
     expect(res.json().error).toContain('totalSize');
   });
 
-  it.each([1.5, '12abc', -1, 1e300])('POST /api/vault/upload/init rejects totalSize %s', async (totalSize) => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/vault/upload/init',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ totalSize, ttl: 3600 }),
-    });
+  it.each([1.5, '12abc', -1, 1e300])(
+    'POST /api/vault/upload/init rejects totalSize %s',
+    async (totalSize) => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/vault/upload/init',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ totalSize, ttl: 3600 }),
+      });
 
-    expect(res.statusCode).toBe(400);
-    expect(mockManager.initChunkedUpload).not.toHaveBeenCalled();
-  });
+      expect(res.statusCode).toBe(400);
+      expect(mockManager.initChunkedUpload).not.toHaveBeenCalled();
+    },
+  );
 
   it('POST /api/vault/upload/init returns 507 when quota exceeded', async () => {
     mockManager.initChunkedUpload.mockImplementationOnce(() => {
@@ -411,9 +442,10 @@ describe('Vault routes', () => {
   });
 
   it('POST /api/vault/upload/:uploadId/chunk returns 200 with progress', async () => {
-    const payload = buildMultipart(boundary,
+    const payload = buildMultipart(
+      boundary,
       { chunkIndex: '0' },
-      { name: 'chunk.bin', content: Buffer.from('a'.repeat(100)) }
+      { name: 'chunk.bin', content: Buffer.from('a'.repeat(100)) },
     );
 
     const res = await app.inject({
@@ -434,9 +466,10 @@ describe('Vault routes', () => {
   });
 
   it('POST /api/vault/upload/:uploadId/chunk returns 400 when chunkIndex is missing', async () => {
-    const payload = buildMultipart(boundary,
+    const payload = buildMultipart(
+      boundary,
       {},
-      { name: 'chunk.bin', content: Buffer.from('data') }
+      { name: 'chunk.bin', content: Buffer.from('data') },
     );
 
     const res = await app.inject({
@@ -457,10 +490,9 @@ describe('Vault routes', () => {
     let part: Readable | undefined;
     mockManager.appendChunk.mockImplementationOnce(async (_uploadId, _chunkIndex, stream) => {
       part = stream;
-      throw Object.assign(
-        new Error('Another request for this upload is still being processed'),
-        { statusCode: 409 }
-      );
+      throw Object.assign(new Error('Another request for this upload is still being processed'), {
+        statusCode: 409,
+      });
     });
 
     const res = await app.inject({
@@ -470,9 +502,10 @@ describe('Vault routes', () => {
         'content-type': `multipart/form-data; boundary=${boundary}`,
         'x-session-token': 'mock-session-token-abc',
       },
-      payload: buildMultipart(boundary,
+      payload: buildMultipart(
+        boundary,
         { chunkIndex: '1' },
-        { name: 'chunk.bin', content: Buffer.alloc(256 * 1024) }
+        { name: 'chunk.bin', content: Buffer.alloc(256 * 1024) },
       ),
     });
 
@@ -484,7 +517,10 @@ describe('Vault routes', () => {
 
   it('POST /api/vault/upload/:uploadId/chunk tells a client out of step which chunk is expected', async () => {
     mockManager.appendChunk.mockRejectedValueOnce(
-      Object.assign(new Error('Expected chunk index 3, got 2'), { statusCode: 400, expectedChunkIndex: 3 })
+      Object.assign(new Error('Expected chunk index 3, got 2'), {
+        statusCode: 400,
+        expectedChunkIndex: 3,
+      }),
     );
 
     const res = await app.inject({
@@ -494,7 +530,11 @@ describe('Vault routes', () => {
         'content-type': `multipart/form-data; boundary=${boundary}`,
         'x-session-token': 'mock-session-token-abc',
       },
-      payload: buildMultipart(boundary, { chunkIndex: '2' }, { name: 'chunk.bin', content: Buffer.from('again') }),
+      payload: buildMultipart(
+        boundary,
+        { chunkIndex: '2' },
+        { name: 'chunk.bin', content: Buffer.from('again') },
+      ),
     });
 
     expect(res.statusCode).toBe(400);
@@ -518,7 +558,7 @@ describe('Vault routes', () => {
 
   it('POST /api/vault/upload/:uploadId/complete returns 404 for unknown session', async () => {
     mockManager.completeChunkedUpload.mockRejectedValueOnce(
-      Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 })
+      Object.assign(new Error('Upload session not found or expired'), { statusCode: 404 }),
     );
 
     const res = await app.inject({
@@ -535,27 +575,41 @@ describe('Vault routes', () => {
     ['init', 'initChunkedUpload', '/api/vault/upload/init'],
     ['chunk', 'appendChunk', '/api/vault/upload/upload-abc/chunk'],
     ['complete', 'completeChunkedUpload', '/api/vault/upload/upload-abc/complete'],
-  ] as const)('POST %s hides unexpected error messages behind a generic 500', async (_name, method, url) => {
-    const leak = Object.assign(
-      new Error("ENOENT: no such file or directory, open '/data/vaults/_uploads/x/data.enc'"),
-      { code: 'ENOENT' }
-    );
-    mockManager[method].mockImplementationOnce(() => { throw leak; });
+  ] as const)(
+    'POST %s hides unexpected error messages behind a generic 500',
+    async (_name, method, url) => {
+      const leak = Object.assign(
+        new Error("ENOENT: no such file or directory, open '/data/vaults/_uploads/x/data.enc'"),
+        { code: 'ENOENT' },
+      );
+      mockManager[method].mockImplementationOnce(() => {
+        throw leak;
+      });
 
-    const res = await app.inject({
-      method: 'POST',
-      url,
-      headers: method === 'appendChunk'
-        ? { 'content-type': `multipart/form-data; boundary=${boundary}`, 'x-session-token': 'mock-session-token-abc' }
-        : { 'content-type': 'application/json', 'x-session-token': 'mock-session-token-abc' },
-      payload: method === 'appendChunk'
-        ? buildMultipart(boundary, { chunkIndex: '0' }, { name: 'chunk', content: Buffer.from('x') })
-        : JSON.stringify({ totalSize: 200 }),
-    });
+      const res = await app.inject({
+        method: 'POST',
+        url,
+        headers:
+          method === 'appendChunk'
+            ? {
+                'content-type': `multipart/form-data; boundary=${boundary}`,
+                'x-session-token': 'mock-session-token-abc',
+              }
+            : { 'content-type': 'application/json', 'x-session-token': 'mock-session-token-abc' },
+        payload:
+          method === 'appendChunk'
+            ? buildMultipart(
+                boundary,
+                { chunkIndex: '0' },
+                { name: 'chunk', content: Buffer.from('x') },
+              )
+            : JSON.stringify({ totalSize: 200 }),
+      });
 
-    expect(res.statusCode).toBe(500);
-    expect(res.json()).toEqual({ error: 'Internal server error' });
-  });
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toEqual({ error: 'Internal server error' });
+    },
+  );
 
   it('DELETE /api/vault/upload/:uploadId returns 204 and calls abort', async () => {
     const res = await app.inject({
@@ -570,9 +624,10 @@ describe('Vault routes', () => {
 
   // Session token verification
   it('POST /api/vault/upload/:uploadId/chunk returns 403 without session token', async () => {
-    const payload = buildMultipart(boundary,
+    const payload = buildMultipart(
+      boundary,
       { chunkIndex: '0' },
-      { name: 'chunk.bin', content: Buffer.from('data') }
+      { name: 'chunk.bin', content: Buffer.from('data') },
     );
 
     const res = await app.inject({

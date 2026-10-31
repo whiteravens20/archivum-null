@@ -10,7 +10,9 @@ import page from '../../index.html?raw';
 
 describe('index.html', () => {
   it('loads nothing from another origin', () => {
-    const references = [...page.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/g)].map((match) => match[1]);
+    const references = [...page.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/g)].map(
+      (match) => match[1],
+    );
 
     // The entry script and the icons: an empty list would mean the pattern stopped matching.
     expect(references).toContain('/src/main.tsx');

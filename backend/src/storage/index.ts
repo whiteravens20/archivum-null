@@ -12,7 +12,12 @@ export interface StorageBackend {
   /** Whether the directory holds nothing but what this backend writes into a vault. */
   holdsOnlyVaultFiles(vaultId: string): Promise<boolean>;
   /** Append a chunk to an in-progress upload identified by uploadId. Returns total bytes written so far. */
-  appendChunk(uploadId: string, stream: Readable, maxTotalSize: number, currentSize: number): Promise<number>;
+  appendChunk(
+    uploadId: string,
+    stream: Readable,
+    maxTotalSize: number,
+    currentSize: number,
+  ): Promise<number>;
   /** Move the assembled chunk file into a finalized vault directory. */
   finalizeChunkedUpload(uploadId: string, vaultId: string): Promise<void>;
   /** Remove temporary chunk directory (cleanup on abort / timeout). */

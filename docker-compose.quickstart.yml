@@ -24,7 +24,7 @@ services:
       - /tmp:noexec,nosuid,size=64m
 
     ports:
-      - "127.0.0.1:3000:3000"
+      - '127.0.0.1:3000:3000'
 
     volumes:
       - vault-data-quickstart:/data/vaults
@@ -51,21 +51,21 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: "1.0"
+          cpus: '1.0'
           pids: 256
 
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health"]
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health']
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
 
     logging:
-      driver: "json-file"
+      driver: 'json-file'
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
 
 volumes:
   vault-data-quickstart:

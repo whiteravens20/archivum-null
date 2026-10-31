@@ -16,13 +16,16 @@ const hasLetter = (text) => /\p{L}/u.test(text);
 const noLiteralUiText = {
   meta: {
     type: 'problem',
-    messages: { literal: 'Text shown to a visitor goes in src/i18n/messages, so that every language has it.' },
+    messages: {
+      literal: 'Text shown to a visitor goes in src/i18n/messages, so that every language has it.',
+    },
   },
   create(context) {
     const report = (node) => context.report({ node, messageId: 'literal' });
     const shown = (node) => {
       let holder = node.parent;
-      while (holder.type === 'ConditionalExpression' || holder.type === 'LogicalExpression') holder = holder.parent;
+      while (holder.type === 'ConditionalExpression' || holder.type === 'LogicalExpression')
+        holder = holder.parent;
       if (holder.type === 'JSXExpressionContainer') holder = holder.parent;
       if (holder.type === 'JSXAttribute') return TEXT_ATTRIBUTES.has(holder.name.name);
       return holder.type === 'JSXElement' || holder.type === 'JSXFragment';
@@ -35,7 +38,8 @@ const noLiteralUiText = {
         if (typeof node.value === 'string' && hasLetter(node.value) && shown(node)) report(node);
       },
       TemplateLiteral(node) {
-        if (node.quasis.some((quasi) => hasLetter(quasi.value.cooked ?? '')) && shown(node)) report(node);
+        if (node.quasis.some((quasi) => hasLetter(quasi.value.cooked ?? '')) && shown(node))
+          report(node);
       },
     };
   },
@@ -59,16 +63,19 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      '@typescript-eslint/no-unused-vars': ['error', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/consistent-type-imports': 'error',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
       'no-var': 'error',
-      'eqeqeq': ['error', 'always'],
+      eqeqeq: ['error', 'always'],
     },
   },
   {
@@ -86,15 +93,20 @@ export default tseslint.config(
     // report what failed as a code or a status, and the pages put it into words.
     files: ['src/crypto/**', 'src/api/**'],
     rules: {
-      'no-restricted-imports': ['error', {
-        patterns: [{
-          group: ['**/i18n', '**/i18n/**'],
-          message: 'Report a code or a status here; the pages turn it into text.',
-        }],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/i18n', '**/i18n/**'],
+              message: 'Report a code or a status here; the pages turn it into text.',
+            },
+          ],
+        },
+      ],
     },
   },
   {
     ignores: ['dist/', 'node_modules/', 'coverage/', '*.js'],
-  }
+  },
 );

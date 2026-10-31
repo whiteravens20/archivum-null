@@ -57,7 +57,7 @@ describe('VaultManager — download counter atomicity', () => {
     // Fire 5 concurrent download requests — Node's event loop is cooperative
     // so only the first synchronously-checked getVault() wins.
     const results = await Promise.all(
-      Array.from({ length: 5 }, () => manager.consumeDownload(vault.vaultId))
+      Array.from({ length: 5 }, () => manager.consumeDownload(vault.vaultId)),
     );
 
     const successes = results.filter(Boolean);
@@ -65,7 +65,9 @@ describe('VaultManager — download counter atomicity', () => {
 
     // Drain the stream so file handles are released
     for (const r of successes) {
-      for await (const _ of r!.stream) { /* drain */ }
+      for await (const _ of r!.stream) {
+        /* drain */
+      }
     }
   });
 
@@ -74,14 +76,16 @@ describe('VaultManager — download counter atomicity', () => {
     const vault = await manager.createVault(makeStream('payload-'.repeat(8)), 3600, N);
 
     const results = await Promise.all(
-      Array.from({ length: N + 2 }, () => manager.consumeDownload(vault.vaultId))
+      Array.from({ length: N + 2 }, () => manager.consumeDownload(vault.vaultId)),
     );
 
     const successes = results.filter(Boolean);
     expect(successes).toHaveLength(N);
 
     for (const r of successes) {
-      for await (const _ of r!.stream) { /* drain */ }
+      for await (const _ of r!.stream) {
+        /* drain */
+      }
     }
   });
 
@@ -130,9 +134,7 @@ describe('VaultManager — download counter atomicity', () => {
     await smallManager.init();
 
     const bigData = 'x'.repeat(2000); // 2000 bytes > 10 + calcEncryptionOverhead(10) = 38
-    await expect(
-      smallManager.createVault(makeStream(bigData), 3600, 1)
-    ).rejects.toThrow();
+    await expect(smallManager.createVault(makeStream(bigData), 3600, 1)).rejects.toThrow();
 
     await smallManager.shutdown();
 
@@ -162,8 +164,11 @@ describe('VaultManager — download counter atomicity', () => {
     // Second upload: 40 more would make 80. Nothing announced its size, so it is
     // refused once it has been written, and nothing of it is left on disk.
     await expect(
-      quotaManager.createVault(makeStream('b'.repeat(40)), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 507, message: expect.stringMatching(/Storage quota exceeded/) });
+      quotaManager.createVault(makeStream('b'.repeat(40)), 3600, 5),
+    ).rejects.toMatchObject({
+      statusCode: 507,
+      message: expect.stringMatching(/Storage quota exceeded/),
+    });
     expect(await fsp.readdir(tempDir)).toEqual([first.vaultId]);
 
     await quotaManager.shutdown();
@@ -180,9 +185,9 @@ describe('VaultManager — download counter atomicity', () => {
     await quotaManager.init();
 
     const stream = makeStream('c'.repeat(200));
-    await expect(
-      quotaManager.createVault(stream, 3600, 5, undefined, 200)
-    ).rejects.toMatchObject({ statusCode: 507 });
+    await expect(quotaManager.createVault(stream, 3600, 5, undefined, 200)).rejects.toMatchObject({
+      statusCode: 507,
+    });
 
     expect(stream.readableEnded).toBe(false);
     expect(await fsp.readdir(tempDir)).toEqual([]);
@@ -207,7 +212,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // ...leaves room for 20. One that declares 80 as well does not fit beside it.
     await expect(
-      quotaManager.createVault(makeStream('b'.repeat(80)), 3600, 5, undefined, 80)
+      quotaManager.createVault(makeStream('b'.repeat(80)), 3600, 5, undefined, 80),
     ).rejects.toMatchObject({ statusCode: 507 });
     // Neither does a chunked upload of that size.
     expect(() => quotaManager.initChunkedUpload(80, 3600, 5)).toThrow(/Storage quota exceeded/);
@@ -218,7 +223,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // Once it is stored, only its real 40 bytes count
     await expect(
-      quotaManager.createVault(makeStream('c'.repeat(60)), 3600, 5, undefined, 60)
+      quotaManager.createVault(makeStream('c'.repeat(60)), 3600, 5, undefined, 60),
     ).resolves.toMatchObject({ ciphertextSize: 60 });
 
     await quotaManager.shutdown();
@@ -235,11 +240,11 @@ describe('VaultManager — download counter atomicity', () => {
     await quotaManager.init();
 
     await expect(
-      quotaManager.createVault(makeStream('d'.repeat(100)), 3600, 5, undefined, 100)
+      quotaManager.createVault(makeStream('d'.repeat(100)), 3600, 5, undefined, 100),
     ).resolves.toMatchObject({ ciphertextSize: 100 });
-    await expect(
-      quotaManager.createVault(makeStream('e'), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 507 });
+    await expect(quotaManager.createVault(makeStream('e'), 3600, 5)).rejects.toMatchObject({
+      statusCode: 507,
+    });
 
     await quotaManager.shutdown();
   });
@@ -269,17 +274,17 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('refuses an upload too small to be an encrypted file and keeps nothing of it', async () => {
     // 31 bytes: one short of an IV, a tag and an empty metadata header
-    await expect(
-      manager.createVault(makeStream('x'.repeat(31)), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 400 });
-    await expect(
-      manager.createVault(makeStream(''), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 400 });
+    await expect(manager.createVault(makeStream('x'.repeat(31)), 3600, 5)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    await expect(manager.createVault(makeStream(''), 3600, 5)).rejects.toMatchObject({
+      statusCode: 400,
+    });
     expect(await fsp.readdir(tempDir)).toEqual([]);
 
-    await expect(
-      manager.createVault(makeStream('x'.repeat(32)), 3600, 5)
-    ).resolves.toMatchObject({ ciphertextSize: 32 });
+    await expect(manager.createVault(makeStream('x'.repeat(32)), 3600, 5)).resolves.toMatchObject({
+      ciphertextSize: 32,
+    });
   });
 
   it('refuses a chunked upload that declares less than an encrypted file needs', () => {
@@ -332,7 +337,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // Sending chunk index 1 before 0 must fail, and say which index is expected
     await expect(
-      manager.appendChunk(session.uploadId, 1, makeStream('data'))
+      manager.appendChunk(session.uploadId, 1, makeStream('data')),
     ).rejects.toMatchObject({
       message: expect.stringMatching(/Expected chunk index 0/),
       statusCode: 400,
@@ -345,9 +350,9 @@ describe('VaultManager — download counter atomicity', () => {
   it('rejects completing with no chunks', async () => {
     const session = manager.initChunkedUpload(100, 3600, 5);
 
-    await expect(
-      manager.completeChunkedUpload(session.uploadId)
-    ).rejects.toThrow(/No chunks received/);
+    await expect(manager.completeChunkedUpload(session.uploadId)).rejects.toThrow(
+      /No chunks received/,
+    );
   });
 
   it('rejects init when totalSize exceeds MAX_FILE_SIZE', () => {
@@ -362,7 +367,7 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('rejects chunk when session does not exist', async () => {
     await expect(
-      manager.appendChunk('nonexistent-session-id', 0, makeStream('data'))
+      manager.appendChunk('nonexistent-session-id', 0, makeStream('data')),
     ).rejects.toThrow(/not found/);
   });
 
@@ -380,7 +385,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // ...when the next index arrives. It must not be written alongside it.
     await expect(
-      manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)))
+      manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50))),
     ).rejects.toMatchObject({ statusCode: 409 });
 
     first.push(null);
@@ -399,8 +404,8 @@ describe('VaultManager — download counter atomicity', () => {
 
     const results = await Promise.allSettled(
       [0, 1, 2, 3].map((index) =>
-        manager.appendChunk(session.uploadId, index, makeStream('x'.repeat(100)))
-      )
+        manager.appendChunk(session.uploadId, index, makeStream('x'.repeat(100))),
+      ),
     );
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
@@ -417,7 +422,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // 150 bytes into a 100-byte upload: refused, and nothing of it is kept
     await expect(
-      manager.appendChunk(session.uploadId, 0, makeStream('x'.repeat(150)))
+      manager.appendChunk(session.uploadId, 0, makeStream('x'.repeat(150))),
     ).rejects.toMatchObject({ statusCode: 413 });
     expect(session.nextChunkIndex).toBe(0);
     expect(session.receivedBytes).toBe(0);
@@ -435,9 +440,9 @@ describe('VaultManager — download counter atomicity', () => {
     const writing = manager.appendChunk(session.uploadId, 0, first);
 
     // Not "no chunks received": the session and its data must survive this
-    await expect(
-      manager.completeChunkedUpload(session.uploadId)
-    ).rejects.toMatchObject({ statusCode: 409 });
+    await expect(manager.completeChunkedUpload(session.uploadId)).rejects.toMatchObject({
+      statusCode: 409,
+    });
 
     first.push(null);
     await writing;
@@ -478,7 +483,9 @@ describe('VaultManager — download counter atomicity', () => {
     capped.initChunkedUpload(100, 3600, 1, undefined, ip);
 
     // Third concurrent session from the same IP must be rejected
-    expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(/Too many concurrent uploads/);
+    expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(
+      /Too many concurrent uploads/,
+    );
 
     // A different IP is unaffected
     expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, '198.51.100.9')).not.toThrow();
@@ -553,9 +560,15 @@ describe('VaultManager — download counter atomicity', () => {
     manager = new mod.VaultManager();
     await manager.init();
 
-    await expect(fsp.readFile(path.join(tempDir, 'photos', 'a.jpg'), 'utf-8')).resolves.toBe('not ours');
-    await expect(fsp.readFile(path.join(tempDir, 'my-project', 'src', 'main.c'), 'utf-8')).resolves.toBe('not ours');
-    await expect(fsp.readFile(path.join(tempDir, lookalike, 'notes.txt'), 'utf-8')).resolves.toBe('not ours');
+    await expect(fsp.readFile(path.join(tempDir, 'photos', 'a.jpg'), 'utf-8')).resolves.toBe(
+      'not ours',
+    );
+    await expect(
+      fsp.readFile(path.join(tempDir, 'my-project', 'src', 'main.c'), 'utf-8'),
+    ).resolves.toBe('not ours');
+    await expect(fsp.readFile(path.join(tempDir, lookalike, 'notes.txt'), 'utf-8')).resolves.toBe(
+      'not ours',
+    );
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toContain('photos');
     expect(warn.mock.calls[0][0]).toContain('my-project');
@@ -564,7 +577,10 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('does not take a meta.json it did not write for a vault', async () => {
     await fsp.mkdir(path.join(tempDir, 'other-tool'));
-    await fsp.writeFile(path.join(tempDir, 'other-tool', 'meta.json'), JSON.stringify({ name: 'something else' }));
+    await fsp.writeFile(
+      path.join(tempDir, 'other-tool', 'meta.json'),
+      JSON.stringify({ name: 'something else' }),
+    );
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await manager.shutdown();
@@ -576,7 +592,9 @@ describe('VaultManager — download counter atomicity', () => {
 
     expect(manager.getStats().totalVaults).toBe(0);
     expect(manager.hasVault('other-tool')).toBe(false);
-    await expect(fsp.access(path.join(tempDir, 'other-tool', 'meta.json'))).resolves.toBeUndefined();
+    await expect(
+      fsp.access(path.join(tempDir, 'other-tool', 'meta.json')),
+    ).resolves.toBeUndefined();
   });
 
   it('restores its own vaults after a restart', async () => {
@@ -589,6 +607,9 @@ describe('VaultManager — download counter atomicity', () => {
     manager = new mod.VaultManager();
     await manager.init();
 
-    expect(manager.getVault(vault.vaultId)).toMatchObject({ ciphertextSize: 60, remainingDownloads: 5 });
+    expect(manager.getVault(vault.vaultId)).toMatchObject({
+      ciphertextSize: 60,
+      remainingDownloads: 5,
+    });
   });
 });

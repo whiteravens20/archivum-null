@@ -48,7 +48,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 
 Then open **http://127.0.0.1:3000** in your browser.
 
-> ⚠️  This uses a default admin password (`quickstart-change-me`). Change it before any real use — see [Production](#production) for the full hardening checklist.
+> ⚠️ This uses a default admin password (`quickstart-change-me`). Change it before any real use — see [Production](#production) for the full hardening checklist.
 
 ---
 
@@ -63,24 +63,24 @@ The table below lists the only hard requirement and optional conveniences.
 
 ### Required (always)
 
-| Requirement | Notes |
-|---|---|
+| Requirement | Notes                                                      |
+| ----------- | ---------------------------------------------------------- |
 | Node.js 24+ | Both backend and frontend; declared in each `package.json` |
 
 ### Optional — containerised setup
 
-| Option | Notes |
-|---|---|
+| Option                      | Notes                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Docker 24+ & Docker Compose | Convenient wrapper around Node — not required; use if you prefer containers or want the production image |
 
 ### Recommended for public / production deployment
 
-| Recommendation | Why it matters if skipped |
-|---|---|
-| Domain name pointed at a public IP | Without one, the service is reachable only on a local network or raw IP — fine for personal/homelab use |
+| Recommendation                                | Why it matters if skipped                                                                                                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain name pointed at a public IP            | Without one, the service is reachable only on a local network or raw IP — fine for personal/homelab use                                                     |
 | VPS running a reverse proxy (nginx, Caddy, …) | Without TLS termination, traffic is unencrypted in transit; the browser will block WebCrypto on non-HTTPS origins (see [Troubleshooting](#troubleshooting)) |
-| Private tunnel (WireGuard, SSH, VPN overlay) | Without a tunnel, port 3000 must be exposed directly to the internet — significantly higher attack surface |
-| Cloudflare Turnstile | Without it, upload abuse protection relies on rate limiting alone; Turnstile verification is automatically skipped when keys are not set |
+| Private tunnel (WireGuard, SSH, VPN overlay)  | Without a tunnel, port 3000 must be exposed directly to the internet — significantly higher attack surface                                                  |
+| Cloudflare Turnstile                          | Without it, upload abuse protection relies on rate limiting alone; Turnstile verification is automatically skipped when keys are not set                    |
 
 > **Quickest local start:** `cd backend && npm install && STORAGE_PATH=../data/vaults npm run dev` in one terminal, `cd frontend && npm install && npm run dev` in another. Open `https://localhost:5173` (accept the self-signed cert once — required for WebCrypto).
 
@@ -181,17 +181,17 @@ All variables live in a single `.env` file at the project root. Copy `.env.examp
 
 Most deployments only touch the variables below. For the full reference (chunk sizes, rate limit tuning, Turnstile hostname pinning, etc.), see [docs/CONFIGURATION.md](docs/CONFIGURATION.md). To change the name, colours or logo, see [Branding](#branding).
 
-| Variable | Default | Description |
-|---|---|---|
-| `ADMIN_PASSWORD` | — | Admin panel password (**required** — service refuses to start without it) |
-| `HOST_BIND_ADDRESS` | `127.0.0.1` | Docker host interface for the published port. Set to your tunnel/WireGuard IP in production — never `0.0.0.0` on a public host. |
-| `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100 MB) |
-| `DEFAULT_TTL` / `MAX_TTL` | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d) |
-| `MAX_TOTAL_STORAGE` | `0` (unlimited) | Global storage quota in bytes; new uploads return HTTP 507 over this limit. Unlimited means uploads can fill the disk the vaults are on, which with Docker is the host's own. `.env.example` sets 10 GiB. |
-| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | — | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped |
-| `TRUST_PROXY` | `loopback` | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
-| `UPDATE_CHECK_ENABLED` | `false` | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection |
-| `APP_VERSION` | — | Version shown in the admin panel. Set automatically in Docker images and by the LXC installer; a manual source install has to set it |
+| Variable                                  | Default            | Description                                                                                                                                                                                                                                                                   |
+| ----------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN_PASSWORD`                          | —                  | Admin panel password (**required** — service refuses to start without it)                                                                                                                                                                                                     |
+| `HOST_BIND_ADDRESS`                       | `127.0.0.1`        | Docker host interface for the published port. Set to your tunnel/WireGuard IP in production — never `0.0.0.0` on a public host.                                                                                                                                               |
+| `MAX_FILE_SIZE`                           | `104857600`        | Max upload size in bytes (100 MB)                                                                                                                                                                                                                                             |
+| `DEFAULT_TTL` / `MAX_TTL`                 | `86400` / `604800` | Default and maximum vault lifetime in seconds (24 h / 7 d)                                                                                                                                                                                                                    |
+| `MAX_TOTAL_STORAGE`                       | `0` (unlimited)    | Global storage quota in bytes; new uploads return HTTP 507 over this limit. Unlimited means uploads can fill the disk the vaults are on, which with Docker is the host's own. `.env.example` sets 10 GiB.                                                                     |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | —                  | Cloudflare Turnstile keys — when both are unset, CAPTCHA is skipped                                                                                                                                                                                                           |
+| `TRUST_PROXY`                             | `loopback`         | Addresses your reverse proxy connects from (IPs, CIDR ranges, `loopback` / `linklocal` / `uniquelocal`). `X-Forwarded-For` is honoured only from these. Listing more than the proxy lets clients spoof their IP and bypass rate limiting. A hop count is rejected at startup. |
+| `UPDATE_CHECK_ENABLED`                    | `false`            | Compare the running version against the newest GitHub release in the admin panel. Opt-in — the app's only self-initiated outbound connection                                                                                                                                  |
+| `APP_VERSION`                             | —                  | Version shown in the admin panel. Set automatically in Docker images and by the LXC installer; a manual source install has to set it                                                                                                                                          |
 
 ## Deployment Architecture
 
@@ -200,6 +200,7 @@ Most deployments only touch the variables below. For the full reference (chunk s
 Visitors connect to a small VPS, which holds the public IP, terminates TLS and runs nothing but a reverse proxy (nginx, Caddy, …). The proxy forwards requests over a private tunnel — WireGuard, an SSH tunnel or a VPN overlay — to the homelab host or VM that actually runs Archivum Null. That host listens only on its tunnel interface, so the app and the stored vaults are never exposed directly to the internet or the LAN.
 
 **Key requirements:**
+
 - Docker port published **only** on the tunnel interface IP (`HOST_BIND_ADDRESS=<tunnel-ip>` in `.env`)
 - No direct LAN access to port 3000
 - Container runs as non-root with read-only filesystem and all capabilities dropped
@@ -242,6 +243,7 @@ sudo ./scripts/check-deployment.sh --tunnel-iface wg0
 ```
 
 It checks:
+
 - Container is running and healthy
 - Port 3000 is **not** bound to every interface, IPv6 included
 - Container is running as non-root and is not privileged
@@ -258,14 +260,14 @@ It checks:
 
 Images are published to `ghcr.io/whiteravens20/archivum-null`.
 
-| Tag | Source | Stable | Purpose |
-|---|---|---|---|
-| `:1.2.3` / `:1.2` / `:1` | Tagged release from `main` | ✅ Yes | Production — pin to an exact version |
-| `:main` | Rolling pointer to the latest tagged release on `main` | ✅ Yes | Production — auto-rolls forward; use this if you want unattended updates instead of a pinned version |
-| `:latest` | Alias of `:main`, pushed by the same release job | ✅ Yes | Production — identical image and digest to `:main` |
-| `:edge` | Snapshot build, run by hand from `main` | ⚠️ No | Snapshot — preview of next release, not production-ready |
-| `:dev` | Snapshot build, run by hand from `dev` | ❌ No | Snapshot — development builds, may be broken |
-| `:edge-<sha>` / `:dev-<sha>` | Specific commit | — | Pin to a known-good snapshot |
+| Tag                          | Source                                                 | Stable | Purpose                                                                                              |
+| ---------------------------- | ------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------- |
+| `:1.2.3` / `:1.2` / `:1`     | Tagged release from `main`                             | ✅ Yes | Production — pin to an exact version                                                                 |
+| `:main`                      | Rolling pointer to the latest tagged release on `main` | ✅ Yes | Production — auto-rolls forward; use this if you want unattended updates instead of a pinned version |
+| `:latest`                    | Alias of `:main`, pushed by the same release job       | ✅ Yes | Production — identical image and digest to `:main`                                                   |
+| `:edge`                      | Snapshot build, run by hand from `main`                | ⚠️ No  | Snapshot — preview of next release, not production-ready                                             |
+| `:dev`                       | Snapshot build, run by hand from `dev`                 | ❌ No  | Snapshot — development builds, may be broken                                                         |
+| `:edge-<sha>` / `:dev-<sha>` | Specific commit                                        | —      | Pin to a known-good snapshot                                                                         |
 
 > **Only `:main`, `:latest` and versioned tags (`:1.2.3`) are production-ready builds.** They are published exclusively by the release workflow on a semver tag push from `main`, and only once the scan of the pushed image has passed.
 > `:latest` usually earns its bad reputation by meaning "the last image built". It cannot mean that here: the release workflow only ever runs on a semver tag, and snapshots are pushed under `:dev` / `:edge` by a different workflow. So `:latest` is simply another name for `:main` — same image, same digest.
@@ -274,6 +276,7 @@ Images are published to `ghcr.io/whiteravens20/archivum-null`.
 ## Upgrading
 
 **From a registry image (recommended for CD deploys):**
+
 ```bash
 # Pin to a specific version by setting IMAGE_TAG=1.2.3 in .env first,
 # then pull and restart:
@@ -283,6 +286,7 @@ docker image prune -f
 ```
 
 **From source (local build):**
+
 ```bash
 git pull
 docker compose up -d --build
@@ -306,33 +310,34 @@ IMAGE_TAG=1.2.3@sha256:<the digest printed above>
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Port 3000 still bound to `0.0.0.0` | `HOST_BIND_ADDRESS` not set in `.env` | Set `HOST_BIND_ADDRESS=<tunnel-ip>` and `docker compose up -d` |
-| Health check failing | `PORT` mismatch between app and health check | Ensure `PORT` in `.env` matches `HEALTHCHECK` in `Dockerfile` (default: `3000`) |
-| Admin panel returns 403 | `ADMIN_PASSWORD` empty or not set | Set `ADMIN_PASSWORD` in `.env` and restart |
-| Uploads fail with 413 | The reverse proxy's request size limit is at or below `CHUNK_SIZE` | Set it above `CHUNK_SIZE`: `15m` for the default 10 MB — see the nginx/Caddy config examples |
-| Turnstile always fails | Site key / secret key mismatch | Ensure `TURNSTILE_SITE_KEY` matches the Cloudflare dashboard and both `TURNSTILE_SECRET` and `TURNSTILE_SITE_KEY` are set |
-| Files not persisted after restart | Volume not mounted | Check `vault-data` volume exists: `docker volume ls` |
-| Permission denied writing to `/data/vaults` | Bind mount used instead of named volume, wrong ownership on host | Named volumes handle ownership automatically. If using a bind mount, the host directory must be owned by UID `1001`: `sudo chown 1001:1001 /your/path` |
-| `crypto.subtle is undefined` in browser | Page served over plain HTTP | WebCrypto requires a secure context (HTTPS or `localhost`). In dev, use `https://localhost:5173` |
+| Symptom                                     | Cause                                                              | Fix                                                                                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Port 3000 still bound to `0.0.0.0`          | `HOST_BIND_ADDRESS` not set in `.env`                              | Set `HOST_BIND_ADDRESS=<tunnel-ip>` and `docker compose up -d`                                                                                         |
+| Health check failing                        | `PORT` mismatch between app and health check                       | Ensure `PORT` in `.env` matches `HEALTHCHECK` in `Dockerfile` (default: `3000`)                                                                        |
+| Admin panel returns 403                     | `ADMIN_PASSWORD` empty or not set                                  | Set `ADMIN_PASSWORD` in `.env` and restart                                                                                                             |
+| Uploads fail with 413                       | The reverse proxy's request size limit is at or below `CHUNK_SIZE` | Set it above `CHUNK_SIZE`: `15m` for the default 10 MB — see the nginx/Caddy config examples                                                           |
+| Turnstile always fails                      | Site key / secret key mismatch                                     | Ensure `TURNSTILE_SITE_KEY` matches the Cloudflare dashboard and both `TURNSTILE_SECRET` and `TURNSTILE_SITE_KEY` are set                              |
+| Files not persisted after restart           | Volume not mounted                                                 | Check `vault-data` volume exists: `docker volume ls`                                                                                                   |
+| Permission denied writing to `/data/vaults` | Bind mount used instead of named volume, wrong ownership on host   | Named volumes handle ownership automatically. If using a bind mount, the host directory must be owned by UID `1001`: `sudo chown 1001:1001 /your/path` |
+| `crypto.subtle is undefined` in browser     | Page served over plain HTTP                                        | WebCrypto requires a secure context (HTTPS or `localhost`). In dev, use `https://localhost:5173`                                                       |
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React, TypeScript, Vite, TailwindCSS |
-| Backend | Fastify (Node.js), TypeScript |
-| Encryption | WebCrypto API, AES-256-GCM |
-| Storage | Local disk (abstracted) |
+| Layer      | Technology                                    |
+| ---------- | --------------------------------------------- |
+| Frontend   | React, TypeScript, Vite, TailwindCSS          |
+| Backend    | Fastify (Node.js), TypeScript                 |
+| Encryption | WebCrypto API, AES-256-GCM                    |
+| Storage    | Local disk (abstracted)                       |
 | Anti-abuse | Cloudflare Turnstile, in-memory rate limiting |
-| Container | Docker, Alpine-based, multi-stage build |
+| Container  | Docker, Alpine-based, multi-stage build       |
 
 ## Admin Panel
 
 Accessible at `/admin`. Protected by HTTP Basic Auth.
 
 Capabilities:
+
 - View active vault count, storage usage, and status
 - List vault metadata (ID, size, timestamps, download counts)
 - Force delete any vault
@@ -375,6 +380,7 @@ that means for your reverse proxy config.
 ## Cloudflare Turnstile
 
 To enable:
+
 1. Create a Turnstile widget at [dash.cloudflare.com](https://dash.cloudflare.com)
 2. Set `TURNSTILE_SITE_KEY` in `.env`
 3. Set `TURNSTILE_SECRET` in `.env`
@@ -422,40 +428,40 @@ See [SECURITY.md](SECURITY.md) for the full security checklist.
 
 ### What the Server Knows vs. Cannot Know
 
-| The server stores | The server **cannot** know |
-|---|---|
-| Encrypted ciphertext | Plaintext content |
-| Vault ID (random) | Encryption key (never sent) |
-| File size (encrypted blob size) | Original filename (stored encrypted) |
-| MIME type (stored encrypted) | Original MIME type |
-| Created / expires timestamps | Uploader identity (no accounts) |
-| Download count | Persistent IP address (in-memory only) |
+| The server stores               | The server **cannot** know             |
+| ------------------------------- | -------------------------------------- |
+| Encrypted ciphertext            | Plaintext content                      |
+| Vault ID (random)               | Encryption key (never sent)            |
+| File size (encrypted blob size) | Original filename (stored encrypted)   |
+| MIME type (stored encrypted)    | Original MIME type                     |
+| Created / expires timestamps    | Uploader identity (no accounts)        |
+| Download count                  | Persistent IP address (in-memory only) |
 
 This is the zero-knowledge guarantee: **a server compromise exposes only encrypted blobs, not plaintext.** The decryption key exists only in the vault URL fragment (`#`), which browsers do not include in HTTP requests.
 
 ### Threat Model — What We Protect Against
 
-| Threat | Protection |
-|---|---|
-| Passive network observer | TLS in transit; ciphertext at rest — observer sees encrypted bytes only |
-| Legal demand / server seizure | Only ciphertext + metadata available; operator cannot decrypt |
-| Enumeration / brute-force | Vault IDs are 24-character nanoid (144 bits of entropy) |
-| Abuse / spam | Turnstile CAPTCHA + four-tier rate limiting per IP |
-| Filename spoofing / path traversal | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link |
-| Large file DoS | Streaming size enforcement — no full file held in memory |
-| Admin credential theft | Timing-safe comparison; Basic Auth over TLS |
+| Threat                                                        | Protection                                                                                                                                                                                                                  |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passive network observer                                      | TLS in transit; ciphertext at rest — observer sees encrypted bytes only                                                                                                                                                     |
+| Legal demand / server seizure                                 | Only ciphertext + metadata available; operator cannot decrypt                                                                                                                                                               |
+| Enumeration / brute-force                                     | Vault IDs are 24-character nanoid (144 bits of entropy)                                                                                                                                                                     |
+| Abuse / spam                                                  | Turnstile CAPTCHA + four-tier rate limiting per IP                                                                                                                                                                          |
+| Filename spoofing / path traversal                            | Client-side `sanitizeFilename()` strips path separators, control chars, bidi overrides, zero-width chars, and leading dots; mismatch detection warns when the decrypted filename differs from the one in the link           |
+| Large file DoS                                                | Streaming size enforcement — no full file held in memory                                                                                                                                                                    |
+| Admin credential theft                                        | Timing-safe comparison; Basic Auth over TLS                                                                                                                                                                                 |
 | Compromised container initiating outbound LAN/WAN connections | Host firewall rules drop every connection the container opens, to the LAN, to the Docker host and to the internet; `scripts/setup-firewall.sh` applies them, see [Egress Containment](docs/HARDENING.md#egress-containment) |
 
 ### Threat Model Limitations
 
-| Threat | Why we don't mitigate it |
-|---|---|
-| Compromised client device | Key is in browser memory and visible in the URL bar/history |
-| Malicious browser extension | Extensions can read page content and URL fragments |
-| Link interception | Anyone with the vault URL can decrypt — share via encrypted channels |
-| Compromised server serving modified JS | A compromised server could serve a client that exfiltrates the key |
-| Targeted state-level adversary with client access | Outside scope — use dedicated offline encryption tools |
-| DDoS at scale | Rate limiting covers casual abuse; use Cloudflare or a CDN for sustained attacks |
+| Threat                                            | Why we don't mitigate it                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Compromised client device                         | Key is in browser memory and visible in the URL bar/history                      |
+| Malicious browser extension                       | Extensions can read page content and URL fragments                               |
+| Link interception                                 | Anyone with the vault URL can decrypt — share via encrypted channels             |
+| Compromised server serving modified JS            | A compromised server could serve a client that exfiltrates the key               |
+| Targeted state-level adversary with client access | Outside scope — use dedicated offline encryption tools                           |
+| DDoS at scale                                     | Rate limiting covers casual abuse; use Cloudflare or a CDN for sustained attacks |
 
 ## Terms of Service
 
@@ -505,7 +511,7 @@ Archivum Null is built using AI coding tools. The tools write most of the code, 
 
 **What a change goes through**
 
-- Every push and pull request runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend. Beside them, the Docker image is built, the shell scripts go through ShellCheck, and the firewall script is applied to a real container on the runner and probed. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
+- Every push and pull request checks the layout of the code, the docs and the workflows with Prettier, and runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend. Beside them, the Docker image is built, the shell scripts go through ShellCheck, and the firewall script is applied to a real container on the runner and probed. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
 - CodeQL, `npm audit` and Trivy scans of the repository and of the image run on every push and pull request, and again every week ([codeql.yml](.github/workflows/codeql.yml), [security.yml](.github/workflows/security.yml)).
 - Pull requests other than automated dependency updates also get an automated review by an AI reviewer that looks for security, correctness and supply-chain problems. It is an extra check, not one of the gates.
 - Commits are signed, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/whiteravens20/archivum-null) results are public.
