@@ -107,6 +107,8 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
           maxDownloads,
           chunkPlaintextSize,
           declaredSize,
+          clientKey(request.ip),
+          networkKey(request.ip),
         );
 
         return reply.status(201).send({
@@ -123,8 +125,8 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         if (error.statusCode === 413) {
           return reply.status(413).send({ error: 'File exceeds maximum allowed size' });
         }
-        if (error.statusCode === 400) {
-          return reply.status(400).send({ error: error.message });
+        if (error.statusCode === 400 || error.statusCode === 429) {
+          return reply.status(error.statusCode).send({ error: error.message });
         }
         if (error.statusCode === 507) {
           return reply.status(507).send({

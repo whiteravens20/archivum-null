@@ -24,7 +24,8 @@ const uploadSessions = new Map<string, ChunkedUploadSession>();
 let reservedBytes = 0;
 
 /**
- * Count of open (uncompleted) chunked-upload sessions per client IP and per wider network.
+ * Count of uploads in progress per client IP and per wider network: open chunked-upload
+ * sessions and single-request uploads still being read. Each holds a reservation.
  * Caps how much storage quota a single IP can tie up via reservations
  * without ever completing an upload (reservation-exhaustion DoS).
  */
@@ -160,10 +161,10 @@ export class VaultManager {
   }
 
   /**
-   * Count one more upload session for a client, or refuse it. Without a cap, a single
-   * client can open many sessions — each reserving quota via reservedBytes — and never
-   * complete them, tying up MAX_TOTAL_STORAGE and blocking legitimate uploads until the
-   * sessions expire (reservation-exhaustion DoS).
+   * Count one more upload in progress for a client, or refuse it. Without a cap, a single
+   * client can start many uploads — each reserving quota via reservedBytes — and never
+   * finish them, tying up MAX_TOTAL_STORAGE and blocking legitimate uploads
+   * (reservation-exhaustion DoS).
    */
   private takeUploadSlot(clientIp?: string, clientNetwork?: string | null): void {
     if (clientIp && config.MAX_UPLOAD_SESSIONS_PER_IP > 0) {
@@ -201,6 +202,8 @@ export class VaultManager {
     maxDownloads: number,
     chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE,
     declaredSize?: number,
+    clientIp?: string,
+    clientNetwork?: string | null,
   ): Promise<VaultMetadata> {
     // MAX_FILE_SIZE refers to the user's raw file — account for the encrypted
     // metadata header (filename + MIME) that the frontend prepends before encryption.
@@ -225,6 +228,10 @@ export class VaultManager {
         declared > 0 ? projected > config.MAX_TOTAL_STORAGE : projected >= config.MAX_TOTAL_STORAGE;
       if (over) throw quotaExceeded();
     }
+
+    // Held until the request has been read. A request can take as long as it likes to send
+    // its body, and without this one client could keep any number of reservations open.
+    this.takeUploadSlot(clientIp, clientNetwork);
 
     let held = declared;
     reservedBytes += held;
@@ -280,6 +287,7 @@ export class VaultManager {
       return meta;
     } finally {
       reservedBytes = Math.max(0, reservedBytes - held);
+      this.releaseUploadSlot(clientIp, clientNetwork);
     }
   }
 

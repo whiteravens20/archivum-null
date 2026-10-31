@@ -250,9 +250,52 @@ describe('Vault routes', () => {
       10,
       5242852,
       payload.length,
+      '127.0.0.1',
+      null,
     );
     // The manager refused without reading the part; the route must not leave it unread
     expect(part?.readableFlowing).toBe(true);
+  });
+
+  it('POST /api/vault answers 429 and drains the upload when the client has too many running', async () => {
+    let part: Readable | undefined;
+    mockManager.createVault.mockImplementationOnce(async (stream: Readable) => {
+      part = stream;
+      throw Object.assign(new Error('Too many concurrent uploads.'), { statusCode: 429 });
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: buildMultipart(
+        boundary,
+        {},
+        { name: 'data.bin', content: Buffer.from('some-data') },
+      ),
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(res.json().error).toBe('Too many concurrent uploads.');
+    expect(part?.readableFlowing).toBe(true);
+  });
+
+  it('POST /api/vault counts an IPv6 client by its /64 and its /48', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      remoteAddress: '2001:db8:1:2::5',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: buildMultipart(
+        boundary,
+        {},
+        { name: 'data.bin', content: Buffer.from('some-data') },
+      ),
+    });
+
+    expect(res.statusCode).toBe(201);
+    const call = mockManager.createVault.mock.calls.at(-1) as unknown[];
+    expect(call.slice(-2)).toEqual(['2001:db8:1:2::/64', '2001:db8:1::/48']);
   });
 
   it('POST /api/vault returns 500 on unexpected error', async () => {
@@ -297,6 +340,8 @@ describe('Vault routes', () => {
       10, // DEFAULT_MAX_DOWNLOADS
       5242852, // CRYPTO_CHUNK_SIZE default
       payload.length, // the request's Content-Length
+      '127.0.0.1', // the client, which IPv4 has no wider network for
+      null,
     );
   });
 

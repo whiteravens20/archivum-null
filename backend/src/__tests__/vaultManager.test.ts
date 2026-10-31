@@ -577,6 +577,62 @@ describe('VaultManager — download counter atomicity', () => {
 
       await capped.shutdown();
     });
+
+    it('holds a slot for a single-request upload for as long as it is read', async () => {
+      const capped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '1' });
+      const ip = '203.0.113.21';
+
+      const slow = new Readable({ read() {} });
+      slow.push(Buffer.alloc(40, 'a'));
+      const writing = capped.createVault(slow, 3600, 5, undefined, 80, ip, null);
+
+      await expect(
+        capped.createVault(makeStream('b'.repeat(40)), 3600, 5, undefined, 40, ip, null),
+      ).rejects.toMatchObject({ statusCode: 429 });
+      expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(
+        /Too many concurrent uploads/,
+      );
+      // Someone else is not affected.
+      await expect(
+        capped.createVault(
+          makeStream('c'.repeat(40)),
+          3600,
+          5,
+          undefined,
+          40,
+          '198.51.100.9',
+          null,
+        ),
+      ).resolves.toMatchObject({ ciphertextSize: 40 });
+
+      slow.push(null);
+      await writing;
+      await expect(
+        capped.createVault(makeStream('d'.repeat(40)), 3600, 5, undefined, 40, ip, null),
+      ).resolves.toMatchObject({ ciphertextSize: 40 });
+
+      await capped.shutdown();
+    });
+
+    it('gives the slot back when a single-request upload fails', async () => {
+      const capped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '1' });
+      const ip = '203.0.113.22';
+
+      const broken = new Readable({
+        read() {
+          this.destroy(new Error('connection lost'));
+        },
+      });
+      await expect(capped.createVault(broken, 3600, 5, undefined, 80, ip, null)).rejects.toThrow(
+        'connection lost',
+      );
+
+      await expect(
+        capped.createVault(makeStream('a'.repeat(40)), 3600, 5, undefined, 40, ip, null),
+      ).resolves.toMatchObject({ ciphertextSize: 40 });
+
+      await capped.shutdown();
+    });
   });
 
   // ------------------------------------------------------------------
