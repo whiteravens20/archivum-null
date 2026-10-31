@@ -9,6 +9,7 @@ import { adminRoutes } from './routes/admin.js';
 import { healthRoutes, termsServed } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
+import { isApiRequest } from './middleware/requestPath.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
 import {
@@ -232,7 +233,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // a 404, not a page and a 200.
     app.setNotFoundHandler(async (request, reply) => {
       const navigation = request.method === 'GET' || request.method === 'HEAD';
-      if (!navigation || request.url.startsWith('/api/')) {
+      if (!navigation || isApiRequest(request)) {
         return reply.status(404).send({ error: 'Not found' });
       }
       return sendIndex(reply);

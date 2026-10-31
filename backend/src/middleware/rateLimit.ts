@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config.js';
 import { clientKey } from './clientKey.js';
+import { requestPath } from './requestPath.js';
 
 /**
  * In-memory rate limiter. IP addresses are NOT persisted.
@@ -11,6 +12,10 @@ import { clientKey } from './clientKey.js';
  *   - Admin    : failed logins on /api/admin/    — RATE_LIMIT_ADMIN_MAX per window (default 10)
  *   - Upload   : POST /api/vault and upload init — RATE_LIMIT_MAX per window (default 10)
  *   - Download : /api/vault/:id/download         — RATE_LIMIT_DOWNLOAD_MAX per window (default 30)
+ *
+ * Which tiers a request counts in is decided from `requestPath()`, the route the router
+ * matched. Do NOT compare `request.url` with a path here: one route can be written in many
+ * ways, and every spelling a comparison misses is a way past the limit.
  *
  * `request.ip` is used directly — Fastify resolves it correctly from
  * X-Forwarded-For according to the `trustProxy` setting. Do NOT re-read
@@ -103,11 +108,7 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
   const windowMs = config.RATE_LIMIT_WINDOW * 1000;
 
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Match on the pathname only — never the raw URL. `request.url` includes the
-    // query string, so matching it directly would let a client append `?x=1` to a
-    // sensitive path and slip past the stricter upload/download tiers, falling back
-    // to the looser general limit.
-    const pathname = request.url.split('?', 1)[0];
+    const pathname = requestPath(request);
     if (!pathname.startsWith('/api/')) return;
 
     // `request.ip` is already resolved via Fastify's trustProxy chain.
