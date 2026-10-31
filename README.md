@@ -505,7 +505,7 @@ Archivum Null is built using AI coding tools. The tools write most of the code, 
 
 **What a change goes through**
 
-- Every push and pull request runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend. Beside them, the Docker image is built, the shell scripts go through ShellCheck, and the firewall script is applied to a real container on the runner and probed. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
+- Every push and pull request checks the layout of the code, the docs and the workflows with Prettier, and runs lint with no warnings allowed, type checking, a build and the unit tests of the backend and the frontend. Beside them, the Docker image is built, the shell scripts go through ShellCheck, and the firewall script is applied to a real container on the runner and probed. A pull request is merged only after all of it passes ([test.yml](.github/workflows/test.yml)).
 - CodeQL, `npm audit` and Trivy scans of the repository and of the image run on every push and pull request, and again every week ([codeql.yml](.github/workflows/codeql.yml), [security.yml](.github/workflows/security.yml)).
 - Pull requests other than automated dependency updates also get an automated review by an AI reviewer that looks for security, correctness and supply-chain problems. It is an extra check, not one of the gates.
 - Commits are signed, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/whiteravens20/archivum-null) results are public.

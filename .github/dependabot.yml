@@ -1,7 +1,7 @@
 # ── Dependabot configuration ──────────────────────────────────────────────────
-# Keeps GitHub Actions, npm dependencies and the Docker base image up to date
-# automatically. Opens PRs against `dev`, weekly for npm and the base image and
-# monthly for actions — CI must pass before merging.
+# Keeps GitHub Actions, npm dependencies, the formatter and the Docker base image up
+# to date automatically. Opens PRs against `dev`, weekly for npm and the base image and
+# monthly for actions and the formatter — CI must pass before merging.
 #
 # Versioning strategy:
 #   - github-actions: bumps the commit SHA and the version comment in `uses:`
@@ -115,6 +115,29 @@ updates:
         exclude-patterns:
           - "vitest"
           - "@vitest/*"
+
+  # ── The formatter ────────────────────────────────────────────────────────────
+  # Prettier at the root formats every file it reads. A release can change what it
+  # writes: when the formatting check fails on a bump, run `npm run format` on its branch.
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: monthly
+      time: "08:00"
+      timezone: UTC
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(tools)"
+    # Same week-long settling window; security updates stay exempt.
+    cooldown:
+      default-days: 7
+    groups:
+      formatter-non-breaking:
+        update-types:
+          - minor
+          - patch
 
   # ── Docker base image ────────────────────────────────────────────────────────
   # Both Dockerfiles pin node by version and digest. A new minor or patch moves
