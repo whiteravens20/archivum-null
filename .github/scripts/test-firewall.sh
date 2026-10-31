@@ -184,7 +184,7 @@ wait_for_listener() {
     else ip netns exec "$1" timeout 1 bash -c "$probe" 2>/dev/null && return 0; fi
     sleep 0.5
   done
-  echo "nothing listens on $2 port $3 after 30 seconds"
+  echo "nothing listens on $2 port $3 after 60 attempts"
   exit 2
 }
 
