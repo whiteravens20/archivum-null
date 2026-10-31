@@ -31,6 +31,7 @@ Describe the tests you ran to verify your changes:
 Please review the [Contributing Guidelines](../CONTRIBUTING.md) before submitting.
 
 - [ ] My code follows the style guidelines of this project
+- [ ] `npm run format:check` passes at the repository root
 - [ ] I have performed a self-review of my own code
 - [ ] I have commented my code, particularly in hard-to-understand areas
 - [ ] I have made corresponding changes to the documentation
