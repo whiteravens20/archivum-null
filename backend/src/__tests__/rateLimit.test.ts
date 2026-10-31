@@ -257,6 +257,49 @@ describe('Rate-limit middleware', () => {
     expect((await download('2001:db8:1:2:ffff::3')).statusCode).toBe(429);
     expect((await download('2001:db8:1:3::1')).statusCode).toBe(200);
   });
+
+  describe('what many clients get together', () => {
+    // A /48 gets ten times a client's limit.
+    const download = (remoteAddress: string) =>
+      app.inject({ method: 'GET', url: '/api/vault/test-id/download', remoteAddress });
+
+    it('should hold one IPv6 /48 to ten times the limit of a client', async () => {
+      // Download limit is 2, so 20 for the /48: ten /64s use it up.
+      for (let i = 0; i < 10; i++) {
+        expect((await download(`2001:db8:1:${i}::1`)).statusCode).toBe(200);
+        expect((await download(`2001:db8:1:${i}::2`)).statusCode).toBe(200);
+      }
+
+      const res = await download('2001:db8:1:ff::1');
+      expect(res.statusCode).toBe(429);
+      expect(res.headers['x-ratelimit-remaining']).toBe('0');
+      expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+
+      // Another /48 has its own count, and so does IPv4.
+      expect((await download('2001:db8:2::1')).statusCode).toBe(200);
+      expect((await download('203.0.113.9')).statusCode).toBe(200);
+    });
+
+    it('should not let what a refused client sends use up what its /48 shares', async () => {
+      // One /64 keeps going long after its own limit of 2. Its neighbours must not pay.
+      for (let i = 0; i < 40; i++) await download('2001:db8:1:1::1');
+
+      for (let i = 2; i < 11; i++) {
+        expect((await download(`2001:db8:1:${i}::1`)).statusCode).toBe(200);
+        expect((await download(`2001:db8:1:${i}::2`)).statusCode).toBe(200);
+      }
+    });
+
+    it('should hold a /48 to the general limit too', async () => {
+      // General limit is 5, so 50 for the /48.
+      const health = (remoteAddress: string) =>
+        app.inject({ method: 'GET', url: '/api/health', remoteAddress });
+      for (let i = 0; i < 50; i++) {
+        expect((await health(`2001:db8:1:${i.toString(16)}::1`)).statusCode).toBe(200);
+      }
+      expect((await health('2001:db8:1:ff::1')).statusCode).toBe(429);
+    });
+  });
 });
 
 describe('Rate-limit middleware, a client with no address', () => {

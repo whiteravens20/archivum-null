@@ -61,3 +61,20 @@ export function clientKey(ip: string): string {
     .map((group) => group.toString(16))
     .join(':')}::/64`;
 }
+
+/**
+ * Key of the wider network a client belongs to, or null when it has none to count.
+ *
+ * Whoever holds an IPv6 /48 holds 65,536 /64s, each a client of its own to `clientKey()`.
+ * A /48 therefore also shares one count, with a higher limit (see SHARED_LIMIT_FACTOR).
+ * An IPv4 address has no such neighbours: a block of them is not handed out for nothing.
+ */
+export function networkKey(ip: string): string | null {
+  if (isIP(ip) !== 6) return null;
+  const groups = ipv6Groups(ip);
+  if (isIpv4Mapped(groups)) return null;
+  return `${groups
+    .slice(0, 3)
+    .map((group) => group.toString(16))
+    .join(':')}::/48`;
+}

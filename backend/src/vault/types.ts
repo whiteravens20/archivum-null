@@ -27,6 +27,8 @@ export interface ChunkedUploadSession {
   expiresAt: number;
   /** Client IP that opened the session — used to cap concurrent sessions per IP. */
   clientIp?: string;
+  /** The wider network of that client, when it has one: it shares a cap as well. */
+  clientNetwork?: string | null;
   /** Set while a chunk is being written or the upload is being finalised. */
   writing?: boolean;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clientKey, UNKNOWN_CLIENT } from '../middleware/clientKey.js';
+import { clientKey, networkKey, UNKNOWN_CLIENT } from '../middleware/clientKey.js';
 
 describe('clientKey', () => {
   it.each([
@@ -38,5 +38,32 @@ describe('clientKey', () => {
 
   it('has an answer for a request whose address is gone', () => {
     expect(clientKey(undefined as unknown as string)).toBe(UNKNOWN_CLIENT);
+  });
+});
+
+describe('networkKey', () => {
+  it.each([
+    ['2001:db8:1:2:aaaa:bbbb:cccc:dddd', '2001:db8:1::/48'],
+    ['2001:DB8:0001:ffff::1', '2001:db8:1::/48'],
+    ['2001:db8::1', '2001:db8:0::/48'],
+    ['fe80::1%eth0', 'fe80:0:0::/48'],
+  ])('%s -> %s', (ip, key) => {
+    expect(networkKey(ip)).toBe(key);
+  });
+
+  it('gives all /64s of one /48 the same key', () => {
+    expect(networkKey('2001:db8:1:2::a')).toBe(networkKey('2001:db8:1:ffff::a'));
+    expect(networkKey('2001:db8:1:2::a')).not.toBe(networkKey('2001:db8:2:2::a'));
+  });
+
+  it.each([['203.0.113.7'], ['::ffff:203.0.113.7'], ['::ffff:cb00:7107'], ['not-an-ip']])(
+    'gives %s, which is not IPv6, none',
+    (value) => {
+      expect(networkKey(value)).toBeNull();
+    },
+  );
+
+  it('cannot be confused with a client key', () => {
+    expect(networkKey('2001:db8:1:2::a')).not.toBe(clientKey('2001:db8:1:2::a'));
   });
 });

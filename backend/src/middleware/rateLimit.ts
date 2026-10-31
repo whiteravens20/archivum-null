@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { config } from '../config.js';
-import { clientKey, UNKNOWN_CLIENT } from './clientKey.js';
+import { config, SHARED_LIMIT_FACTOR } from '../config.js';
+import { clientKey, networkKey, UNKNOWN_CLIENT } from './clientKey.js';
 import { requestPath } from './requestPath.js';
 
 /**
@@ -22,6 +22,7 @@ import { requestPath } from './requestPath.js';
  * X-Forwarded-For manually; that would bypass the trust chain and allow
  * clients to spoof their IP. Buckets are keyed by `clientKey()`, which groups
  * IPv6 clients by /64 so rotating addresses inside one allocation gains nothing.
+ * On top of that a whole /48 shares a higher limit, see `networkKey()`.
  */
 export interface RateBucket {
   count: number;
@@ -97,13 +98,14 @@ function tooManyRequests(
 
 function checkLimit(
   map: Map<string, RateBucket>,
-  ip: string,
+  client: string,
+  network: string | null,
   max: number,
   windowMs: number,
   reply: FastifyReply,
 ): boolean {
   const now = Date.now();
-  const bucket = currentBucket(map, ip, windowMs, now);
+  const bucket = currentBucket(map, client, windowMs, now);
   bucket.count++;
 
   reply.header('X-RateLimit-Limit', max);
@@ -113,6 +115,18 @@ function checkLimit(
   if (bucket.count > max) {
     tooManyRequests(reply, bucket, now, 'Too many requests. Try again later.');
     return false;
+  }
+
+  // Counted only once the client's own limit has let the request through: what one client
+  // sends after it has been refused must not use up what its neighbours share.
+  if (network !== null) {
+    const shared = currentBucket(map, network, windowMs, now);
+    shared.count++;
+    if (shared.count > max * SHARED_LIMIT_FACTOR) {
+      reply.header('X-RateLimit-Remaining', 0);
+      tooManyRequests(reply, shared, now, 'Too many requests. Try again later.');
+      return false;
+    }
   }
   return true;
 }
@@ -134,11 +148,12 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     if (!pathname.startsWith('/api/')) return;
 
     // `request.ip` is already resolved via Fastify's trustProxy chain.
-    const ip = clientKey(request.ip);
+    const client = clientKey(request.ip);
+    const network = networkKey(request.ip);
 
     // Without the value: it is whatever a client wrote. A proxy that adds a port to the
     // address would otherwise put all visitors in one bucket with nothing to say why.
-    if (ip === UNKNOWN_CLIENT && !reportedUnknownClient) {
+    if (client === UNKNOWN_CLIENT && !reportedUnknownClient) {
       reportedUnknownClient = true;
       request.log.warn(
         'A client address that came through the proxy is not an IP address, and such clients share one rate-limit bucket. Check what the reverse proxy sends in X-Forwarded-For.',
@@ -146,7 +161,8 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     }
 
     // Tier 1 — general API limit (guards /api/tos file I/O, vault GET, etc.)
-    if (!checkLimit(apiBuckets, ip, config.RATE_LIMIT_API_MAX, windowMs, reply)) return;
+    const generalMax = config.RATE_LIMIT_API_MAX;
+    if (!checkLimit(apiBuckets, client, network, generalMax, windowMs, reply)) return;
 
     // Tier 2a — admin routes: a limit on failed logins, not on requests. basicAuth adds
     // to the bucket when credentials are missing or wrong, so a signed-in panel may
@@ -155,7 +171,7 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
     // password included: guessing must not go on, or learn anything, while locked out.
     if (pathname.startsWith('/api/admin')) {
       const now = Date.now();
-      const failures = adminBuckets.get(ip);
+      const failures = adminBuckets.get(client);
       if (failures && failures.resetAt > now && failures.count >= config.RATE_LIMIT_ADMIN_MAX) {
         tooManyRequests(reply, failures, now, 'Too many failed login attempts. Try again later.');
         return;
@@ -169,14 +185,16 @@ export async function rateLimitPlugin(app: FastifyInstance): Promise<void> {
       (pathname === '/api/vault' && request.method === 'POST') ||
       (pathname === '/api/vault/upload/init' && request.method === 'POST');
     if (isNewUpload) {
-      if (!checkLimit(uploadBuckets, ip, config.RATE_LIMIT_MAX, windowMs, reply)) return;
+      const uploadMax = config.RATE_LIMIT_MAX;
+      if (!checkLimit(uploadBuckets, client, network, uploadMax, windowMs, reply)) return;
     }
 
     // Tier 3 — download limit (prevents bulk enumeration / download exhaustion).
     // Whatever the method: only GET is routed, but a request made with another one is
     // still counted where a download would be, not in the looser general tier.
     if (/^\/api\/vault\/[^/]+\/download$/.test(pathname)) {
-      checkLimit(downloadBuckets, ip, config.RATE_LIMIT_DOWNLOAD_MAX, windowMs, reply);
+      const downloadMax = config.RATE_LIMIT_DOWNLOAD_MAX;
+      checkLimit(downloadBuckets, client, network, downloadMax, windowMs, reply);
     }
   });
 }

@@ -398,6 +398,20 @@ describe('Vault routes', () => {
     expect(mockManager.initChunkedUpload).toHaveBeenCalledOnce();
   });
 
+  it('POST /api/vault/upload/init counts an IPv6 client by its /64 and its /48', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vault/upload/init',
+      remoteAddress: '2001:db8:1:2::5',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ totalSize: 200 }),
+    });
+
+    expect(res.statusCode).toBe(201);
+    const call = mockManager.initChunkedUpload.mock.calls.at(-1) as unknown[];
+    expect(call.slice(-2)).toEqual(['2001:db8:1:2::/64', '2001:db8:1::/48']);
+  });
+
   it('POST /api/vault/upload/init returns 400 when totalSize is missing', async () => {
     const res = await app.inject({
       method: 'POST',

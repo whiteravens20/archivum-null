@@ -514,6 +514,71 @@ describe('VaultManager — download counter atomicity', () => {
     await capped.shutdown();
   });
 
+  describe('what a client can hold', () => {
+    const NETWORK = '2001:db8:1::/48';
+    const inNetwork = (i: number) => `2001:db8:1:${i.toString(16)}::/64`;
+
+    async function startManager(env: Record<string, string>): Promise<VaultManagerType> {
+      vi.resetModules();
+      vi.stubEnv('STORAGE_PATH', tempDir);
+      vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+      vi.stubEnv('MAX_TTL', '604800');
+      for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+      const mod = await import('../vault/manager.js');
+      const started = new mod.VaultManager();
+      await started.init();
+      return started;
+    }
+
+    it('caps the sessions of a whole network at ten times those of a client', async () => {
+      const capped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '1' });
+
+      const first = capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(0), NETWORK);
+      for (let i = 1; i < 10; i++) {
+        capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(i), NETWORK);
+      }
+      expect(() =>
+        capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(10), NETWORK),
+      ).toThrow(/Too many concurrent uploads/);
+
+      // Another network has its own count.
+      expect(() =>
+        capped.initChunkedUpload(100, 3600, 1, undefined, '2001:db8:2:1::/64', '2001:db8:2::/48'),
+      ).not.toThrow();
+
+      // Ending one session frees its place in the network too.
+      await capped.abortChunkedUpload(first.uploadId);
+      expect(() =>
+        capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(10), NETWORK),
+      ).not.toThrow();
+
+      await capped.shutdown();
+    });
+
+    it('applies no network cap with the session cap switched off', async () => {
+      const uncapped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '0' });
+      for (let i = 0; i < 30; i++) {
+        uncapped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(1), NETWORK);
+      }
+      await uncapped.shutdown();
+    });
+
+    it('keeps no slot for a session the quota refused', async () => {
+      const capped = await startManager({
+        MAX_UPLOAD_SESSIONS_PER_IP: '1',
+        MAX_TOTAL_STORAGE: '100',
+      });
+      const ip = '203.0.113.20';
+
+      expect(() => capped.initChunkedUpload(200, 3600, 1, undefined, ip)).toThrow(
+        /Storage quota exceeded/,
+      );
+      expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).not.toThrow();
+
+      await capped.shutdown();
+    });
+  });
+
   // ------------------------------------------------------------------
   // Orphan cleanup on startup
   // ------------------------------------------------------------------
