@@ -192,9 +192,12 @@ describe('applyBranding', () => {
 
   it('leaves the rest of the page as it was', () => {
     const page = applyBranding(SOURCE_PAGE, DEFAULTS);
+    // The two tags it replaces come out whole first: a tag can span several lines.
+    const rest = SOURCE_PAGE.replace(/<title>[\s\S]*?<\/title>/i, '').replace(/<meta\s+name="description"[^>]*>/i, '');
 
-    for (const line of SOURCE_PAGE.split('\n')) {
-      if (/<html\b|<title>|name="description"|<\/head>/.test(line)) continue;
+    expect(rest).not.toContain('name="description"');
+    for (const line of rest.split('\n')) {
+      if (/<html\b|<\/head>/.test(line)) continue;
       expect(page).toContain(line);
     }
   });
