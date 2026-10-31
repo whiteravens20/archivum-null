@@ -6,7 +6,7 @@
 # (.github/dependabot.yml).
 
 # Stage 1: Build backend
-FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS backend-build
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS backend-build
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* backend/.npmrc* ./
 RUN npm ci --ignore-scripts
@@ -14,7 +14,7 @@ COPY backend/ ./
 RUN npm run build
 
 # Stage 2: Build frontend
-FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS frontend-build
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* frontend/.npmrc* ./
 RUN npm ci --ignore-scripts
@@ -22,7 +22,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 3: Production image
-FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS production
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS production
 
 # Upgrade the OS packages, then have the package manager remove itself. Nothing
 # installs a package in a running container, and with apk-tools go the packages only
