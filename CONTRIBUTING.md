@@ -320,7 +320,7 @@ Archivum Null is a security-sensitive project. The following rules apply strictl
 
 ### AI-assisted code
 
-Most of this project is written with AI coding tools, as the [README](README.md#how-the-code-is-written-and-checked) describes, and contributions may be too. The same standard applies to every contribution:
+This project is built using AI coding tools, as the [README](README.md#how-the-code-is-written-and-checked) describes, and contributions may be too. The same standard applies to every contribution:
 
 - Read AI-generated code line by line before you submit it.
 - Take extra care with the security-critical files: `crypto/encrypt.ts`, `middleware/basicAuth.ts`, `storage/local.ts` and the vault expiry logic.
