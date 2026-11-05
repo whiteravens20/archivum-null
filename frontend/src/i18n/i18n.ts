@@ -109,6 +109,7 @@ export function createTranslator(
 ): Translator {
   const numbers = new Intl.NumberFormat(locale);
   const plurals = new Intl.PluralRules(lang);
+  const englishPlurals = new Intl.PluralRules('en');
 
   // Own keys only: `constructor` or `__proto__` is not a message.
   const lookup = (messages: Catalogue, key: string) =>
@@ -123,7 +124,9 @@ export function createTranslator(
       return typeof value === 'number' ? numbers.format(value) : value;
     });
 
-  const text = (key: string): string => lookup(MESSAGES[lang], key) ?? key;
+  // A message the language lacks is shown in English, so a key never reaches the page.
+  const text = (key: string): string =>
+    lookup(MESSAGES[lang], key) ?? lookup(MESSAGES.en, key) ?? key;
 
   function t(key: TextKey, vars: Readonly<Record<string, string | number>> = {}): string {
     return fill(text(key), vars);
@@ -134,7 +137,10 @@ export function createTranslator(
     locale,
     t: t as Translator['t'],
     plural(key, count) {
-      const form = lookup(MESSAGES[lang], `${key}_${plurals.select(count)}`);
+      // English forms go by the English rules
+      const form =
+        lookup(MESSAGES[lang], `${key}_${plurals.select(count)}`) ??
+        lookup(MESSAGES.en, `${key}_${englishPlurals.select(count)}`);
       return form === undefined ? key : fill(form, { count });
     },
     rich(key, slots) {
