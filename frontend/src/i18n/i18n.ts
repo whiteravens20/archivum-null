@@ -1,8 +1,13 @@
 import { createContext, createElement, Fragment, useContext, type ReactNode } from 'react';
-import { en } from './messages/en.ts';
-import { pl } from './messages/pl.ts';
+import en from './messages/en.json';
+import pl from './messages/pl.json';
+import type { PLACEHOLDERS } from './placeholders.ts';
 
-/** The interface languages. English is the source the others translate. */
+/**
+ * The interface languages, the only ones loaded and offered. English is the source the
+ * others translate. A language joins this list once its file in messages/ has every
+ * message; until then the file may hold part of them, and it is not loaded.
+ */
 export const LANGUAGES = ['en', 'pl'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
@@ -49,35 +54,34 @@ export function localeFor(lang: Language, preferred: readonly string[]): string 
   return lang;
 }
 
-type En = typeof en;
+/**
+ * A language's messages by key. A message that depends on a number has a key for each
+ * plural category whole numbers fall into in the language: `<key>_one`, `<key>_few`...
+ */
+type Catalogue = Readonly<Record<string, string>>;
 
-/** The forms of a message that depends on a number, one per plural category it can fall into. */
-export type PluralForms = Readonly<
-  Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }
->;
+const MESSAGES: Record<Language, Catalogue> = { en, pl };
 
-/** What a translation provides: every key of the English messages, with the same kind of value. */
-export type Messages = { readonly [K in keyof En]: En[K] extends string ? string : PluralForms };
+type Key = keyof typeof en;
+type PluralBase<K> = K extends `${infer Base}_other` ? Base : never;
 
+/** A message that depends on a number. English has an `_other` form for each. */
+export type PluralKey = PluralBase<Key>;
 /** A plain message. */
-export type TextKey = { [K in keyof En]: En[K] extends string ? K : never }[keyof En];
-/** A message that depends on a number. */
-export type PluralKey = Exclude<keyof En, TextKey>;
+export type TextKey = Exclude<Key, `${PluralKey}_${Intl.LDMLPluralRule}`>;
 
 /** The names of a message's `{placeholders}`. */
-type Placeholders<S> = S extends `${string}{${infer Name}}${infer Rest}`
-  ? Name | Placeholders<Rest>
+type Placeholders<K extends TextKey> = K extends keyof typeof PLACEHOLDERS
+  ? (typeof PLACEHOLDERS)[K][number]
   : never;
-type Vars<K extends TextKey> = Readonly<Record<Placeholders<En[K]>, string | number>>;
+type Vars<K extends TextKey> = Readonly<Record<Placeholders<K>, string | number>>;
 /** The values a message takes: none, or one for each of its placeholders. */
-type VarsArg<K extends TextKey> = [Placeholders<En[K]>] extends [never] ? [] : [vars: Vars<K>];
+type VarsArg<K extends TextKey> = [Placeholders<K>] extends [never] ? [] : [vars: Vars<K>];
 
 /** A message kept to be shown later. It is held as its key, so it follows a change of language. */
 export type Message = {
-  [K in TextKey]: [Placeholders<En[K]>] extends [never] ? { key: K } : { key: K; vars: Vars<K> };
+  [K in TextKey]: [Placeholders<K>] extends [never] ? { key: K } : { key: K; vars: Vars<K> };
 }[TextKey];
-
-export const MESSAGES: Record<Language, Messages> = { en, pl };
 
 export interface Translator {
   lang: Language;
@@ -90,10 +94,7 @@ export interface Translator {
    * A message with React nodes in its placeholders, for markup inside a sentence.
    * The markup stays in the code; nothing in a message is parsed as HTML.
    */
-  rich<K extends TextKey>(
-    key: K,
-    slots: Readonly<Record<Placeholders<En[K]>, ReactNode>>,
-  ): ReactNode;
+  rich<K extends TextKey>(key: K, slots: Readonly<Record<Placeholders<K>, ReactNode>>): ReactNode;
   message(message: Message): string;
   /** Switch the interface to another language. */
   setLang(lang: Language): void;
@@ -106,13 +107,12 @@ export function createTranslator(
   locale: string,
   setLang: (lang: Language) => void,
 ): Translator {
-  const messages = MESSAGES[lang];
   const numbers = new Intl.NumberFormat(locale);
   const plurals = new Intl.PluralRules(lang);
 
   // Own keys only: `constructor` or `__proto__` is not a message.
-  const lookup = (key: string) =>
-    Object.hasOwn(messages, key) ? messages[key as keyof Messages] : undefined;
+  const lookup = (messages: Catalogue, key: string) =>
+    Object.hasOwn(messages, key) ? messages[key] : undefined;
 
   // One pass over the message: what a value brings in is never read again, so a file
   // name such as `{actual}` or `$&` shows as itself.
@@ -123,10 +123,7 @@ export function createTranslator(
       return typeof value === 'number' ? numbers.format(value) : value;
     });
 
-  const text = (key: string): string => {
-    const message = lookup(key);
-    return typeof message === 'string' ? message : key;
-  };
+  const text = (key: string): string => lookup(MESSAGES[lang], key) ?? key;
 
   function t(key: TextKey, vars: Readonly<Record<string, string | number>> = {}): string {
     return fill(text(key), vars);
@@ -137,9 +134,8 @@ export function createTranslator(
     locale,
     t: t as Translator['t'],
     plural(key, count) {
-      const forms = lookup(key);
-      if (typeof forms !== 'object') return key;
-      return fill(forms[plurals.select(count)] ?? forms.other, { count });
+      const form = lookup(MESSAGES[lang], `${key}_${plurals.select(count)}`);
+      return form === undefined ? key : fill(form, { count });
     },
     rich(key, slots) {
       const named: Readonly<Record<string, ReactNode>> = slots;
