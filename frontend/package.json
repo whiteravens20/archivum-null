@@ -11,6 +11,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "messages": "node scripts/messages.mjs",
     "lint": "eslint src/ --max-warnings 0",
     "lint:fix": "eslint src/ --fix",
     "test": "vitest run",

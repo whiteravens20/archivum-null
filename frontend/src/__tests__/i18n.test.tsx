@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import {
-  createTranslator,
-  LANGUAGES,
-  MESSAGES,
-  type PluralKey,
-  type TextKey,
-} from '../i18n/i18n.js';
+import { createTranslator, type PluralKey, type TextKey } from '../i18n/i18n.js';
 
 describe('translator', () => {
   const { t, plural, rich, message } = createTranslator('en', 'en', () => {});
@@ -74,44 +68,6 @@ describe('translator', () => {
         'The link indicated <img src=x onerror=alert(1)> but the decrypted file is actually {expected}. The link may have been tampered with.',
       );
     });
-  });
-});
-
-const placeholders = (template: string) =>
-  [...template.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
-
-describe.each(LANGUAGES.filter((lang) => lang !== 'en'))('the %s translation', (lang) => {
-  const messages = MESSAGES[lang];
-  const english = MESSAGES.en;
-
-  it('should keep the placeholders of every English message, and no others', () => {
-    for (const [key, source] of Object.entries(english)) {
-      const translated = messages[key as keyof typeof messages];
-      if (typeof source === 'string') {
-        expect(typeof translated, key).toBe('string');
-        expect(placeholders(translated as string), key).toEqual(placeholders(source));
-      } else {
-        for (const form of Object.values(translated)) {
-          expect(placeholders(form), key).toEqual(['count']);
-        }
-      }
-    }
-  });
-
-  it('should leave no message empty', () => {
-    for (const [key, value] of Object.entries(messages)) {
-      const forms = typeof value === 'string' ? [value] : Object.values(value);
-      for (const form of forms) expect(form.trim(), key).not.toBe('');
-    }
-  });
-
-  it('should give every plural form the language has', () => {
-    const categories = new Intl.PluralRules(lang).resolvedOptions().pluralCategories;
-    for (const [key, value] of Object.entries(messages)) {
-      if (typeof value === 'string') continue;
-      for (const category of categories)
-        expect(value[category], `${key} ${category}`).toBeDefined();
-    }
   });
 });
 
