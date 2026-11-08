@@ -563,6 +563,58 @@ describe('VaultManager — download counter atomicity', () => {
       await uncapped.shutdown();
     });
 
+    it('gives back once what a session cancelled while it was being finished held', async () => {
+      const capped = await startManager({
+        MAX_UPLOAD_SESSIONS_PER_IP: '2',
+        MAX_TOTAL_STORAGE: '1000',
+      });
+      // The manager's own storage class, from the module registry it was loaded with.
+      const { LocalStorage } = await import('../storage/local.js');
+      const ip = '203.0.113.24';
+
+      // Another upload of the same client stays open: one slot and 800 bytes are its.
+      capped.initChunkedUpload(800, 3600, 1, undefined, ip);
+
+      const session = capped.initChunkedUpload(50, 3600, 1, undefined, ip);
+      await capped.appendChunk(session.uploadId, 0, makeStream('x'.repeat(50)));
+
+      // The finished file is moved into place, and the move then waits until the test
+      // lets it go: the cancellation below arrives after the move and before the session
+      // is done with, while it is still in the map.
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const finalize = LocalStorage.prototype.finalizeChunkedUpload;
+      const held = vi
+        .spyOn(LocalStorage.prototype, 'finalizeChunkedUpload')
+        .mockImplementation(async function (
+          this: InstanceType<typeof LocalStorage>,
+          uploadId,
+          vaultId,
+        ) {
+          await finalize.call(this, uploadId, vaultId);
+          await gate;
+        });
+
+      const finishing = capped.completeChunkedUpload(session.uploadId);
+      await capped.abortChunkedUpload(session.uploadId);
+      release();
+      await finishing;
+      held.mockRestore();
+
+      // The open upload's 800 bytes still count: with the 50 now stored, 150 are free,
+      // and 200 do not fit. Taken off it once more, its reservation would let them in.
+      expect(() => capped.initChunkedUpload(200, 3600, 1, undefined, '198.51.100.30')).toThrow(
+        /Storage quota exceeded/,
+      );
+      // And it keeps its slot: one more session of the client fits, a second does not.
+      expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).not.toThrow();
+      expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).toThrow(
+        /Too many concurrent uploads/,
+      );
+
+      await capped.shutdown();
+    });
+
     it('keeps no slot for a session the quota refused', async () => {
       const capped = await startManager({
         MAX_UPLOAD_SESSIONS_PER_IP: '1',

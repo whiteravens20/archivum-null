@@ -168,6 +168,14 @@ export class VaultManager {
    * Must be called whenever a session is discarded (completed, aborted, or expired).
    */
   private releaseSessionAccounting(session: ChunkedUploadSession): void {
+    // Once per session, whoever gets here. Two requests can reach this for one session:
+    // an abort while a complete is mid-rename, a late chunk and a complete that both
+    // find the session expired, or either of them racing purgeExpired. A second release
+    // hands back a reservation and a slot that this session no longer holds, and they
+    // are taken from whatever else the client has running: its uploads lose their slots
+    // while they are still being written, and the quota counts less than is held.
+    if (!session.accounted) return;
+    session.accounted = false;
     reservedBytes = Math.max(0, reservedBytes - session.totalSize);
     this.releaseUploadSlot(session.clientIp, session.clientNetwork);
   }
@@ -351,6 +359,8 @@ export class VaultManager {
       clientIp,
       clientNetwork,
       lastActivityAt: Date.now(),
+      // Both were taken above, and are this session's until it gives them back.
+      accounted: true,
     };
     uploadSessions.set(uploadId, session);
     return session;

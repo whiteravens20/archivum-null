@@ -33,4 +33,10 @@ export interface ChunkedUploadSession {
   lastActivityAt: number;
   /** Set while a chunk is being written or the upload is being finalised. */
   writing?: boolean;
+  /**
+   * Set while the session holds its quota reservation and its slot in the count of what
+   * its client has running. Cleared when they are given back, so that they are given
+   * back once and no other upload loses them.
+   */
+  accounted?: boolean;
 }
