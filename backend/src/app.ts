@@ -10,6 +10,7 @@ import { healthRoutes, termsServed } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
 import { isApiRequest } from './middleware/requestPath.js';
+import { pinPeerAddress } from './middleware/peerAddress.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
 import {
@@ -73,6 +74,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     // under the limits set for it below.
     bodyLimit: 16 * 1024,
   });
+
+  // Every connection's address, read when it is accepted: see middleware/peerAddress.ts.
+  app.server.on('connection', pinPeerAddress);
 
   // Security headers
   app.addHook('onSend', async (_request, reply, payload) => {
