@@ -8,6 +8,13 @@ const TURNSTILE_PLACEHOLDER = '0x0000000000000000000000';
 export const MIN_TTL_SECONDS = 60;
 export const MAX_DOWNLOADS_PER_VAULT = 1000;
 
+/**
+ * How many times a client's own limit a group of clients may use together: an IPv6 /48
+ * in every limit, and all clients together in failed admin logins. A limit per client
+ * says nothing about someone who can be many clients.
+ */
+export const SHARED_LIMIT_FACTOR = 10;
+
 // Per-chunk AES-GCM overhead: 12-byte IV + 16-byte GCM authentication tag = 28 bytes per chunk.
 const PER_CHUNK_OVERHEAD = 28;
 

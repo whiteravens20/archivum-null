@@ -4,6 +4,7 @@ import {
   calcEncryptionOverhead,
   MIN_TTL_SECONDS,
   MAX_DOWNLOADS_PER_VAULT,
+  SHARED_LIMIT_FACTOR,
 } from '../config.js';
 import { LocalStorage } from '../storage/local.js';
 import { nanoid } from 'nanoid';
@@ -23,11 +24,20 @@ const uploadSessions = new Map<string, ChunkedUploadSession>();
 let reservedBytes = 0;
 
 /**
- * Count of open (uncompleted) chunked-upload sessions per client IP.
+ * Count of uploads in progress per client IP and per wider network: open chunked-upload
+ * sessions and single-request uploads still being read. Each holds a reservation.
  * Caps how much storage quota a single IP can tie up via reservations
  * without ever completing an upload (reservation-exhaustion DoS).
  */
 const ipSessionCounts = new Map<string, number>();
+
+/**
+ * A chunked session gets no new chunk for this long, and it is dropped along with its
+ * reservation. A session otherwise holds its whole declared size against the quota until
+ * UPLOAD_SESSION_TTL, without a byte being sent. A chunk still being written does not count
+ * as idle, however slow the link, so what this has to outlast is the pause between chunks.
+ */
+export const UPLOAD_SESSION_IDLE_MS = 15 * 60_000;
 
 /** HMAC secret generated at startup — used to sign upload session tokens. */
 const sessionSecret = randomBytes(32);
@@ -139,7 +149,11 @@ export class VaultManager {
       .map(([id]) => this.deleteVault(id));
 
     const expiredSessions = Array.from(uploadSessions.entries())
-      .filter(([, session]) => session.expiresAt <= now)
+      .filter(
+        ([, session]) =>
+          session.expiresAt <= now ||
+          (!session.writing && session.lastActivityAt + UPLOAD_SESSION_IDLE_MS <= now),
+      )
       .map(([id, session]) => {
         this.releaseSessionAccounting(session);
         uploadSessions.delete(id);
@@ -154,11 +168,51 @@ export class VaultManager {
    * Must be called whenever a session is discarded (completed, aborted, or expired).
    */
   private releaseSessionAccounting(session: ChunkedUploadSession): void {
+    // Once per session, whoever gets here. Two requests can reach this for one session:
+    // an abort while a complete is mid-rename, a late chunk and a complete that both
+    // find the session expired, or either of them racing purgeExpired. A second release
+    // hands back a reservation and a slot that this session no longer holds, and they
+    // are taken from whatever else the client has running: its uploads lose their slots
+    // while they are still being written, and the quota counts less than is held.
+    if (!session.accounted) return;
+    session.accounted = false;
     reservedBytes = Math.max(0, reservedBytes - session.totalSize);
-    if (session.clientIp) {
-      const remaining = (ipSessionCounts.get(session.clientIp) ?? 0) - 1;
-      if (remaining <= 0) ipSessionCounts.delete(session.clientIp);
-      else ipSessionCounts.set(session.clientIp, remaining);
+    this.releaseUploadSlot(session.clientIp, session.clientNetwork);
+  }
+
+  /**
+   * Count one more upload in progress for a client, or refuse it. Without a cap, a single
+   * client can start many uploads — each reserving quota via reservedBytes — and never
+   * finish them, tying up MAX_TOTAL_STORAGE and blocking legitimate uploads
+   * (reservation-exhaustion DoS).
+   */
+  private takeUploadSlot(clientIp?: string, clientNetwork?: string | null): void {
+    if (clientIp && config.MAX_UPLOAD_SESSIONS_PER_IP > 0) {
+      const open = ipSessionCounts.get(clientIp) ?? 0;
+      const openNearby = clientNetwork ? (ipSessionCounts.get(clientNetwork) ?? 0) : 0;
+      if (
+        open >= config.MAX_UPLOAD_SESSIONS_PER_IP ||
+        openNearby >= config.MAX_UPLOAD_SESSIONS_PER_IP * SHARED_LIMIT_FACTOR
+      ) {
+        throw Object.assign(
+          new Error(
+            'Too many concurrent uploads. Complete or cancel an upload before starting another.',
+          ),
+          { statusCode: 429 },
+        );
+      }
+    }
+    for (const key of [clientIp, clientNetwork]) {
+      if (key) ipSessionCounts.set(key, (ipSessionCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  private releaseUploadSlot(clientIp?: string, clientNetwork?: string | null): void {
+    for (const key of [clientIp, clientNetwork]) {
+      if (!key) continue;
+      const remaining = (ipSessionCounts.get(key) ?? 0) - 1;
+      if (remaining <= 0) ipSessionCounts.delete(key);
+      else ipSessionCounts.set(key, remaining);
     }
   }
 
@@ -168,6 +222,8 @@ export class VaultManager {
     maxDownloads: number,
     chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE,
     declaredSize?: number,
+    clientIp?: string,
+    clientNetwork?: string | null,
   ): Promise<VaultMetadata> {
     // MAX_FILE_SIZE refers to the user's raw file — account for the encrypted
     // metadata header (filename + MIME) that the frontend prepends before encryption.
@@ -192,6 +248,10 @@ export class VaultManager {
         declared > 0 ? projected > config.MAX_TOTAL_STORAGE : projected >= config.MAX_TOTAL_STORAGE;
       if (over) throw quotaExceeded();
     }
+
+    // Held until the request has been read. A request can take as long as it likes to send
+    // its body, and without this one client could keep any number of reservations open.
+    this.takeUploadSlot(clientIp, clientNetwork);
 
     let held = declared;
     reservedBytes += held;
@@ -247,6 +307,7 @@ export class VaultManager {
       return meta;
     } finally {
       reservedBytes = Math.max(0, reservedBytes - held);
+      this.releaseUploadSlot(clientIp, clientNetwork);
     }
   }
 
@@ -258,6 +319,7 @@ export class VaultManager {
     maxDownloads: number,
     chunkPlaintextSize: number = config.CRYPTO_CHUNK_SIZE,
     clientIp?: string,
+    clientNetwork?: string | null,
   ): ChunkedUploadSession {
     const plaintextMax = config.MAX_FILE_SIZE + MAX_METADATA_HEADER;
     const maxAllowed = plaintextMax + calcEncryptionOverhead(plaintextMax);
@@ -269,33 +331,20 @@ export class VaultManager {
       throw Object.assign(new Error('Invalid total size'), { statusCode: 400 });
     }
 
-    // Cap concurrent open sessions per IP. Without this, a single client can open
-    // many sessions — each reserving quota via reservedBytes — and never complete
-    // them, tying up MAX_TOTAL_STORAGE and blocking legitimate uploads until the
-    // sessions expire (reservation-exhaustion DoS).
-    if (clientIp && config.MAX_UPLOAD_SESSIONS_PER_IP > 0) {
-      const open = ipSessionCounts.get(clientIp) ?? 0;
-      if (open >= config.MAX_UPLOAD_SESSIONS_PER_IP) {
-        throw Object.assign(
-          new Error(
-            'Too many concurrent uploads. Complete or cancel an upload before starting another.',
-          ),
-          { statusCode: 429 },
-        );
-      }
-    }
+    // Reserve a per-IP session slot for the duration of the upload.
+    this.takeUploadSlot(clientIp, clientNetwork);
 
     // Enforce global storage quota — include reservedBytes to prevent TOCTOU.
     if (config.MAX_TOTAL_STORAGE > 0) {
       const { totalStorageBytes } = this.getStats();
       if (totalStorageBytes + reservedBytes + totalSize > config.MAX_TOTAL_STORAGE) {
+        this.releaseUploadSlot(clientIp, clientNetwork);
         throw quotaExceeded();
       }
     }
 
-    // Reserve quota and a per-IP session slot for the duration of the upload.
+    // Reserve quota for the duration of the upload.
     reservedBytes += totalSize;
-    if (clientIp) ipSessionCounts.set(clientIp, (ipSessionCounts.get(clientIp) ?? 0) + 1);
 
     const uploadId = nanoid(ID_LENGTH);
     const session: ChunkedUploadSession = {
@@ -308,6 +357,10 @@ export class VaultManager {
       chunkPlaintextSize,
       expiresAt: Date.now() + config.UPLOAD_SESSION_TTL * 1000,
       clientIp,
+      clientNetwork,
+      lastActivityAt: Date.now(),
+      // Both were taken above, and are this session's until it gives them back.
+      accounted: true,
     };
     uploadSessions.set(uploadId, session);
     return session;
@@ -361,6 +414,7 @@ export class VaultManager {
       session.nextChunkIndex += 1;
     } finally {
       session.writing = false;
+      session.lastActivityAt = Date.now();
     }
 
     return session;

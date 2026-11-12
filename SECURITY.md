@@ -90,18 +90,20 @@ from becoming an attack surface:
 - [x] Turnstile API call has a 10-second timeout (`AbortSignal.timeout`) — prevents hung workers on Cloudflare degradation; returns HTTP 504 on timeout
 - [x] Four-tier in-memory per-IP rate limiting:
   - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
-  - Admin tier: failed logins on `/api/admin` (default 10 per window) — once reached, every admin request from that client is refused until the window ends, a correct password included; requests with valid credentials are not counted
+  - Admin tier: failed logins on `/api/admin` (default 10 per window) — once reached, every admin request from that client is refused until the window ends, a correct password included; requests with valid credentials are not counted. Ten times as many failures from all clients together refuse everyone until the window ends, and are logged
   - Upload tier: `POST /api/vault` and `POST /api/vault/upload/init` (default 10 req/window) — stricter
   - Download tier: `/api/vault/:id/download`, whatever the method (default 30 req/window) — prevents bulk download exhaustion
-- [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
-- [x] IPv6 clients rate-limited and capped on open upload sessions per /64, not per address — rotating addresses inside one allocation gains no extra quota
+- [x] Limits follow the route the router matched, not the text of the URL — a path written another way, percent-encoded or as an absolute URL, counts where the plain path does
+- [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing); a forwarded value that is no address gets no bucket of its own
+- [x] IPv6 clients rate-limited and capped on uploads in progress per /64, not per address — rotating addresses inside one allocation gains no extra quota; a whole /48 shares ten times each limit
+- [x] The memory rate limiting uses is bounded — at most 100,000 clients per tier, the oldest going first, and an address is forgotten within a minute of the end of its window
 - [x] `TRUST_PROXY` validated at startup: IPs, CIDR ranges with a non-zero prefix, or named private ranges only — hop counts are rejected, because a hop count cannot check who is connecting and lets a client that reaches the port directly spoof its IP (GHSA-3m5p-2c4r-xxw2)
 - [x] Max file size enforcement (413 response)
 - [x] CAPTCHA gate — with Turnstile on, the upload is blocked until the widget verifies; after 10 seconds without a result the page says so and keeps waiting, and it shows an error only when the widget reports a failure or the challenge expires
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
 - [x] Chunked upload sessions protected by HMAC-SHA256 session token — returned at `POST /api/vault/upload/init`, required on all subsequent `/chunk`, `/complete`, and abort requests (`x-session-token` header); token is signed server-side with a per-process random key and verified in constant time
-- [x] Storage quota enforced with reservations — a chunked upload holds its declared size for as long as its session is open and writes one chunk at a time; a single-request upload holds the length its request declares while it is written, and is then counted by what it stored. Uploads that overlap cannot together exceed `MAX_TOTAL_STORAGE`
+- [x] Storage quota enforced with reservations — a chunked upload holds its declared size for as long as its session is open and writes one chunk at a time, and a session with no new chunk for 15 minutes is dropped; a single-request upload holds the length its request declares while it is written, and is then counted by what it stored. Uploads that overlap cannot together exceed `MAX_TOTAL_STORAGE`, and one client can have only `MAX_UPLOAD_SESSIONS_PER_IP` of either kind in progress
 
 ### Client-Side Defenses
 

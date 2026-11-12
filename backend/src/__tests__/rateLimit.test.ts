@@ -14,6 +14,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import type * as RateLimit from '../middleware/rateLimit.js';
+import type { RateBucket } from '../middleware/rateLimit.js';
 
 describe('Rate-limit middleware', () => {
   let app: FastifyInstance;
@@ -254,5 +256,201 @@ describe('Rate-limit middleware', () => {
     expect((await download('2001:db8:1:2::2')).statusCode).toBe(200);
     expect((await download('2001:db8:1:2:ffff::3')).statusCode).toBe(429);
     expect((await download('2001:db8:1:3::1')).statusCode).toBe(200);
+  });
+
+  describe('what many clients get together', () => {
+    // A /48 and all clients together get ten times a client's limit.
+    const download = (remoteAddress: string) =>
+      app.inject({ method: 'GET', url: '/api/vault/test-id/download', remoteAddress });
+
+    it('should hold one IPv6 /48 to ten times the limit of a client', async () => {
+      // Download limit is 2, so 20 for the /48: ten /64s use it up.
+      for (let i = 0; i < 10; i++) {
+        expect((await download(`2001:db8:1:${i}::1`)).statusCode).toBe(200);
+        expect((await download(`2001:db8:1:${i}::2`)).statusCode).toBe(200);
+      }
+
+      const res = await download('2001:db8:1:ff::1');
+      expect(res.statusCode).toBe(429);
+      expect(res.headers['x-ratelimit-remaining']).toBe('0');
+      expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+
+      // Another /48 has its own count, and so does IPv4.
+      expect((await download('2001:db8:2::1')).statusCode).toBe(200);
+      expect((await download('203.0.113.9')).statusCode).toBe(200);
+    });
+
+    it('should not let what a refused client sends use up what its /48 shares', async () => {
+      // One /64 keeps going long after its own limit of 2. Its neighbours must not pay.
+      for (let i = 0; i < 40; i++) await download('2001:db8:1:1::1');
+
+      for (let i = 2; i < 11; i++) {
+        expect((await download(`2001:db8:1:${i}::1`)).statusCode).toBe(200);
+        expect((await download(`2001:db8:1:${i}::2`)).statusCode).toBe(200);
+      }
+    });
+
+    it('should hold a /48 to the general limit too', async () => {
+      // General limit is 5, so 50 for the /48.
+      const health = (remoteAddress: string) =>
+        app.inject({ method: 'GET', url: '/api/health', remoteAddress });
+      for (let i = 0; i < 50; i++) {
+        expect((await health(`2001:db8:1:${i.toString(16)}::1`)).statusCode).toBe(200);
+      }
+      expect((await health('2001:db8:1:ff::1')).statusCode).toBe(429);
+    });
+
+    it('should close the admin routes for everyone at ten times the limit of a client', async () => {
+      // Admin limit is 2, so 20 failed logins from all clients together.
+      for (let i = 0; i < 19; i++) {
+        expect(recordAdminAuthFailure(`203.0.113.${i}`)).toBe(false);
+      }
+      expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(200);
+
+      // The twentieth says so, once.
+      expect(recordAdminAuthFailure('203.0.113.100')).toBe(true);
+      expect(recordAdminAuthFailure('203.0.113.101')).toBe(false);
+
+      const res = await app.inject({ method: 'GET', url: '/api/admin/stats' });
+      expect(res.statusCode).toBe(429);
+      expect(res.json().error).toContain('failed login attempts');
+      expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+
+      // Nothing outside the panel is touched.
+      expect((await app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
+    });
+
+    it('should open the admin routes again when the window ends', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        for (let i = 0; i < 20; i++) recordAdminAuthFailure(`203.0.113.${i}`);
+        expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(429);
+
+        vi.setSystemTime(Date.now() + 61_000);
+        expect((await app.inject({ method: 'GET', url: '/api/admin/stats' })).statusCode).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+});
+
+describe('Rate-limit middleware, a client with no address', () => {
+  it('should tell the operator once, without repeating what was sent', async () => {
+    vi.resetModules();
+    const warn = vi.fn();
+    const logger = {
+      warn,
+      info: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      fatal: vi.fn(),
+      trace: vi.fn(),
+      level: 'info',
+      child: () => logger,
+    };
+    const app = Fastify({ loggerInstance: logger as never, trustProxy: true });
+    const { rateLimitPlugin } = await import('../middleware/rateLimit.js');
+    await rateLimitPlugin(app);
+    app.get('/api/health', async () => ({ status: 'ok' }));
+    await app.ready();
+
+    for (const value of ['203.0.113.7:51234', 'secret-looking-string']) {
+      await app.inject({
+        method: 'GET',
+        url: '/api/health',
+        headers: { 'x-forwarded-for': value },
+      });
+    }
+    await app.inject({ method: 'GET', url: '/api/health', remoteAddress: '198.51.100.1' });
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0])).toContain('X-Forwarded-For');
+    expect(String(warn.mock.calls[0])).not.toContain('203.0.113.7');
+    await app.close();
+  });
+});
+
+describe('Rate-limit buckets', () => {
+  type Map_ = Map<string, RateBucket>;
+  const WINDOW = 60_000;
+  let buckets: typeof RateLimit;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    buckets = await import('../middleware/rateLimit.js');
+  });
+
+  it('should go on with a bucket until its window ends, then start afresh', () => {
+    const map: Map_ = new Map();
+    const first = buckets.currentBucket(map, 'a', WINDOW, 1000);
+    first.count = 5;
+
+    expect(buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW - 1)).toBe(first);
+
+    const next = buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW);
+    expect(next).not.toBe(first);
+    expect(next.count).toBe(0);
+    expect(next.resetAt).toBe(1000 + 2 * WINDOW);
+  });
+
+  it('should keep the map in the order the buckets started, a restarted one included', () => {
+    const map: Map_ = new Map();
+    buckets.currentBucket(map, 'a', WINDOW, 1000);
+    buckets.currentBucket(map, 'b', WINDOW, 2000);
+    buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW);
+
+    expect([...map.keys()]).toEqual(['b', 'a']);
+  });
+
+  it('should forget the buckets whose window has ended, and no others', () => {
+    const map: Map_ = new Map();
+    buckets.currentBucket(map, 'a', WINDOW, 1000);
+    buckets.currentBucket(map, 'b', WINDOW, 2000);
+    buckets.currentBucket(map, 'c', WINDOW, 3000);
+
+    buckets.forgetExpired(map, 2000 + WINDOW);
+    expect([...map.keys()]).toEqual(['c']);
+
+    buckets.forgetExpired(map, 3000 + WINDOW);
+    expect(map.size).toBe(0);
+  });
+
+  it('should forget a bucket that ended behind one that was restarted', () => {
+    const map: Map_ = new Map();
+    buckets.currentBucket(map, 'a', WINDOW, 1000);
+    buckets.currentBucket(map, 'b', WINDOW, 2000);
+    buckets.currentBucket(map, 'a', WINDOW, 1000 + WINDOW);
+
+    buckets.forgetExpired(map, 2000 + WINDOW);
+    expect([...map.keys()]).toEqual(['a']);
+  });
+
+  it('should keep count of no more clients than the limit, dropping the oldest', () => {
+    const map: Map_ = new Map();
+    for (let i = 0; i < buckets.MAX_TRACKED_CLIENTS; i++) {
+      buckets.currentBucket(map, `client-${i}`, WINDOW, 1000);
+    }
+    expect(map.size).toBe(buckets.MAX_TRACKED_CLIENTS);
+
+    buckets.currentBucket(map, 'one more', WINDOW, 1000);
+    expect(map.size).toBe(buckets.MAX_TRACKED_CLIENTS);
+    expect(map.has('client-0')).toBe(false);
+    expect(map.has('client-1')).toBe(true);
+    expect(map.has('one more')).toBe(true);
+  });
+
+  it('should make room by dropping what has ended before anything still running', () => {
+    const map: Map_ = new Map();
+    for (let i = 0; i < buckets.MAX_TRACKED_CLIENTS; i++) {
+      buckets.currentBucket(map, `client-${i}`, WINDOW, i < 10 ? 1000 : 1000 + WINDOW);
+    }
+
+    buckets.currentBucket(map, 'one more', WINDOW, 1000 + WINDOW);
+
+    // The ten that ended all went; nothing still running had to.
+    expect(map.size).toBe(buckets.MAX_TRACKED_CLIENTS - 9);
+    expect(map.has('client-10')).toBe(true);
+    expect(map.has('client-9')).toBe(false);
   });
 });
