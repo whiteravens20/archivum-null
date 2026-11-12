@@ -49,9 +49,7 @@ describe('UploadZone', () => {
 
   it('should call onFileSelect for valid file', () => {
     const onFileSelect = vi.fn();
-    const { container } = render(
-      <UploadZone onFileSelect={onFileSelect} maxSize={1024 * 1024} />
-    );
+    const { container } = render(<UploadZone onFileSelect={onFileSelect} maxSize={1024 * 1024} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 
     const file = new File(['content'], 'test.txt', { type: 'text/plain' });

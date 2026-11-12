@@ -1,0 +1,5 @@
+# Commits that change layout only. GitHub's blame view skips them; locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: format the repository with Prettier
+852b0ae632536e0ca9d5c3fd727fe4554e7dcabb

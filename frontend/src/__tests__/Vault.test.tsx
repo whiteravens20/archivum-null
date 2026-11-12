@@ -39,7 +39,7 @@ function renderVault(vaultId: string, hash = '') {
       <Routes>
         <Route path="/vault/:vaultId" element={<VaultPage />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -72,7 +72,9 @@ describe('Vault page', () => {
   it('should say why from the status, not from what the server wrote', async () => {
     mockGetVaultInfo.mockRejectedValue(new ApiError(429, 'Too many requests. Try again later.'));
     renderVault('busy');
-    expect(await screen.findByText('Too many requests. Wait a moment and try again.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Too many requests. Wait a moment and try again.'),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Try again later/)).not.toBeInTheDocument();
   });
 
@@ -112,9 +114,7 @@ describe('Vault page', () => {
     renderVault('abc', '');
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/No decryption key found in URL/)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/No decryption key found in URL/)).toBeInTheDocument();
     });
     // Nothing to decrypt with: the button must not start a download that takes a slot
     expect(screen.getByRole('button', { name: 'Decrypt & Download' })).toBeDisabled();
@@ -173,14 +173,18 @@ describe('Vault page', () => {
       expect(URL.createObjectURL).not.toHaveBeenCalled();
     });
 
-    it('should report a key that does not decrypt the vault, not the browser\'s words for it', async () => {
+    it("should report a key that does not decrypt the vault, not the browser's words for it", async () => {
       await openVault({ ciphertextSize: 128, chunkPlaintextSize: 100 });
       mockDownloadVault.mockResolvedValue(new Blob([new Uint8Array(128)]));
-      mockDecryptChunk.mockRejectedValue(new DOMException('The operation failed for an operation-specific reason', 'OperationError'));
+      mockDecryptChunk.mockRejectedValue(
+        new DOMException('The operation failed for an operation-specific reason', 'OperationError'),
+      );
 
       fireEvent.click(screen.getByText('Decrypt & Download'));
 
-      expect(await screen.findByText('Decryption failed. The link may be incomplete or altered.')).toBeInTheDocument();
+      expect(
+        await screen.findByText('Decryption failed. The link may be incomplete or altered.'),
+      ).toBeInTheDocument();
       expect(screen.queryByText(/operation-specific/)).not.toBeInTheDocument();
       expect(URL.createObjectURL).not.toHaveBeenCalled();
     });

@@ -175,6 +175,19 @@ http_from() {
 }
 apply() { bash "$SCRIPT" "$@" --yes >/dev/null 2>&1 || bad "setup-firewall.sh $*" "exit code $?"; }
 
+# wait_for_listener <namespace|host> <address> <port> — the stand-in servers start in the background and can take
+# seconds to come up on a busy runner. A check that ran before them would report a refused connection as a failure.
+wait_for_listener() {
+  local probe="exec 3<>/dev/tcp/$2/$3"
+  for _ in $(seq 1 60); do
+    if [[ "$1" == host ]]; then timeout 1 bash -c "$probe" 2>/dev/null && return 0
+    else ip netns exec "$1" timeout 1 bash -c "$probe" 2>/dev/null && return 0; fi
+    sleep 0.5
+  done
+  echo "nothing listens on $2 port $3 after 60 attempts"
+  exit 2
+}
+
 # without <pattern> <command...> — run a command on a PATH that holds every tool of this machine except the ones
 # whose name matches the pattern. A minimal container image has nft and no iptables; some hosts have it the other way.
 without() {
@@ -266,6 +279,10 @@ live() {
   ip netns exec an-fwtest-lan python3 -m http.server 8080 --bind "$LAN_IP6" >/dev/null 2>&1 & PIDS+=($!)
   python3 -m http.server "$HOST_PORT" --bind 0.0.0.0 >/dev/null 2>&1 & PIDS+=($!)
   python3 -m http.server "$HOST_PORT" --bind "$LAN_HOST_IP6" >/dev/null 2>&1 & PIDS+=($!)
+  wait_for_listener an-fwtest-lan "$LAN_IP" 8080
+  wait_for_listener an-fwtest-lan "$LAN_IP6" 8080
+  wait_for_listener host "$LAN_HOST_IP" "$HOST_PORT"
+  wait_for_listener host "$LAN_HOST_IP6" "$HOST_PORT"
 
   docker network create --ipv6 --subnet "$APP_NET6" -o com.docker.network.bridge.name=br-archivum "$NETWORK" >/dev/null
   docker run -d --name "$APP" --network "$NETWORK" -p "$TUNNEL_HOST_IP:3000:3000" "$image" \

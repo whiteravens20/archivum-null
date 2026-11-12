@@ -12,7 +12,8 @@ vi.mock('../crypto/encrypt.js', () => ({
   encryptChunk: async (plaintext: Uint8Array) => plaintext, // passthrough
   calculateTotalEncryptedSize: (size: number) => size,
   countChunks: (size: number, chunkSize: number) => {
-    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) throw new Error('Invalid crypto chunk size');
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0)
+      throw new Error('Invalid crypto chunk size');
     return Math.max(1, Math.ceil(size / chunkSize));
   },
   PER_CHUNK_OVERHEAD: 28,
@@ -127,7 +128,9 @@ describe('vault API client', () => {
   describe('uploadVault', () => {
     function createMockXhr(overrides: Record<string, unknown> = {}) {
       let resolveSend: () => void;
-      const sendCalled = new Promise<void>(r => { resolveSend = r; });
+      const sendCalled = new Promise<void>((r) => {
+        resolveSend = r;
+      });
 
       const Ctor = function (this: Record<string, unknown>) {
         Object.assign(this, {
@@ -143,7 +146,11 @@ describe('vault API client', () => {
           ...overrides,
         });
         Ctor._instance = this;
-      } as unknown as { new (): Record<string, unknown>; _instance: Record<string, unknown>; sendCalled: Promise<void> };
+      } as unknown as {
+        new (): Record<string, unknown>;
+        _instance: Record<string, unknown>;
+        sendCalled: Promise<void>;
+      };
       Ctor.sendCalled = sendCalled;
       return Ctor;
     }
@@ -214,7 +221,12 @@ describe('vault API client', () => {
     it('should call onProgress during upload', async () => {
       const XhrCtor = createMockXhr({
         status: 201,
-        responseText: JSON.stringify({ vaultId: 'v', expiresAt: 0, maxDownloads: 1, ciphertextSize: 1 }),
+        responseText: JSON.stringify({
+          vaultId: 'v',
+          expiresAt: 0,
+          maxDownloads: 1,
+          ciphertextSize: 1,
+        }),
       });
       vi.stubGlobal('XMLHttpRequest', XhrCtor);
 
@@ -232,7 +244,7 @@ describe('vault API client', () => {
       const upload = inst.upload as { onprogress: (e: unknown) => void };
       upload.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
       // XHR upload progress: 0.3 + (50/100) * 0.7 ≈ 0.65
-      const xhrCall = onProgress.mock.calls.find(c => c[0] > 0.6);
+      const xhrCall = onProgress.mock.calls.find((c) => c[0] > 0.6);
       expect(xhrCall).toBeDefined();
       expect(xhrCall![0]).toBeCloseTo(0.65, 10);
 
@@ -273,8 +285,12 @@ describe('vault API client', () => {
       // What a value missing from the runtime configuration turns into
       const missing = undefined as unknown as number;
 
-      await expect(uploadVault(file, mockKey, missing, 3600, 5)).rejects.toThrow('Invalid crypto chunk size');
-      await expect(uploadVaultChunked(file, mockKey, missing, 3600, 5)).rejects.toThrow('Invalid crypto chunk size');
+      await expect(uploadVault(file, mockKey, missing, 3600, 5)).rejects.toThrow(
+        'Invalid crypto chunk size',
+      );
+      await expect(uploadVaultChunked(file, mockKey, missing, 3600, 5)).rejects.toThrow(
+        'Invalid crypto chunk size',
+      );
 
       // No request with an empty body, and no upload session opened
       expect(XhrCtor._instance).toBeUndefined();
@@ -302,10 +318,14 @@ describe('vault API client', () => {
         json: () => Promise.resolve(body),
       };
     }
-    const stored = (index: number) => reply(200, { uploadId: 'up-1', receivedBytes: 10 * (index + 1), nextChunkIndex: index + 1 });
+    const stored = (index: number) =>
+      reply(200, { uploadId: 'up-1', receivedBytes: 10 * (index + 1), nextChunkIndex: index + 1 });
 
     /** A fetch that answers init, complete and abort, and takes each chunk's answer from a queue. */
-    function mockFetch(chunkAnswers: Array<ReturnType<typeof reply> | Error>, completeAnswer = reply(201, created)) {
+    function mockFetch(
+      chunkAnswers: Array<ReturnType<typeof reply> | Error>,
+      completeAnswer = reply(201, created),
+    ) {
       const calls: string[] = [];
       globalThis.fetch = vi.fn(async (url: string, options?: RequestInit) => {
         if (url.endsWith('/upload/init')) {
@@ -359,7 +379,11 @@ describe('vault API client', () => {
 
     it('should wait as long as the server asks before retrying a rate-limited chunk', async () => {
       const calls = mockFetch([
-        reply(429, { error: 'Too many requests. Try again later.', retryAfter: 7 }, { 'Retry-After': '7' }),
+        reply(
+          429,
+          { error: 'Too many requests. Try again later.', retryAfter: 7 },
+          { 'Retry-After': '7' },
+        ),
         stored(0),
         stored(1),
       ]);
@@ -388,7 +412,9 @@ describe('vault API client', () => {
     });
 
     it('should not take an out-of-step answer to a first attempt for success', async () => {
-      const calls = mockFetch([reply(400, { error: 'Expected chunk index 1, got 0', expectedChunkIndex: 1 })]);
+      const calls = mockFetch([
+        reply(400, { error: 'Expected chunk index 1, got 0', expectedChunkIndex: 1 }),
+      ]);
 
       await expect(upload()).rejects.toThrow('Expected chunk index 1, got 0');
       expect(calls).toEqual(['init', 'chunk 0', 'abort']);
@@ -430,21 +456,26 @@ describe('vault API client', () => {
       const ac = new AbortController();
       ac.abort(new DOMException('Upload cancelled', 'AbortError'));
       globalThis.fetch = vi.fn((_url: string, options?: RequestInit) =>
-        Promise.reject(options?.signal?.reason)
+        Promise.reject(options?.signal?.reason),
       ) as unknown as typeof fetch;
 
       await expect(upload(ac.signal)).rejects.toMatchObject({ name: 'AbortError' });
     });
 
     it('should abort the session when completion fails', async () => {
-      const calls = mockFetch([stored(0), stored(1)], reply(500, { error: 'Internal server error' }));
+      const calls = mockFetch(
+        [stored(0), stored(1)],
+        reply(500, { error: 'Internal server error' }),
+      );
 
       await expect(upload()).rejects.toThrow('Internal server error');
       expect(calls).toEqual(['init', 'chunk 0', 'chunk 1', 'complete', 'abort']);
     });
 
     it('should stop waiting and abort the session when cancelled during a pause', async () => {
-      const calls = mockFetch([reply(429, { error: 'Too many requests. Try again later.' }, { 'Retry-After': '30' })]);
+      const calls = mockFetch([
+        reply(429, { error: 'Too many requests. Try again later.' }, { 'Retry-After': '30' }),
+      ]);
       const ac = new AbortController();
 
       const result = upload(ac.signal);

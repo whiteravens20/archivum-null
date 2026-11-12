@@ -37,7 +37,7 @@ const distRoot = path.join(
   '..',
   '..',
   'frontend',
-  'dist'
+  'dist',
 );
 let provisioned = false;
 

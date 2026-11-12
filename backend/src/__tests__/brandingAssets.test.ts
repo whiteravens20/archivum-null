@@ -17,13 +17,15 @@ import { execFileSync } from 'node:child_process';
 
 import { loadBrandingAssets, MAX_ASSET_BYTES } from '../static/brandingAssets.js';
 
-const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>';
+const SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>';
 
 describe('loadBrandingAssets', () => {
   let dir: string;
   let warnings: string[];
   const load = () => loadBrandingAssets(dir, (message) => warnings.push(message));
-  const put = (name: string, content: string | Buffer = SVG) => fs.writeFileSync(path.join(dir, name), content);
+  const put = (name: string, content: string | Buffer = SVG) =>
+    fs.writeFileSync(path.join(dir, name), content);
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'archivum-branding-'));
@@ -35,7 +37,9 @@ describe('loadBrandingAssets', () => {
   });
 
   it('yields nothing, quietly, when the directory does not exist', () => {
-    const assets = loadBrandingAssets(path.join(dir, 'missing'), (message) => warnings.push(message));
+    const assets = loadBrandingAssets(path.join(dir, 'missing'), (message) =>
+      warnings.push(message),
+    );
 
     expect(assets.files.size).toBe(0);
     expect(assets.logo).toBeUndefined();
@@ -50,19 +54,31 @@ describe('loadBrandingAssets', () => {
 
     const assets = load();
 
-    expect([...assets.files.keys()].sort()).toEqual(['/apple-touch-icon.png', '/favicon.ico', '/favicon.svg']);
-    expect(assets.files.get('/favicon.svg')).toEqual({ body: Buffer.from(SVG), contentType: 'image/svg+xml' });
+    expect([...assets.files.keys()].sort()).toEqual([
+      '/apple-touch-icon.png',
+      '/favicon.ico',
+      '/favicon.svg',
+    ]);
+    expect(assets.files.get('/favicon.svg')).toEqual({
+      body: Buffer.from(SVG),
+      contentType: 'image/svg+xml',
+    });
     expect(assets.files.get('/favicon.ico')?.contentType).toBe('image/vnd.microsoft.icon');
     expect(assets.files.get('/apple-touch-icon.png')?.contentType).toBe('image/png');
     expect(warnings).toEqual([]);
   });
 
   it('lets the icons of the web app manifest be replaced too', () => {
-    for (const name of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png']) put(name, Buffer.from([0x89, 0x50]));
+    for (const name of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'])
+      put(name, Buffer.from([0x89, 0x50]));
 
     const assets = load();
 
-    expect([...assets.files.keys()].sort()).toEqual(['/icon-192.png', '/icon-512.png', '/icon-maskable-512.png']);
+    expect([...assets.files.keys()].sort()).toEqual([
+      '/icon-192.png',
+      '/icon-512.png',
+      '/icon-maskable-512.png',
+    ]);
     expect(warnings).toEqual([]);
   });
 
@@ -184,7 +200,9 @@ describe('loadBrandingAssets', () => {
 
     expect(assets.files.size).toBe(0);
     expect(warnings).toHaveLength(3);
-    expect(warnings.every((warning) => warning.includes('is not a file name this server uses'))).toBe(true);
+    expect(
+      warnings.every((warning) => warning.includes('is not a file name this server uses')),
+    ).toBe(true);
     expect(warnings.join('\n')).not.toContain('.hidden');
   });
 });
@@ -197,7 +215,8 @@ describe('buildApp — operator files replace the built-in images', () => {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'archivum-branding-app-'));
     const brandingDir = path.join(scratch, 'branding');
     fs.mkdirSync(brandingDir);
-    for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(brandingDir, name), content);
+    for (const [name, content] of Object.entries(files))
+      fs.writeFileSync(path.join(brandingDir, name), content);
     fs.mkdirSync(path.join(scratch, 'vaults'));
 
     vi.resetModules();
@@ -220,7 +239,9 @@ describe('buildApp — operator files replace the built-in images', () => {
   });
 
   it('serves the operator favicon in place of the built-in one', async () => {
-    const res = await (await start({ 'favicon.svg': SVG })).inject({ method: 'GET', url: '/favicon.svg' });
+    const res = await (
+      await start({ 'favicon.svg': SVG })
+    ).inject({ method: 'GET', url: '/favicon.svg' });
 
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toBe('image/svg+xml');
@@ -228,12 +249,16 @@ describe('buildApp — operator files replace the built-in images', () => {
   });
 
   it('sends an operator file with the headers of every other response', async () => {
-    const res = await (await start({ 'logo.svg': SVG })).inject({ method: 'GET', url: '/brand/logo.svg' });
+    const res = await (
+      await start({ 'logo.svg': SVG })
+    ).inject({ method: 'GET', url: '/brand/logo.svg' });
 
     expect(res.statusCode).toBe(200);
     // An SVG opened on its own is a document: the policy that forbids inline script
     // has to come with it, and the type must not be open to sniffing.
-    expect(res.headers['content-security-policy']).toContain("script-src 'self' https://challenges.cloudflare.com");
+    expect(res.headers['content-security-policy']).toContain(
+      "script-src 'self' https://challenges.cloudflare.com",
+    );
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['cache-control']).toBe('public, max-age=0, must-revalidate');
     // Same rule as for the built-in files: nothing that dates the deployment.
@@ -259,14 +284,21 @@ describe('buildApp — operator files replace the built-in images', () => {
   it('does not serve other files from the directory', async () => {
     const instance = await start({ 'notes.txt': 'private notes', 'logo.svg': SVG });
 
-    for (const url of ['/notes.txt', '/brand/notes.txt', '/brand/../notes.txt', '/brand/%2e%2e/notes.txt']) {
+    for (const url of [
+      '/notes.txt',
+      '/brand/notes.txt',
+      '/brand/../notes.txt',
+      '/brand/%2e%2e/notes.txt',
+    ]) {
       const res = await instance.inject({ method: 'GET', url });
       expect(res.body, url).not.toContain('private notes');
     }
   });
 
   it('does not serve a logo in a format the operator did not supply', async () => {
-    const res = await (await start({ 'logo.svg': SVG })).inject({ method: 'GET', url: '/brand/logo.png' });
+    const res = await (
+      await start({ 'logo.svg': SVG })
+    ).inject({ method: 'GET', url: '/brand/logo.png' });
 
     // Falls through to the SPA like any unknown path; what matters is that it is not the SVG.
     expect(res.headers['content-type']).not.toBe('image/svg+xml');

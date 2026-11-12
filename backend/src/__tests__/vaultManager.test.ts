@@ -57,7 +57,7 @@ describe('VaultManager — download counter atomicity', () => {
     // Fire 5 concurrent download requests — Node's event loop is cooperative
     // so only the first synchronously-checked getVault() wins.
     const results = await Promise.all(
-      Array.from({ length: 5 }, () => manager.consumeDownload(vault.vaultId))
+      Array.from({ length: 5 }, () => manager.consumeDownload(vault.vaultId)),
     );
 
     const successes = results.filter(Boolean);
@@ -65,7 +65,9 @@ describe('VaultManager — download counter atomicity', () => {
 
     // Drain the stream so file handles are released
     for (const r of successes) {
-      for await (const _ of r!.stream) { /* drain */ }
+      for await (const _ of r!.stream) {
+        /* drain */
+      }
     }
   });
 
@@ -74,14 +76,16 @@ describe('VaultManager — download counter atomicity', () => {
     const vault = await manager.createVault(makeStream('payload-'.repeat(8)), 3600, N);
 
     const results = await Promise.all(
-      Array.from({ length: N + 2 }, () => manager.consumeDownload(vault.vaultId))
+      Array.from({ length: N + 2 }, () => manager.consumeDownload(vault.vaultId)),
     );
 
     const successes = results.filter(Boolean);
     expect(successes).toHaveLength(N);
 
     for (const r of successes) {
-      for await (const _ of r!.stream) { /* drain */ }
+      for await (const _ of r!.stream) {
+        /* drain */
+      }
     }
   });
 
@@ -130,9 +134,7 @@ describe('VaultManager — download counter atomicity', () => {
     await smallManager.init();
 
     const bigData = 'x'.repeat(2000); // 2000 bytes > 10 + calcEncryptionOverhead(10) = 38
-    await expect(
-      smallManager.createVault(makeStream(bigData), 3600, 1)
-    ).rejects.toThrow();
+    await expect(smallManager.createVault(makeStream(bigData), 3600, 1)).rejects.toThrow();
 
     await smallManager.shutdown();
 
@@ -162,8 +164,11 @@ describe('VaultManager — download counter atomicity', () => {
     // Second upload: 40 more would make 80. Nothing announced its size, so it is
     // refused once it has been written, and nothing of it is left on disk.
     await expect(
-      quotaManager.createVault(makeStream('b'.repeat(40)), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 507, message: expect.stringMatching(/Storage quota exceeded/) });
+      quotaManager.createVault(makeStream('b'.repeat(40)), 3600, 5),
+    ).rejects.toMatchObject({
+      statusCode: 507,
+      message: expect.stringMatching(/Storage quota exceeded/),
+    });
     expect(await fsp.readdir(tempDir)).toEqual([first.vaultId]);
 
     await quotaManager.shutdown();
@@ -180,9 +185,9 @@ describe('VaultManager — download counter atomicity', () => {
     await quotaManager.init();
 
     const stream = makeStream('c'.repeat(200));
-    await expect(
-      quotaManager.createVault(stream, 3600, 5, undefined, 200)
-    ).rejects.toMatchObject({ statusCode: 507 });
+    await expect(quotaManager.createVault(stream, 3600, 5, undefined, 200)).rejects.toMatchObject({
+      statusCode: 507,
+    });
 
     expect(stream.readableEnded).toBe(false);
     expect(await fsp.readdir(tempDir)).toEqual([]);
@@ -207,7 +212,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // ...leaves room for 20. One that declares 80 as well does not fit beside it.
     await expect(
-      quotaManager.createVault(makeStream('b'.repeat(80)), 3600, 5, undefined, 80)
+      quotaManager.createVault(makeStream('b'.repeat(80)), 3600, 5, undefined, 80),
     ).rejects.toMatchObject({ statusCode: 507 });
     // Neither does a chunked upload of that size.
     expect(() => quotaManager.initChunkedUpload(80, 3600, 5)).toThrow(/Storage quota exceeded/);
@@ -218,7 +223,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // Once it is stored, only its real 40 bytes count
     await expect(
-      quotaManager.createVault(makeStream('c'.repeat(60)), 3600, 5, undefined, 60)
+      quotaManager.createVault(makeStream('c'.repeat(60)), 3600, 5, undefined, 60),
     ).resolves.toMatchObject({ ciphertextSize: 60 });
 
     await quotaManager.shutdown();
@@ -235,11 +240,11 @@ describe('VaultManager — download counter atomicity', () => {
     await quotaManager.init();
 
     await expect(
-      quotaManager.createVault(makeStream('d'.repeat(100)), 3600, 5, undefined, 100)
+      quotaManager.createVault(makeStream('d'.repeat(100)), 3600, 5, undefined, 100),
     ).resolves.toMatchObject({ ciphertextSize: 100 });
-    await expect(
-      quotaManager.createVault(makeStream('e'), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 507 });
+    await expect(quotaManager.createVault(makeStream('e'), 3600, 5)).rejects.toMatchObject({
+      statusCode: 507,
+    });
 
     await quotaManager.shutdown();
   });
@@ -269,17 +274,17 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('refuses an upload too small to be an encrypted file and keeps nothing of it', async () => {
     // 31 bytes: one short of an IV, a tag and an empty metadata header
-    await expect(
-      manager.createVault(makeStream('x'.repeat(31)), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 400 });
-    await expect(
-      manager.createVault(makeStream(''), 3600, 5)
-    ).rejects.toMatchObject({ statusCode: 400 });
+    await expect(manager.createVault(makeStream('x'.repeat(31)), 3600, 5)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    await expect(manager.createVault(makeStream(''), 3600, 5)).rejects.toMatchObject({
+      statusCode: 400,
+    });
     expect(await fsp.readdir(tempDir)).toEqual([]);
 
-    await expect(
-      manager.createVault(makeStream('x'.repeat(32)), 3600, 5)
-    ).resolves.toMatchObject({ ciphertextSize: 32 });
+    await expect(manager.createVault(makeStream('x'.repeat(32)), 3600, 5)).resolves.toMatchObject({
+      ciphertextSize: 32,
+    });
   });
 
   it('refuses a chunked upload that declares less than an encrypted file needs', () => {
@@ -332,7 +337,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // Sending chunk index 1 before 0 must fail, and say which index is expected
     await expect(
-      manager.appendChunk(session.uploadId, 1, makeStream('data'))
+      manager.appendChunk(session.uploadId, 1, makeStream('data')),
     ).rejects.toMatchObject({
       message: expect.stringMatching(/Expected chunk index 0/),
       statusCode: 400,
@@ -345,9 +350,9 @@ describe('VaultManager — download counter atomicity', () => {
   it('rejects completing with no chunks', async () => {
     const session = manager.initChunkedUpload(100, 3600, 5);
 
-    await expect(
-      manager.completeChunkedUpload(session.uploadId)
-    ).rejects.toThrow(/No chunks received/);
+    await expect(manager.completeChunkedUpload(session.uploadId)).rejects.toThrow(
+      /No chunks received/,
+    );
   });
 
   it('rejects init when totalSize exceeds MAX_FILE_SIZE', () => {
@@ -362,7 +367,7 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('rejects chunk when session does not exist', async () => {
     await expect(
-      manager.appendChunk('nonexistent-session-id', 0, makeStream('data'))
+      manager.appendChunk('nonexistent-session-id', 0, makeStream('data')),
     ).rejects.toThrow(/not found/);
   });
 
@@ -380,7 +385,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // ...when the next index arrives. It must not be written alongside it.
     await expect(
-      manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)))
+      manager.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50))),
     ).rejects.toMatchObject({ statusCode: 409 });
 
     first.push(null);
@@ -399,8 +404,8 @@ describe('VaultManager — download counter atomicity', () => {
 
     const results = await Promise.allSettled(
       [0, 1, 2, 3].map((index) =>
-        manager.appendChunk(session.uploadId, index, makeStream('x'.repeat(100)))
-      )
+        manager.appendChunk(session.uploadId, index, makeStream('x'.repeat(100))),
+      ),
     );
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
@@ -417,7 +422,7 @@ describe('VaultManager — download counter atomicity', () => {
 
     // 150 bytes into a 100-byte upload: refused, and nothing of it is kept
     await expect(
-      manager.appendChunk(session.uploadId, 0, makeStream('x'.repeat(150)))
+      manager.appendChunk(session.uploadId, 0, makeStream('x'.repeat(150))),
     ).rejects.toMatchObject({ statusCode: 413 });
     expect(session.nextChunkIndex).toBe(0);
     expect(session.receivedBytes).toBe(0);
@@ -435,9 +440,9 @@ describe('VaultManager — download counter atomicity', () => {
     const writing = manager.appendChunk(session.uploadId, 0, first);
 
     // Not "no chunks received": the session and its data must survive this
-    await expect(
-      manager.completeChunkedUpload(session.uploadId)
-    ).rejects.toMatchObject({ statusCode: 409 });
+    await expect(manager.completeChunkedUpload(session.uploadId)).rejects.toMatchObject({
+      statusCode: 409,
+    });
 
     first.push(null);
     await writing;
@@ -478,7 +483,9 @@ describe('VaultManager — download counter atomicity', () => {
     capped.initChunkedUpload(100, 3600, 1, undefined, ip);
 
     // Third concurrent session from the same IP must be rejected
-    expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(/Too many concurrent uploads/);
+    expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(
+      /Too many concurrent uploads/,
+    );
 
     // A different IP is unaffected
     expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, '198.51.100.9')).not.toThrow();
@@ -505,6 +512,281 @@ describe('VaultManager — download counter atomicity', () => {
     expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).not.toThrow();
 
     await capped.shutdown();
+  });
+
+  describe('what a client can hold', () => {
+    const NETWORK = '2001:db8:1::/48';
+    const inNetwork = (i: number) => `2001:db8:1:${i.toString(16)}::/64`;
+
+    async function startManager(env: Record<string, string>): Promise<VaultManagerType> {
+      vi.resetModules();
+      vi.stubEnv('STORAGE_PATH', tempDir);
+      vi.stubEnv('MAX_FILE_SIZE', String(10 * 1024 * 1024));
+      vi.stubEnv('MAX_TTL', '604800');
+      for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+      const mod = await import('../vault/manager.js');
+      const started = new mod.VaultManager();
+      await started.init();
+      return started;
+    }
+
+    it('caps the sessions of a whole network at ten times those of a client', async () => {
+      const capped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '1' });
+
+      const first = capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(0), NETWORK);
+      for (let i = 1; i < 10; i++) {
+        capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(i), NETWORK);
+      }
+      expect(() =>
+        capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(10), NETWORK),
+      ).toThrow(/Too many concurrent uploads/);
+
+      // Another network has its own count.
+      expect(() =>
+        capped.initChunkedUpload(100, 3600, 1, undefined, '2001:db8:2:1::/64', '2001:db8:2::/48'),
+      ).not.toThrow();
+
+      // Ending one session frees its place in the network too.
+      await capped.abortChunkedUpload(first.uploadId);
+      expect(() =>
+        capped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(10), NETWORK),
+      ).not.toThrow();
+
+      await capped.shutdown();
+    });
+
+    it('applies no network cap with the session cap switched off', async () => {
+      const uncapped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '0' });
+      for (let i = 0; i < 30; i++) {
+        uncapped.initChunkedUpload(100, 3600, 1, undefined, inNetwork(1), NETWORK);
+      }
+      await uncapped.shutdown();
+    });
+
+    it('gives back once what a session cancelled while it was being finished held', async () => {
+      const capped = await startManager({
+        MAX_UPLOAD_SESSIONS_PER_IP: '2',
+        MAX_TOTAL_STORAGE: '1000',
+      });
+      // The manager's own storage class, from the module registry it was loaded with.
+      const { LocalStorage } = await import('../storage/local.js');
+      const ip = '203.0.113.24';
+
+      // Another upload of the same client stays open: one slot and 800 bytes are its.
+      capped.initChunkedUpload(800, 3600, 1, undefined, ip);
+
+      const session = capped.initChunkedUpload(50, 3600, 1, undefined, ip);
+      await capped.appendChunk(session.uploadId, 0, makeStream('x'.repeat(50)));
+
+      // The finished file is moved into place, and the move then waits until the test
+      // lets it go: the cancellation below arrives after the move and before the session
+      // is done with, while it is still in the map.
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const finalize = LocalStorage.prototype.finalizeChunkedUpload;
+      const held = vi
+        .spyOn(LocalStorage.prototype, 'finalizeChunkedUpload')
+        .mockImplementation(async function (
+          this: InstanceType<typeof LocalStorage>,
+          uploadId,
+          vaultId,
+        ) {
+          await finalize.call(this, uploadId, vaultId);
+          await gate;
+        });
+
+      const finishing = capped.completeChunkedUpload(session.uploadId);
+      await capped.abortChunkedUpload(session.uploadId);
+      release();
+      await finishing;
+      held.mockRestore();
+
+      // The open upload's 800 bytes still count: with the 50 now stored, 150 are free,
+      // and 200 do not fit. Taken off it once more, its reservation would let them in.
+      expect(() => capped.initChunkedUpload(200, 3600, 1, undefined, '198.51.100.30')).toThrow(
+        /Storage quota exceeded/,
+      );
+      // And it keeps its slot: one more session of the client fits, a second does not.
+      expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).not.toThrow();
+      expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).toThrow(
+        /Too many concurrent uploads/,
+      );
+
+      await capped.shutdown();
+    });
+
+    it('keeps no slot for a session the quota refused', async () => {
+      const capped = await startManager({
+        MAX_UPLOAD_SESSIONS_PER_IP: '1',
+        MAX_TOTAL_STORAGE: '100',
+      });
+      const ip = '203.0.113.20';
+
+      expect(() => capped.initChunkedUpload(200, 3600, 1, undefined, ip)).toThrow(
+        /Storage quota exceeded/,
+      );
+      expect(() => capped.initChunkedUpload(50, 3600, 1, undefined, ip)).not.toThrow();
+
+      await capped.shutdown();
+    });
+
+    it('holds a slot for a single-request upload for as long as it is read', async () => {
+      const capped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '1' });
+      const ip = '203.0.113.21';
+
+      const slow = new Readable({ read() {} });
+      slow.push(Buffer.alloc(40, 'a'));
+      const writing = capped.createVault(slow, 3600, 5, undefined, 80, ip, null);
+
+      await expect(
+        capped.createVault(makeStream('b'.repeat(40)), 3600, 5, undefined, 40, ip, null),
+      ).rejects.toMatchObject({ statusCode: 429 });
+      expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).toThrow(
+        /Too many concurrent uploads/,
+      );
+      // Someone else is not affected.
+      await expect(
+        capped.createVault(
+          makeStream('c'.repeat(40)),
+          3600,
+          5,
+          undefined,
+          40,
+          '198.51.100.9',
+          null,
+        ),
+      ).resolves.toMatchObject({ ciphertextSize: 40 });
+
+      slow.push(null);
+      await writing;
+      await expect(
+        capped.createVault(makeStream('d'.repeat(40)), 3600, 5, undefined, 40, ip, null),
+      ).resolves.toMatchObject({ ciphertextSize: 40 });
+
+      await capped.shutdown();
+    });
+
+    it('gives the slot back when a single-request upload fails', async () => {
+      const capped = await startManager({ MAX_UPLOAD_SESSIONS_PER_IP: '1' });
+      const ip = '203.0.113.22';
+
+      const broken = new Readable({
+        read() {
+          this.destroy(new Error('connection lost'));
+        },
+      });
+      await expect(capped.createVault(broken, 3600, 5, undefined, 80, ip, null)).rejects.toThrow(
+        'connection lost',
+      );
+
+      await expect(
+        capped.createVault(makeStream('a'.repeat(40)), 3600, 5, undefined, 40, ip, null),
+      ).resolves.toMatchObject({ ciphertextSize: 40 });
+
+      await capped.shutdown();
+    });
+
+    describe('sessions left idle', () => {
+      const CLEANUP = 60_000;
+      let idle: number;
+
+      beforeEach(async () => {
+        vi.resetModules();
+        vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+        idle = (await import('../vault/manager.js')).UPLOAD_SESSION_IDLE_MS;
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('drops a session that gets no chunk, with its reservation and its slot', async () => {
+        const capped = await startManager({
+          MAX_UPLOAD_SESSIONS_PER_IP: '1',
+          MAX_TOTAL_STORAGE: '100',
+        });
+        const ip = '203.0.113.23';
+
+        const session = capped.initChunkedUpload(100, 3600, 1, undefined, ip);
+        expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, '198.51.100.9')).toThrow(
+          /Storage quota exceeded/,
+        );
+
+        await vi.advanceTimersByTimeAsync(idle + CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(100))),
+        ).rejects.toMatchObject({ statusCode: 404 });
+        expect(() => capped.initChunkedUpload(100, 3600, 1, undefined, ip)).not.toThrow();
+
+        await capped.shutdown();
+      });
+
+      it('leaves a session alone before the idle time is up', async () => {
+        const capped = await startManager({});
+        const session = capped.initChunkedUpload(100, 3600, 1);
+
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(100))),
+        ).resolves.toMatchObject({ receivedBytes: 100 });
+
+        await capped.shutdown();
+      });
+
+      it('starts the idle time again with every chunk', async () => {
+        const capped = await startManager({});
+        const session = capped.initChunkedUpload(100, 3600, 1);
+
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+        await capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(50)));
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50))),
+        ).resolves.toMatchObject({ receivedBytes: 100 });
+
+        await capped.shutdown();
+      });
+
+      it('does not take a chunk still being written for idleness, however slow', async () => {
+        const capped = await startManager({});
+        const session = capped.initChunkedUpload(100, 3600, 1);
+
+        const slow = new Readable({ read() {} });
+        slow.push(Buffer.alloc(50, 'a'));
+        const writing = capped.appendChunk(session.uploadId, 0, slow);
+
+        await vi.advanceTimersByTimeAsync(idle + 2 * CLEANUP);
+        slow.push(Buffer.alloc(50, 'b'));
+        slow.push(null);
+        await expect(writing).resolves.toMatchObject({ receivedBytes: 100 });
+
+        await expect(capped.completeChunkedUpload(session.uploadId)).resolves.toMatchObject({
+          ciphertextSize: 100,
+        });
+
+        await capped.shutdown();
+      });
+
+      it('still ends a busy session when its time is up', async () => {
+        const capped = await startManager({ UPLOAD_SESSION_TTL: String((idle / 1000) * 2) });
+        const session = capped.initChunkedUpload(200, 3600, 1);
+
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+        await capped.appendChunk(session.uploadId, 0, makeStream('a'.repeat(50)));
+        await vi.advanceTimersByTimeAsync(idle - CLEANUP);
+        await capped.appendChunk(session.uploadId, 1, makeStream('b'.repeat(50)));
+        await vi.advanceTimersByTimeAsync(2 * CLEANUP);
+
+        await expect(
+          capped.appendChunk(session.uploadId, 2, makeStream('c'.repeat(50))),
+        ).rejects.toMatchObject({ statusCode: 404 });
+
+        await capped.shutdown();
+      });
+    });
   });
 
   // ------------------------------------------------------------------
@@ -553,9 +835,15 @@ describe('VaultManager — download counter atomicity', () => {
     manager = new mod.VaultManager();
     await manager.init();
 
-    await expect(fsp.readFile(path.join(tempDir, 'photos', 'a.jpg'), 'utf-8')).resolves.toBe('not ours');
-    await expect(fsp.readFile(path.join(tempDir, 'my-project', 'src', 'main.c'), 'utf-8')).resolves.toBe('not ours');
-    await expect(fsp.readFile(path.join(tempDir, lookalike, 'notes.txt'), 'utf-8')).resolves.toBe('not ours');
+    await expect(fsp.readFile(path.join(tempDir, 'photos', 'a.jpg'), 'utf-8')).resolves.toBe(
+      'not ours',
+    );
+    await expect(
+      fsp.readFile(path.join(tempDir, 'my-project', 'src', 'main.c'), 'utf-8'),
+    ).resolves.toBe('not ours');
+    await expect(fsp.readFile(path.join(tempDir, lookalike, 'notes.txt'), 'utf-8')).resolves.toBe(
+      'not ours',
+    );
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toContain('photos');
     expect(warn.mock.calls[0][0]).toContain('my-project');
@@ -564,7 +852,10 @@ describe('VaultManager — download counter atomicity', () => {
 
   it('does not take a meta.json it did not write for a vault', async () => {
     await fsp.mkdir(path.join(tempDir, 'other-tool'));
-    await fsp.writeFile(path.join(tempDir, 'other-tool', 'meta.json'), JSON.stringify({ name: 'something else' }));
+    await fsp.writeFile(
+      path.join(tempDir, 'other-tool', 'meta.json'),
+      JSON.stringify({ name: 'something else' }),
+    );
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await manager.shutdown();
@@ -576,7 +867,9 @@ describe('VaultManager — download counter atomicity', () => {
 
     expect(manager.getStats().totalVaults).toBe(0);
     expect(manager.hasVault('other-tool')).toBe(false);
-    await expect(fsp.access(path.join(tempDir, 'other-tool', 'meta.json'))).resolves.toBeUndefined();
+    await expect(
+      fsp.access(path.join(tempDir, 'other-tool', 'meta.json')),
+    ).resolves.toBeUndefined();
   });
 
   it('restores its own vaults after a restart', async () => {
@@ -589,6 +882,9 @@ describe('VaultManager — download counter atomicity', () => {
     manager = new mod.VaultManager();
     await manager.init();
 
-    expect(manager.getVault(vault.vaultId)).toMatchObject({ ciphertextSize: 60, remainingDownloads: 5 });
+    expect(manager.getVault(vault.vaultId)).toMatchObject({
+      ciphertextSize: 60,
+      remainingDownloads: 5,
+    });
   });
 });

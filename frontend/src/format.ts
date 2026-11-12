@@ -14,7 +14,10 @@ export function formatBytes(bytes: number, locale: string): string {
     value /= 1024;
     unit++;
   }
-  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: unit > 0 ? 1 : 0, useGrouping: false });
+  const number = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: unit > 0 ? 1 : 0,
+    useGrouping: false,
+  });
   return `${number.format(value)} ${UNITS[unit]}`;
 }
 

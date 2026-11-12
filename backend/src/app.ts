@@ -9,6 +9,8 @@ import { adminRoutes } from './routes/admin.js';
 import { healthRoutes, termsServed } from './routes/health.js';
 import { rateLimitPlugin } from './middleware/rateLimit.js';
 import { buildProxyHint } from './middleware/proxyHint.js';
+import { isApiRequest } from './middleware/requestPath.js';
+import { pinPeerAddress } from './middleware/peerAddress.js';
 import { vaultManager } from './vault/manager.js';
 import { buildAssetCloak } from './static/assetCloak.js';
 import {
@@ -73,6 +75,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     bodyLimit: 16 * 1024,
   });
 
+  // Every connection's address, read when it is accepted: see middleware/peerAddress.ts.
+  app.server.on('connection', pinPeerAddress);
+
   // Security headers
   app.addHook('onSend', async (_request, reply, payload) => {
     reply.header('X-Content-Type-Options', 'nosniff');
@@ -82,12 +87,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     reply.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
-    reply.header(
-      'Strict-Transport-Security',
-      'max-age=63072000; includeSubDomains; preload'
-    );
+    reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     return payload;
   });
 
@@ -154,20 +156,20 @@ export async function buildApp(): Promise<FastifyInstance> {
     // below only ever sends a finished string.
     const brandingAssets = loadBrandingAssets(
       config.BRANDING_PATH || path.join(__dirname, '..', '..', 'branding'),
-      (warning) => app.log.warn(warning)
+      (warning) => app.log.warn(warning),
     );
     const branded = applyBranding(assetCloak.indexHtml, branding, brandingAssets);
     const indexHtml = termsServed ? branded : markNoTerms(branded);
     for (const warning of brandingWarnings(branding)) app.log.warn(warning);
     if (brandingAssets.files.size > 0) {
-      app.log.info({ files: [...brandingAssets.files.keys()] }, 'Serving the operator\'s branding files');
+      app.log.info(
+        { files: [...brandingAssets.files.keys()] },
+        "Serving the operator's branding files",
+      );
     }
 
     const sendIndex = (reply: FastifyReply) =>
-      reply
-        .header('Cache-Control', 'no-store')
-        .type('text/html; charset=utf-8')
-        .send(indexHtml);
+      reply.header('Cache-Control', 'no-store').type('text/html; charset=utf-8').send(indexHtml);
 
     // Cloaked assets. The name changes on every restart, so the bytes behind a given
     // URL never do — safe to cache immutably for as long as the client likes.
@@ -191,7 +193,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         reply
           .header('Cache-Control', 'public, max-age=0, must-revalidate')
           .type(asset.contentType)
-          .send(asset.body)
+          .send(asset.body),
       );
     }
 
@@ -201,7 +203,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       reply
         .header('Cache-Control', 'public, max-age=0, must-revalidate')
         .type('application/manifest+json; charset=utf-8')
-        .send(manifest)
+        .send(manifest),
     );
 
     await app.register(fastifyStatic, {
@@ -235,7 +237,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // a 404, not a page and a 200.
     app.setNotFoundHandler(async (request, reply) => {
       const navigation = request.method === 'GET' || request.method === 'HEAD';
-      if (!navigation || request.url.startsWith('/api/')) {
+      if (!navigation || isApiRequest(request)) {
         return reply.status(404).send({ error: 'Not found' });
       }
       return sendIndex(reply);

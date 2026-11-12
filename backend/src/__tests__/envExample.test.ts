@@ -9,7 +9,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const examplePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '.env.example');
+const examplePath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  '.env.example',
+);
 
 /** KEY=value lines that are not commented out. */
 function readExample(): Record<string, string> {

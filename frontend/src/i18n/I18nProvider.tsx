@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { browserLanguages, createTranslator, detectLanguage, I18nContext, localeFor, type Language } from './i18n.ts';
+import {
+  browserLanguages,
+  createTranslator,
+  detectLanguage,
+  I18nContext,
+  localeFor,
+  type Language,
+} from './i18n.ts';
 
 /**
  * The interface language: the first of the browser's languages the interface has, until
@@ -12,7 +19,10 @@ import { browserLanguages, createTranslator, detectLanguage, I18nContext, locale
 export default function I18nProvider({ children }: { children: ReactNode }) {
   const [preferred] = useState(browserLanguages);
   const [lang, setLang] = useState<Language>(() => detectLanguage(preferred));
-  const translator = useMemo(() => createTranslator(lang, localeFor(lang, preferred), setLang), [lang, preferred]);
+  const translator = useMemo(
+    () => createTranslator(lang, localeFor(lang, preferred), setLang),
+    [lang, preferred],
+  );
 
   useEffect(() => {
     document.documentElement.lang = lang;

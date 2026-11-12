@@ -25,22 +25,34 @@ describe('getBranding', () => {
     expect(getBranding().name).toBe('Archivum Null');
   });
 
-  it.each(['light', 'auto', 'dark'] as const)('should read the %s theme from the root element', (theme) => {
-    document.documentElement.dataset.theme = theme;
+  it.each(['light', 'auto', 'dark'] as const)(
+    'should read the %s theme from the root element',
+    (theme) => {
+      document.documentElement.dataset.theme = theme;
 
-    expect(getBranding().theme).toBe(theme);
-  });
+      expect(getBranding().theme).toBe(theme);
+    },
+  );
 
   it('should use the logos the server points at', () => {
-    setBrandingTags({ 'brand-logo': '/brand/logo.svg', 'brand-logo-light': '/brand/logo-light.png' });
+    setBrandingTags({
+      'brand-logo': '/brand/logo.svg',
+      'brand-logo-light': '/brand/logo-light.png',
+    });
 
-    expect(getBranding()).toMatchObject({ logo: '/brand/logo.svg', logoLight: '/brand/logo-light.png' });
+    expect(getBranding()).toMatchObject({
+      logo: '/brand/logo.svg',
+      logoLight: '/brand/logo-light.png',
+    });
   });
 
   it('should keep the built-in mark for the theme the operator supplied no logo for', () => {
     setBrandingTags({ 'brand-logo-light': '/brand/logo-light.png' });
 
-    expect(getBranding()).toMatchObject({ logo: '/logo-symbol.webp', logoLight: '/brand/logo-light.png' });
+    expect(getBranding()).toMatchObject({
+      logo: '/logo-symbol.webp',
+      logoLight: '/brand/logo-light.png',
+    });
   });
 
   it('should treat an unknown theme as dark', () => {

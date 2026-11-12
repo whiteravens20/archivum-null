@@ -4,7 +4,7 @@
  * the tests show, where no backend has touched the page.
  */
 
-import { en } from './i18n/messages/en.ts';
+import en from './i18n/messages/en.json';
 
 /**
  * The tagline of an instance whose operator sets none, the same as the server's. The

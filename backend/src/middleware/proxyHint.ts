@@ -38,7 +38,7 @@ export function buildProxyHint(): (request: FastifyRequest) => Promise<void> {
     reported = true;
     request.log.warn(
       { peer },
-      'Ignored X-Forwarded-For from a peer not in TRUST_PROXY — add this address if it is your reverse proxy'
+      'Ignored X-Forwarded-For from a peer not in TRUST_PROXY — add this address if it is your reverse proxy',
     );
   };
 }

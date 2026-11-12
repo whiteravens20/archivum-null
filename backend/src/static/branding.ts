@@ -50,10 +50,14 @@ function isDisplayText(value: string, maxLength: number): boolean {
  */
 export function parseBranding(input: BrandingInput): Branding {
   if (!isDisplayText(input.name, NAME_MAX_LENGTH)) {
-    throw new Error(`BRAND_NAME must be 1 to ${NAME_MAX_LENGTH} characters with no control characters`);
+    throw new Error(
+      `BRAND_NAME must be 1 to ${NAME_MAX_LENGTH} characters with no control characters`,
+    );
   }
   if (!isDisplayText(input.tagline, TAGLINE_MAX_LENGTH)) {
-    throw new Error(`BRAND_TAGLINE must be 1 to ${TAGLINE_MAX_LENGTH} characters with no control characters`);
+    throw new Error(
+      `BRAND_TAGLINE must be 1 to ${TAGLINE_MAX_LENGTH} characters with no control characters`,
+    );
   }
   // The colour is written into a <style> element, so nothing but six hex digits
   // gets through: no names, no rgb(), no url().
@@ -84,7 +88,9 @@ function linear(channel: number): number {
 
 function luminance(hex: string): number {
   const rgb = parseInt(hex.slice(1), 16);
-  return 0.2126 * linear(rgb >> 16) + 0.7152 * linear((rgb >> 8) & 0xff) + 0.0722 * linear(rgb & 0xff);
+  return (
+    0.2126 * linear(rgb >> 16) + 0.7152 * linear((rgb >> 8) & 0xff) + 0.0722 * linear(rgb & 0xff)
+  );
 }
 
 /** WCAG 2 contrast ratio of two `#rrggbb` colours, from 1 (same) to 21 (black on white). */
@@ -189,7 +195,11 @@ const HEAD_END = /[ \t]*<\/head>/i;
  * tags, which is also how the SPA learns the values (frontend/src/branding.ts): the
  * Content-Security-Policy allows no inline script, so there is no script to put them in.
  */
-export function applyBranding(indexHtml: string, branding: Branding, logos: BrandLogos = {}): string {
+export function applyBranding(
+  indexHtml: string,
+  branding: Branding,
+  logos: BrandLogos = {},
+): string {
   // No </head>, nowhere to put the tags — leave such a page as it is.
   if (!HEAD_END.test(indexHtml)) return indexHtml;
 
@@ -203,11 +213,12 @@ export function applyBranding(indexHtml: string, branding: Branding, logos: Bran
     `<link rel="manifest" href="${MANIFEST_PATH}" />`,
   ];
   if (logos.logo) tags.push(`<meta name="brand-logo" content="${escapeHtml(logos.logo)}" />`);
-  if (logos.logoLight) tags.push(`<meta name="brand-logo-light" content="${escapeHtml(logos.logoLight)}" />`);
+  if (logos.logoLight)
+    tags.push(`<meta name="brand-logo-light" content="${escapeHtml(logos.logoLight)}" />`);
   if (branding.accentColor !== null) {
     // Unlayered, so it wins over the defaults the stylesheet keeps in @layer theme.
     tags.push(
-      `<style>:root{--color-vault-accent:${branding.accentColor};--color-vault-on-accent:${onAccentColor(branding.accentColor)}}</style>`
+      `<style>:root{--color-vault-accent:${branding.accentColor};--color-vault-on-accent:${onAccentColor(branding.accentColor)}}</style>`,
     );
   }
   const block = tags.map((tag) => `    ${tag}\n`).join('');

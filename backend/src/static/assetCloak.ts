@@ -79,8 +79,8 @@ export function buildAssetCloak(distRoot: string): AssetCloak | null {
       .map((entry) =>
         path.posix.join(
           path.relative(assetsDir, entry.parentPath).split(path.sep).join('/'),
-          entry.name
-        )
+          entry.name,
+        ),
       );
   } catch {
     // No assets/ directory — nothing to cloak, index.html is served as-is.
@@ -90,10 +90,7 @@ export function buildAssetCloak(distRoot: string): AssetCloak | null {
   // content-type detection still works for assets served straight off disk. Any
   // directory nesting collapses — a cloaked name carries no structure either.
   const cloakedNames = new Map<string, string>(
-    originalNames.map((name) => [
-      name,
-      `${randomBytes(8).toString('hex')}${path.extname(name)}`,
-    ])
+    originalNames.map((name) => [name, `${randomBytes(8).toString('hex')}${path.extname(name)}`]),
   );
 
   // Longest first, so a name that is a prefix of another (`app.js` vs `app.js.map`)

@@ -8,7 +8,12 @@ import I18nProvider from '../i18n/I18nProvider.js';
 import { createTranslator, I18nContext, type Language } from '../i18n/i18n.js';
 
 /** The server's answer: TOS.md, and the translations beside it. */
-const mockFetch = (terms: string, ok = true, status = 200, translations: Record<string, unknown> = {}) => {
+const mockFetch = (
+  terms: string,
+  ok = true,
+  status = 200,
+  translations: Record<string, unknown> = {},
+) => {
   const fetchMock = vi.fn().mockResolvedValue({
     ok,
     status,
@@ -20,7 +25,9 @@ const mockFetch = (terms: string, ok = true, status = 200, translations: Record<
 
 function inLanguage(lang: Language) {
   return ({ children }: { children: ReactNode }) => (
-    <I18nContext.Provider value={createTranslator(lang, lang, () => {})}>{children}</I18nContext.Provider>
+    <I18nContext.Provider value={createTranslator(lang, lang, () => {})}>
+      {children}
+    </I18nContext.Provider>
   );
 }
 
@@ -37,10 +44,14 @@ describe('Tos page', () => {
   });
 
   it('shows the terms as the formatted HTML the server sends', async () => {
-    mockFetch('<h1>Terms of Service</h1>\n<p>Use <strong>responsibly</strong>.</p>\n<ul><li>one</li><li>two</li></ul>');
+    mockFetch(
+      '<h1>Terms of Service</h1>\n<p>Use <strong>responsibly</strong>.</p>\n<ul><li>one</li><li>two</li></ul>',
+    );
     render(<Tos />);
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Terms of Service' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Terms of Service' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('responsibly').tagName).toBe('STRONG');
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
@@ -97,7 +108,9 @@ describe('Tos page', () => {
       mockFetch('<h1>Terms of Service</h1>', true, 200, { pl: '<h1>Regulamin</h1>' });
       render(<Tos />, { wrapper: inLanguage('pl') });
 
-      expect(await screen.findByRole('heading', { level: 1, name: 'Regulamin' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Regulamin' }),
+      ).toBeInTheDocument();
       expect(screen.queryByText('Terms of Service')).not.toBeInTheDocument();
     });
 
@@ -105,38 +118,57 @@ describe('Tos page', () => {
       mockFetch('<h1>Terms of Service</h1>', true, 200, { de: '<h1>Nutzungsbedingungen</h1>' });
       render(<Tos />, { wrapper: inLanguage('pl') });
 
-      expect(await screen.findByRole('heading', { level: 1, name: 'Terms of Service' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Terms of Service' }),
+      ).toBeInTheDocument();
     });
 
     it('takes nothing but text for a translation', async () => {
       mockFetch('<h1>Terms of Service</h1>', true, 200, { pl: { html: '<h1>Regulamin</h1>' } });
       render(<Tos />, { wrapper: inLanguage('pl') });
 
-      expect(await screen.findByRole('heading', { level: 1, name: 'Terms of Service' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Terms of Service' }),
+      ).toBeInTheDocument();
     });
 
     it('switches with the language, without asking the server again', async () => {
       vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['pl-PL']);
-      const fetchMock = mockFetch('<h1>Terms of Service</h1>', true, 200, { pl: '<h1>Regulamin</h1>' });
+      const fetchMock = mockFetch('<h1>Terms of Service</h1>', true, 200, {
+        pl: '<h1>Regulamin</h1>',
+      });
       render(
         <I18nProvider>
           <MemoryRouter>
             <Tos />
             <Footer />
           </MemoryRouter>
-        </I18nProvider>
+        </I18nProvider>,
       );
-      expect(await screen.findByRole('heading', { level: 1, name: 'Regulamin' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Regulamin' }),
+      ).toBeInTheDocument();
 
-      fireEvent.change(screen.getByRole('combobox', { name: 'Język' }), { target: { value: 'en' } });
+      fireEvent.change(screen.getByRole('combobox', { name: 'Język' }), {
+        target: { value: 'en' },
+      });
 
-      expect(screen.getByRole('heading', { level: 1, name: 'Terms of Service' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Terms of Service' }),
+      ).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledOnce();
     });
   });
 
   it('shows the error message for an answer that is not terms', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve(['<h1>TOS</h1>']) }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(['<h1>TOS</h1>']),
+      }),
+    );
     render(<Tos />);
 
     expect(await screen.findByText(/failed to load terms of service/i)).toBeInTheDocument();

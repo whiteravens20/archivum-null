@@ -20,7 +20,7 @@ declare global {
           'expired-callback'?: () => void;
           theme?: 'dark' | 'light' | 'auto';
           size?: 'normal' | 'compact';
-        }
+        },
       ) => string;
       remove: (widgetId: string) => void;
       reset: (widgetId: string) => void;
@@ -66,10 +66,7 @@ export default function Turnstile({ siteKey, onVerify, onError, onExpire }: Turn
     return () => clearInterval(check);
   }, [enabled]);
 
-  const handleVerify = useCallback(
-    (token: string) => onVerify(token),
-    [onVerify]
-  );
+  const handleVerify = useCallback((token: string) => onVerify(token), [onVerify]);
 
   useEffect(() => {
     if (!ready || !containerRef.current || !window.turnstile) return;

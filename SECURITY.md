@@ -61,7 +61,7 @@ the version is treated as something to withhold from unauthenticated callers.
 - [x] Version served only from the authenticated admin API, never bundled into the frontend
 - [x] Enforced in the Node process, so Docker and bare-metal behave identically
 
-**Limit, stated plainly:** the bundle's *contents* are the version. Client-side code
+**Limit, stated plainly:** the bundle's _contents_ are the version. Client-side code
 is delivered to the browser by definition, so downloading the JavaScript and diffing
 it against a rebuilt tag still identifies the release, and the bundle names its
 dependency versions in cleartext regardless. The measures above remove the cheap,
@@ -90,18 +90,20 @@ from becoming an attack surface:
 - [x] Turnstile API call has a 10-second timeout (`AbortSignal.timeout`) — prevents hung workers on Cloudflare degradation; returns HTTP 504 on timeout
 - [x] Four-tier in-memory per-IP rate limiting:
   - General API tier: all `/api/` routes (default 120 req/window) — guards file I/O endpoints like `/api/tos`
-  - Admin tier: failed logins on `/api/admin` (default 10 per window) — once reached, every admin request from that client is refused until the window ends, a correct password included; requests with valid credentials are not counted
+  - Admin tier: failed logins on `/api/admin` (default 10 per window) — once reached, every admin request from that client is refused until the window ends, a correct password included; requests with valid credentials are not counted. Ten times as many failures from all clients together refuse everyone until the window ends, and are logged
   - Upload tier: `POST /api/vault` and `POST /api/vault/upload/init` (default 10 req/window) — stricter
   - Download tier: `/api/vault/:id/download`, whatever the method (default 30 req/window) — prevents bulk download exhaustion
-- [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing)
-- [x] IPv6 clients rate-limited and capped on open upload sessions per /64, not per address — rotating addresses inside one allocation gains no extra quota
+- [x] Limits follow the route the router matched, not the text of the URL — a path written another way, percent-encoded or as an absolute URL, counts where the plain path does
+- [x] `request.ip` used for rate limiting — resolved by Fastify via `trustProxy` chain, not raw `X-Forwarded-For` (prevents IP spoofing); a forwarded value that is no address gets no bucket of its own
+- [x] IPv6 clients rate-limited and capped on uploads in progress per /64, not per address — rotating addresses inside one allocation gains no extra quota; a whole /48 shares ten times each limit
+- [x] The memory rate limiting uses is bounded — at most 100,000 clients per tier, the oldest going first, and an address is forgotten within a minute of the end of its window
 - [x] `TRUST_PROXY` validated at startup: IPs, CIDR ranges with a non-zero prefix, or named private ranges only — hop counts are rejected, because a hop count cannot check who is connecting and lets a client that reaches the port directly spoof its IP (GHSA-3m5p-2c4r-xxw2)
 - [x] Max file size enforcement (413 response)
 - [x] CAPTCHA gate — with Turnstile on, the upload is blocked until the widget verifies; after 10 seconds without a result the page says so and keeps waiting, and it shows an error only when the widget reports a failure or the challenge expires
 - [x] TTL clamping (min 60s, max configurable)
 - [x] Download count clamping (min 1, max 1000)
 - [x] Chunked upload sessions protected by HMAC-SHA256 session token — returned at `POST /api/vault/upload/init`, required on all subsequent `/chunk`, `/complete`, and abort requests (`x-session-token` header); token is signed server-side with a per-process random key and verified in constant time
-- [x] Storage quota enforced with reservations — a chunked upload holds its declared size for as long as its session is open and writes one chunk at a time; a single-request upload holds the length its request declares while it is written, and is then counted by what it stored. Uploads that overlap cannot together exceed `MAX_TOTAL_STORAGE`
+- [x] Storage quota enforced with reservations — a chunked upload holds its declared size for as long as its session is open and writes one chunk at a time, and a session with no new chunk for 15 minutes is dropped; a single-request upload holds the length its request declares while it is written, and is then counted by what it stored. Uploads that overlap cannot together exceed `MAX_TOTAL_STORAGE`, and one client can have only `MAX_UPLOAD_SESSIONS_PER_IP` of either kind in progress
 
 ### Client-Side Defenses
 
@@ -110,7 +112,7 @@ from becoming an attack surface:
 - [x] A download with no chunks is reported as corrupted — nothing is saved, where an empty file used to pass for a successful download
 - [x] Filename mismatch detection — on download, the decrypted filename from the encrypted payload is compared to the one encoded in the URL fragment; a visible warning is shown if they differ, indicating possible link tampering
 - [x] Interface language from the browser's language list and the switch in the page only — never read from or written to the address, a cookie or browser storage; a choice made in the page lasts until it is reloaded and is sent to no one. The terms of service come with every translation in one response, so showing them in the chosen language asks the server for nothing
-- [x] Translations are part of the single frontend script — none is fetched at runtime, and no message comes from the server or from a link
+- [x] The translations of the languages offered are part of the single frontend script — a file of a language not offered is not built in, none is fetched at runtime, and no message comes from the server or from a link
 - [x] Values put into a message (the file names from the link and from the decrypted payload, the version strings from the server) are inserted in one pass as text, so a name such as `{actual}` or `$&` shows as itself; markup inside a sentence is built in the code, and no message is parsed as HTML
 - [x] Errors are shown in the page's own words, chosen by the HTTP status — the text of a server's error response is not displayed. The one server text the interface shows is the admin panel's note on a failed update check
 
@@ -161,7 +163,7 @@ from becoming an attack surface:
 - [x] Minimal dependencies
 - [x] 7-day dependency quarantine — Dependabot `cooldown: default-days: 7` on every ecosystem, so a freshly published version is never proposed, never auto-merged. Security advisories are exempt and land immediately.
 - [x] `min-release-age=7` in every `.npmrc` as the client-side backstop for manual installs
-- [x] Registry signatures verified in CI (`npm audit signatures`, both workspaces)
+- [x] Registry signatures verified in CI (`npm audit signatures`, both workspaces and the formatter at the root)
 - [x] `npm ci --ignore-scripts` in Docker build
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images
@@ -169,12 +171,12 @@ from becoming an attack surface:
 
 ### What This Does NOT Protect Against
 
-| Threat vector | Why it is out of scope |
-|---|---|
-| Compromised client device | Encryption key resides in browser memory and the URL bar; malware/physical access exposes it |
-| Malicious browser extension | Extensions can read page content, URL fragments, and intercept WebCrypto calls |
-| Link sharing over insecure channel | Anyone holding the vault URL `#KEY` fragment can decrypt the file |
-| Server-side JS tampering | A compromised server could serve a modified frontend that exfiltrates the key before encryption |
-| Targeted state-level adversary with client access | Outside scope — use offline, air-gapped tools for this threat model |
-| Sustained DDoS | Rate limiting covers casual abuse; deploy behind Cloudflare or another CDN for sustained attacks |
-| Long-term storage security | Vaults are designed to be ephemeral; do not use for archival of sensitive material |
+| Threat vector                                     | Why it is out of scope                                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Compromised client device                         | Encryption key resides in browser memory and the URL bar; malware/physical access exposes it     |
+| Malicious browser extension                       | Extensions can read page content, URL fragments, and intercept WebCrypto calls                   |
+| Link sharing over insecure channel                | Anyone holding the vault URL `#KEY` fragment can decrypt the file                                |
+| Server-side JS tampering                          | A compromised server could serve a modified frontend that exfiltrates the key before encryption  |
+| Targeted state-level adversary with client access | Outside scope — use offline, air-gapped tools for this threat model                              |
+| Sustained DDoS                                    | Rate limiting covers casual abuse; deploy behind Cloudflare or another CDN for sustained attacks |
+| Long-term storage security                        | Vaults are designed to be ephemeral; do not use for archival of sensitive material               |

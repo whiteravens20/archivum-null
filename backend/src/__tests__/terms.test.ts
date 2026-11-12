@@ -7,22 +7,24 @@ import { loadTerms, markNoTerms, renderTerms } from '../static/terms.js';
 
 describe('renderTerms', () => {
   it('should convert the formatting a terms document uses', () => {
-    const html = renderTerms([
-      '# Terms',
-      '',
-      'You agree **not** to do *this*:',
-      '',
-      '- one',
-      '- two',
-      '',
-      '> A notice.',
-      '',
-      '---',
-      '',
-      '| Plan | Limit |',
-      '|---|---|',
-      '| Free | 100 MB |',
-    ].join('\n'));
+    const html = renderTerms(
+      [
+        '# Terms',
+        '',
+        'You agree **not** to do *this*:',
+        '',
+        '- one',
+        '- two',
+        '',
+        '> A notice.',
+        '',
+        '---',
+        '',
+        '| Plan | Limit |',
+        '|---|---|',
+        '| Free | 100 MB |',
+      ].join('\n'),
+    );
 
     expect(html).toContain('<h1>Terms</h1>');
     expect(html).toContain('<strong>not</strong>');
@@ -35,13 +37,15 @@ describe('renderTerms', () => {
   });
 
   it('should show raw HTML as the text it is', () => {
-    const html = renderTerms([
-      'Before <script>alert(1)</script> after.',
-      '',
-      '<img src=x onerror="alert(1)">',
-      '',
-      '<iframe src="https://example.com"></iframe>',
-    ].join('\n'));
+    const html = renderTerms(
+      [
+        'Before <script>alert(1)</script> after.',
+        '',
+        '<img src=x onerror="alert(1)">',
+        '',
+        '<iframe src="https://example.com"></iframe>',
+      ].join('\n'),
+    );
 
     expect(html).not.toMatch(/<script|<img|<iframe/i);
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
@@ -50,7 +54,7 @@ describe('renderTerms', () => {
 
   it('should keep links to web and mail addresses and to paths on the site', () => {
     const html = renderTerms(
-      '[web](https://example.com/terms?a=1&b=2) [plain](HTTP://example.com) [mail](mailto:legal@example.com) [home](/) [section](#privacy) [near](./privacy) [query](?lang=pl)'
+      '[web](https://example.com/terms?a=1&b=2) [plain](HTTP://example.com) [mail](mailto:legal@example.com) [home](/) [section](#privacy) [near](./privacy) [query](?lang=pl)',
     );
 
     expect(html).toContain('<a href="https://example.com/terms?a=1&amp;b=2">web</a>');
@@ -94,7 +98,7 @@ describe('renderTerms', () => {
   it('should convert the terms file this repository ships', () => {
     const tos = fs.readFileSync(
       path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'TOS.md'),
-      'utf-8'
+      'utf-8',
     );
     const html = renderTerms(tos);
 
@@ -128,7 +132,15 @@ describe('loadTerms', () => {
 
   it('should take no other file for a translation', () => {
     write('TOS.md', '# Terms');
-    for (const name of ['TOS.PL.md', 'TOS.pl-PL.md', 'TOS.pol.md', 'TOS.p.md', 'TOS.pl.md.bak', 'TOS.pl.txt', 'tos.pl.md']) {
+    for (const name of [
+      'TOS.PL.md',
+      'TOS.pl-PL.md',
+      'TOS.pol.md',
+      'TOS.p.md',
+      'TOS.pl.md.bak',
+      'TOS.pl.txt',
+      'tos.pl.md',
+    ]) {
       write(name, '# Not a translation');
     }
 

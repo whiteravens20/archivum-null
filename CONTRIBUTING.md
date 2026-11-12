@@ -17,6 +17,7 @@ Thank you for considering a contribution to Archivum Null. This project handles 
   - [Project Structure](#project-structure)
   - [Coding Guidelines](#coding-guidelines)
     - [General](#general)
+    - [Formatting](#formatting)
     - [Linting](#linting)
     - [TypeScript](#typescript)
     - [Naming conventions](#naming-conventions)
@@ -80,10 +81,10 @@ Contributions we will **not accept**:
 
 ### Requirements
 
-| Tool | Version |
-|---|---|
-| Node.js | ≥ 24.0.0 |
-| npm | bundled with Node.js |
+| Tool                    | Version                              |
+| ----------------------- | ------------------------------------ |
+| Node.js                 | ≥ 24.0.0                             |
+| npm                     | bundled with Node.js                 |
 | Docker & Docker Compose | optional — for containerised testing |
 
 ### Local start (no Docker)
@@ -156,7 +157,18 @@ frontend/src/
 - **TypeScript** is mandatory everywhere — no `any` types and no type assertions without a comment explaining why.
 - Keep functions small and single-purpose.
 - No dead code or commented-out blocks in submitted PRs.
-- Match the existing code style; ESLint is the source of truth.
+- Prettier decides the layout; ESLint is the gate for the code itself.
+
+### Formatting
+
+Prettier formats every file it reads, the code, the docs and the workflows alike, with one config at the repository root. Run it there before you commit:
+
+```bash
+npm ci --ignore-scripts
+npm run format
+```
+
+CI runs `npm run format:check` and fails on a file that is not formatted.
 
 ### Linting
 
@@ -180,13 +192,13 @@ No type errors are accepted.
 
 ### Naming conventions
 
-| Context | Convention |
-|---|---|
-| Files | `camelCase.ts` / `PascalCase.tsx` for React components |
-| Variables / functions | `camelCase` |
-| Types / interfaces | `PascalCase` |
-| Constants | `UPPER_SNAKE_CASE` |
-| Environment variables | `UPPER_SNAKE_CASE` |
+| Context               | Convention                                             |
+| --------------------- | ------------------------------------------------------ |
+| Files                 | `camelCase.ts` / `PascalCase.tsx` for React components |
+| Variables / functions | `camelCase`                                            |
+| Types / interfaces    | `PascalCase`                                           |
+| Constants             | `UPPER_SNAKE_CASE`                                     |
+| Environment variables | `UPPER_SNAKE_CASE`                                     |
 
 ### Dependencies
 
@@ -214,7 +226,9 @@ Keep commits focused — one logical change per commit. Avoid mixing refactors w
 
 ## Translations
 
-The interface text lives in `frontend/src/i18n/messages/`, one file per language. `en.ts` is the source: every other file has the same keys, and `npm run typecheck` fails while one is missing. A `{name}` in a message is a value the code puts in, and a translation keeps every one of them. A message that depends on a number has a form for each plural category of the language, as `Intl.PluralRules` names them: English has `one` and `other`, Polish `one`, `few`, `many` and `other`. The frontend tests check every language against English for both.
+The interface text lives in `frontend/src/i18n/messages/`, one JSON file per language, named by its language code: a flat object of messages by key. `en.json` is the source the other files translate. A `{name}` in a message is a value the code puts in, and a translation keeps every one of them. A message that depends on a number has a key for each plural category that whole numbers fall into in the language, as `Intl.PluralRules` names them, with the category after the key: `vaultConfig.days_one` and `vaultConfig.days_other` in English, `_one`, `_few` and `_many` in Polish, whose `other` is for fractions only.
+
+The interface loads and offers only the languages in `LANGUAGES` (`frontend/src/i18n/i18n.ts`), and the frontend tests hold each of them to every message of `en.json`. A file of a language not on that list may hold part of the messages, as a translation still in progress does, and is checked for what it has: each of its messages is in `en.json`, is not empty, keeps the placeholders of the English one and has the plural forms of its language. A message a language lacks all the same is shown in English.
 
 ### Correcting a translation
 
@@ -222,16 +236,17 @@ Change the message in that language's file, keep its placeholders, and run `npm 
 
 ### Adding text to the interface
 
-1. Add the key to `en.ts`, then to every other language file.
-2. Show it with `t('key')` from `useI18n()`. A count that changes the wording goes through `plural('key', count)`, and markup inside a sentence, such as a `<code>` element, through `rich('key', { name: <code>…</code> })`. A message is plain text: nothing in it is read as HTML.
-3. Keep an error that is shown later in state as its key, not as text, so that it follows a change of language.
+1. Add the message to `en.json` and to the file of every language in `LANGUAGES`.
+2. If it has placeholders, or you changed the placeholders of a message, run `npm run messages` in `frontend/`. It writes their names to `src/i18n/placeholders.ts`, which the type check reads, because TypeScript sees every text of a JSON file as a plain string. The tests fail while that file is out of date.
+3. Show it with `t('key')` from `useI18n()`. A count that changes the wording goes through `plural('key', count)`, and markup inside a sentence, such as a `<code>` element, through `rich('key', { name: <code>…</code> })`. A message is plain text: nothing in it is read as HTML.
+4. Keep an error that is shown later in state as its key, not as text, so that it follows a change of language.
 
 The linter fails on text written straight into JSX, as the content of an element or as `alt`, `aria-label`, `label`, `placeholder` or `title`.
 
 ### Adding a language
 
-1. Create `messages/<code>.ts`, named by the language's ISO 639-1 code, the way `pl.ts` is made: `export const <code>: Messages = { … }` with every key of `en.ts`. Give each plural message the forms that `new Intl.PluralRules('<code>').resolvedOptions().pluralCategories` lists.
-2. In `frontend/src/i18n/i18n.ts`, add the code to `LANGUAGES`, the language's name in the language itself to `LANGUAGE_NAMES`, and the file to `MESSAGES`.
+1. Create `messages/<code>.json`, named by the language's ISO 639-1 code, and translate the messages of `en.json` into it. Give each message that depends on a number the forms of the categories whole numbers fall into in the language; the tests name any that are missing. The file can grow over several changes: until the language is on the list, the file is not loaded.
+2. Once it has every message, add the code to `LANGUAGES` in `frontend/src/i18n/i18n.ts`, the language's name in the language itself to `LANGUAGE_NAMES`, and the file to `MESSAGES`, imported beside the others.
 3. Run the tests, then look at every page in the new language, at phone width too: a translation is often longer than the English.
 
 ### What stays as it is
@@ -308,7 +323,7 @@ Archivum Null is a security-sensitive project. The following rules apply strictl
 
 ### AI-assisted code
 
-Most of this project is written with AI coding tools, as the [README](README.md#how-the-code-is-written-and-checked) describes, and contributions may be too. The same standard applies to every contribution:
+This project is built using AI coding tools, as the [README](README.md#how-the-code-is-written-and-checked) describes, and contributions may be too. The same standard applies to every contribution:
 
 - Read AI-generated code line by line before you submit it.
 - Take extra care with the security-critical files: `crypto/encrypt.ts`, `middleware/basicAuth.ts`, `storage/local.ts` and the vault expiry logic.
@@ -337,7 +352,7 @@ Before opening a PR that touches security-relevant code, confirm the following i
 1. **Fork** the repository and create a branch from `dev` (not `main`).
 2. Branch naming: `fix/short-description`, `feat/short-description`, `docs/short-description`, `security/short-description`.
 3. Make your changes, following this guide.
-4. Run the full test and lint suite.
+4. Run the formatter and the full test and lint suite.
 5. Open a pull request against the `dev` branch.
 6. Fill out the PR template completely — incomplete PRs will be asked to add missing information.
 7. Respond to review comments. PRs that are not addressed within 30 days may be closed.

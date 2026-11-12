@@ -11,7 +11,9 @@ interface UploadZoneProps {
 export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZoneProps) {
   const { t, locale } = useI18n();
   const [isDragOver, setIsDragOver] = useState(false);
-  const [error, setError] = useState<'uploadZone.tooLarge' | 'uploadZone.empty' | 'uploadZone.unreadable' | null>(null);
+  const [error, setError] = useState<
+    'uploadZone.tooLarge' | 'uploadZone.empty' | 'uploadZone.unreadable' | null
+  >(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Counter-based drag tracking: avoids false dragleave when cursor crosses child elements.
   // Every dragenter increments, every dragleave decrements — isDragOver only clears at 0.
@@ -30,7 +32,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
       }
       onFileSelect(file);
     },
-    [maxSize, onFileSelect]
+    [maxSize, onFileSelect],
   );
 
   const handleDragEnter = useCallback(
@@ -40,17 +42,14 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
       dragCounter.current += 1;
       if (dragCounter.current === 1) setIsDragOver(true);
     },
-    [disabled]
+    [disabled],
   );
 
-  const handleDragLeave = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      dragCounter.current -= 1;
-      if (dragCounter.current === 0) setIsDragOver(false);
-    },
-    []
-  );
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) setIsDragOver(false);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault(); // required for drop to fire
@@ -66,9 +65,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
       // 1. Fast path: synchronous access (X11, Windows, macOS, Chrome/Firefox)
       const syncFile: File | null =
         e.dataTransfer.files[0] ??
-        (e.dataTransfer.items[0]?.kind === 'file'
-          ? e.dataTransfer.items[0].getAsFile()
-          : null);
+        (e.dataTransfer.items[0]?.kind === 'file' ? e.dataTransfer.items[0].getAsFile() : null);
 
       if (syncFile) {
         validateAndSelect(syncFile);
@@ -91,7 +88,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
 
       setError('uploadZone.unreadable');
     },
-    [disabled, validateAndSelect]
+    [disabled, validateAndSelect],
   );
 
   return (
@@ -123,9 +120,7 @@ export default function UploadZone({ onFileSelect, maxSize, disabled }: UploadZo
 
       {/* pointer-events-none: all drag/click events go to the outer div only */}
       <div className="space-y-3 pointer-events-none">
-        <div className="text-4xl opacity-40">
-          {isDragOver ? '↓' : '◈'}
-        </div>
+        <div className="text-4xl opacity-40">{isDragOver ? '↓' : '◈'}</div>
         <p className="text-vault-text-soft">
           {isDragOver ? t('uploadZone.dropHere') : t('uploadZone.prompt')}
         </p>

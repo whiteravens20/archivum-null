@@ -9,6 +9,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { AddressInfo } from 'node:net';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -20,12 +22,15 @@ const BOUNDARY = '----uploadLimitTest';
 
 function multipart(fields: Record<string, string>, file: Buffer): Buffer {
   const head = Object.entries(fields)
-    .map(([name, value]) => `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+    .map(
+      ([name, value]) =>
+        `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+    )
     .join('');
   return Buffer.concat([
     Buffer.from(
       `${head}--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="encrypted.bin"\r\n` +
-      'Content-Type: application/octet-stream\r\n\r\n'
+        'Content-Type: application/octet-stream\r\n\r\n',
     ),
     file,
     Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
@@ -38,7 +43,12 @@ describe('upload request size limit', () => {
 
   const headers = { 'content-type': `multipart/form-data; boundary=${BOUNDARY}` };
   const upload = (file: Buffer) =>
-    app.inject({ method: 'POST', url: '/api/vault', headers, payload: multipart({ ttl: '3600', maxDownloads: '1' }, file) });
+    app.inject({
+      method: 'POST',
+      url: '/api/vault',
+      headers,
+      payload: multipart({ ttl: '3600', maxDownloads: '1' }, file),
+    });
   const sendChunk = (uploadId: string, sessionToken: string, index: number, file: Buffer) =>
     app.inject({
       method: 'POST',
@@ -131,5 +141,92 @@ describe('upload request size limit', () => {
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toMatchObject({ receivedBytes: CHUNK_SIZE, nextChunkIndex: 1 });
     expect(fs.statSync(staged).size).toBe(CHUNK_SIZE);
+  });
+
+  describe('uploads in progress', () => {
+    /** A request that has sent its head and all of `payload` but its last bytes. */
+    async function holdUpload(payload: Buffer) {
+      await app.listen({ host: '127.0.0.1', port: 0 });
+      const { port } = app.server.address() as AddressInfo;
+      const socket = net.connect(port, '127.0.0.1');
+      let answer = '';
+      socket.setEncoding('utf8');
+      socket.on('data', (data) => (answer += data));
+      socket.on('error', () => {});
+      const closed = new Promise((resolve) => socket.once('close', resolve));
+      await new Promise((resolve) => socket.once('connect', resolve));
+      socket.write(
+        `POST /api/vault HTTP/1.1\r\nhost: test\r\nconnection: close\r\n` +
+          `content-type: ${headers['content-type']}\r\ncontent-length: ${payload.length}\r\n\r\n`,
+      );
+      socket.write(payload.subarray(0, payload.length - 100));
+      // Under way once it has a directory, and it has its slot from before that. Until
+      // then the next upload could get there first, and this one would be the one refused.
+      await vi.waitFor(() => expect(vaultsOnDisk()).toHaveLength(1));
+      return { socket, closed, answer: () => answer };
+    }
+
+    async function expectRefused(): Promise<void> {
+      const res = await upload(Buffer.alloc(100, 7));
+      expect(res.statusCode).toBe(429);
+      expect(res.json().error).toContain('Too many concurrent uploads');
+    }
+
+    beforeEach(() => {
+      // One wait below asks repeatedly, and 429 has to mean the uploads, not the rate.
+      vi.stubEnv('RATE_LIMIT_MAX', '100000');
+      vi.stubEnv('RATE_LIMIT_API_MAX', '100000');
+      vi.stubEnv('MAX_UPLOAD_SESSIONS_PER_IP', '1');
+    });
+
+    it('should count one still being sent against what a client may have running', async () => {
+      await start(0);
+      const payload = multipart({ ttl: '3600', maxDownloads: '1' }, Buffer.alloc(1000, 7));
+      const held = await holdUpload(payload);
+      await expectRefused();
+
+      // A chunked upload counts in the same place.
+      const init = await app.inject({
+        method: 'POST',
+        url: '/api/vault/upload/init',
+        payload: { totalSize: 1000, ttl: 3600, maxDownloads: 1 },
+      });
+      expect(init.statusCode).toBe(429);
+
+      // Someone else is not affected.
+      const other = await app.inject({
+        method: 'POST',
+        url: '/api/vault',
+        remoteAddress: '198.51.100.9',
+        headers,
+        payload: multipart({ ttl: '3600', maxDownloads: '1' }, Buffer.alloc(100, 7)),
+      });
+      expect(other.statusCode).toBe(201);
+
+      // The first one finishes normally, and with it the slot comes free. Not with end():
+      // the server takes a client that closes its side for one that has gone.
+      held.socket.write(payload.subarray(payload.length - 100));
+      await held.closed;
+      expect(held.answer()).toContain('201 Created');
+      expect((await upload(Buffer.alloc(100, 7))).statusCode).toBe(201);
+    });
+
+    it('should give the slot and the reservation back when a client goes mid-upload', async () => {
+      await start(CHUNK_SIZE);
+      const payload = multipart(
+        { ttl: '3600', maxDownloads: '1' },
+        Buffer.alloc(CHUNK_SIZE / 2, 7),
+      );
+      const held = await holdUpload(payload);
+      await expectRefused();
+
+      held.socket.destroy();
+
+      // As large as the first was, so it fits only with that one's reservation returned.
+      await vi.waitFor(async () => {
+        expect((await upload(Buffer.alloc(CHUNK_SIZE / 2, 7))).statusCode).toBe(201);
+      });
+      expect(vaultsOnDisk()).toHaveLength(1);
+    });
   });
 });

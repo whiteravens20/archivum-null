@@ -80,10 +80,7 @@ function baseStatus(): UpdateStatus {
 }
 
 /** Reads a body, giving up the moment it goes past `limit` bytes. */
-async function readCapped(
-  body: ReadableStream<Uint8Array>,
-  limit: number
-): Promise<string | null> {
+async function readCapped(body: ReadableStream<Uint8Array>, limit: number): Promise<string | null> {
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -127,7 +124,7 @@ async function fetchLatestRelease(): Promise<UpdateStatus> {
         },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         redirect: 'error',
-      }
+      },
     );
 
     if (!response.ok) {
@@ -173,8 +170,7 @@ async function fetchLatestRelease(): Promise<UpdateStatus> {
 
   status.latest = release.tag_name;
   status.checkedAt = Date.now();
-  status.publishedAt =
-    typeof release.published_at === 'string' ? release.published_at : null;
+  status.publishedAt = typeof release.published_at === 'string' ? release.published_at : null;
   status.releaseUrl =
     typeof release.html_url === 'string'
       ? release.html_url
@@ -219,8 +215,7 @@ export async function getUpdateStatus(): Promise<UpdateStatus> {
       cache = {
         status,
         expiresAt:
-          Date.now() +
-          (status.latest ? config.UPDATE_CHECK_INTERVAL * 1000 : FAILURE_CACHE_MS),
+          Date.now() + (status.latest ? config.UPDATE_CHECK_INTERVAL * 1000 : FAILURE_CACHE_MS),
       };
       return status;
     })

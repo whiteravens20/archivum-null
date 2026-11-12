@@ -19,7 +19,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       totalVaults: stats.totalVaults,
       activeVaults: stats.activeVaults,
       totalStorageBytes: stats.totalStorageBytes,
-      totalStorageMB: Math.round(stats.totalStorageBytes / 1024 / 1024 * 100) / 100,
+      totalStorageMB: Math.round((stats.totalStorageBytes / 1024 / 1024) * 100) / 100,
       // 0 means unlimited
       storageQuotaBytes: config.MAX_TOTAL_STORAGE,
     });
@@ -48,7 +48,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         expiresAt: v.expiresAt,
         remainingDownloads: v.remainingDownloads,
         maxDownloads: v.maxDownloads,
-      }))
+      })),
     );
   });
 
