@@ -81,7 +81,7 @@ jobs:
           # skips the release comparison rather than pretending a snapshot is a version.
           build-args: |
             CACHE_BUST_APK=${{ github.run_id }}
-            APP_VERSION=edge-${{ github.sha }}
+            APP_VERSION=${{ github.ref_name == 'dev' && 'dev' || 'edge' }}-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
