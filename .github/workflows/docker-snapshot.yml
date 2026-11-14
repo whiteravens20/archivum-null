@@ -46,16 +46,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compute snapshot tags
         id: tag
+        # The branch name and the rest come in as variables, not as text pasted
+        # into the script: a branch is named by whoever pushes it, and a name
+        # with a quote in it would otherwise end the string and run the rest.
         run: |
-          PREFIX=$([ "${{ github.ref_name }}" == "dev" ] && echo "dev" || echo "edge")
-          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          PREFIX=$([ "$GITHUB_REF_NAME" == "dev" ] && echo "dev" || echo "edge")
+          SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           {
             echo "value<<EOF"
-            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}"
-            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}-${SHA}"
+            echo "${REGISTRY}/${IMAGE_NAME}:${PREFIX}"
+            echo "${REGISTRY}/${IMAGE_NAME}:${PREFIX}-${SHA}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -88,7 +93,9 @@ jobs:
       - name: Resolve image ref for scan
         id: img-ref
         # Scan by immutable digest from the registry.
-        run: echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "ref=${REGISTRY}/${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
 
   # ── Trivy scan ────────────────────────────────────────────────────────────────
   #   dev   → exit-code 0  findings reported to Security tab; build stays green
@@ -106,6 +113,8 @@ jobs:
     steps:
       - name: Checkout (for .trivyignore)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0

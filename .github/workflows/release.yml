@@ -61,6 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0 # full history needed for branch containment check
       - name: Check branch containment
         id: check
@@ -91,6 +92,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compute Docker metadata
         id: meta
@@ -223,6 +226,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0 # needed to compare tag with previous tag
 
       - name: Extract tag message
@@ -296,19 +300,14 @@ jobs:
         run: cp "$BUNDLE" "${ARCHIVE_NAME}.sigstore.json"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          # Auto-generate body from GitHub's release notes API:
-          # groups PRs by label, lists commits, credits contributors.
-          generate_release_notes: true
-          # Append Docker image reference to the generated notes.
-          append_body: true
-          # Attach the source tarball (only files needed to build & run) and its
-          # attestation bundle
-          files: |
-            ${{ env.ARCHIVE_NAME }}
-            ${{ env.ARCHIVE_NAME }}.sigstore.json
-          body: |
+        # gh, which the runner already has, rather than an action that would be
+        # handed this job's write token. The body below comes first and GitHub's
+        # generated notes after it, as before; run again over a release that is
+        # already there, this only puts the files back and leaves its text alone.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BODY: |
             ${{ steps.tag-msg.outputs.message }}
 
             ---
@@ -338,6 +337,20 @@ jobs:
             ```
 
             `archivum-null-${{ github.ref_name }}.tar.gz.sigstore.json` is the same attestation as a file, for `gh attestation verify --bundle`.
+        run: |
+          set -euo pipefail
+          files=("$ARCHIVE_NAME" "$ARCHIVE_NAME.sigstore.json")
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}"
+            exit 0
+          fi
+          body=${BODY#"${BODY%%[![:space:]]*}"}
+          body=${body%"${body##*[![:space:]]}"}
+          notes=$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" --jq .body)
+          printf '%s\n\n%s\n' "$body" "$notes" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" "${files[@]}"
 
   # ── Job 3: Trivy scan on pushed image ────────────────────────────────────────
   # Pulls the freshly pushed image by immutable digest and scans for HIGH/CRITICAL
@@ -356,6 +369,8 @@ jobs:
     steps:
       - name: Checkout (for .trivyignore)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0

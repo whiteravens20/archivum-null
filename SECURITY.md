@@ -168,6 +168,7 @@ from becoming an attack surface:
 - [x] Multi-stage Docker build (no build tools in prod image)
 - [x] Alpine-based images
 - [x] Base image pinned by version and digest in both Dockerfiles; Dependabot updates it under the same 7-day quarantine
+- [x] The workflows audited by zizmor on every push, pull request and week, findings in the Security tab: no checkout leaves its token for later steps, no expression is pasted into a script, a pull request merges by itself only when Dependabot opened it
 
 ### What This Does NOT Protect Against
 
