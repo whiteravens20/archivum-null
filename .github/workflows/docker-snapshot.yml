@@ -51,13 +51,16 @@ jobs:
 
       - name: Compute snapshot tags
         id: tag
+        # The branch name and the rest come in as variables, not as text pasted
+        # into the script: a branch is named by whoever pushes it, and a name
+        # with a quote in it would otherwise end the string and run the rest.
         run: |
-          PREFIX=$([ "${{ github.ref_name }}" == "dev" ] && echo "dev" || echo "edge")
-          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          PREFIX=$([ "$GITHUB_REF_NAME" == "dev" ] && echo "dev" || echo "edge")
+          SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           {
             echo "value<<EOF"
-            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}"
-            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}-${SHA}"
+            echo "${REGISTRY}/${IMAGE_NAME}:${PREFIX}"
+            echo "${REGISTRY}/${IMAGE_NAME}:${PREFIX}-${SHA}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -90,7 +93,9 @@ jobs:
       - name: Resolve image ref for scan
         id: img-ref
         # Scan by immutable digest from the registry.
-        run: echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "ref=${REGISTRY}/${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
 
   # ── Trivy scan ────────────────────────────────────────────────────────────────
   #   dev   → exit-code 0  findings reported to Security tab; build stays green
