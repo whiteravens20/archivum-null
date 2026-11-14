@@ -55,7 +55,7 @@ jobs:
         # into the script: a branch is named by whoever pushes it, and a name
         # with a quote in it would otherwise end the string and run the rest.
         run: |
-          PREFIX=$([ "$GITHUB_REF_NAME" == "dev" ] && echo "dev" || echo "edge")
+          PREFIX=$([ "${{ github.ref_name }}" == "dev" ] && echo "dev" || echo "edge")
           SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           {
             echo "value<<EOF"
